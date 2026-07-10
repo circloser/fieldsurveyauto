@@ -277,7 +277,8 @@ $("zoomOut").addEventListener("click", () => setZoom(zoomW / ZOOM_STEP));
 $("zoomFit").addEventListener("click", () => fitZoom());
 function fitZoom() {
   const host = $("pageHost");
-  const w = (host && host.clientWidth) ? host.clientWidth - 4 : 700;
+  // #pageHost 좌우 패딩(16+16)만큼 빼서 페이지가 캔버스 안에 여백을 두고 딱 맞게.
+  const w = (host && host.clientWidth) ? host.clientWidth - 36 : 700;
   setZoom(w);
 }
 // Ctrl + 휠로도 확대/축소

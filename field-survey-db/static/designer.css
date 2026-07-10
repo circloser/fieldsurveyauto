@@ -1,9 +1,12 @@
-.dwrap { max-width: 1240px; margin: 0 auto; padding: 32px 24px 80px; }
+.dwrap { max-width: min(1880px, 95vw); margin: 0 auto; padding: 28px 36px 64px; }
+/* 불러오기 전 진입 화면(헤더·보안배지·업로드 카드)은 읽기 편한 폭으로 가운데 정렬,
+   불러온 뒤 작업 화면(designer-main)은 넓은 폭 전체를 사용한다. */
+.dheader, .security-badge, #loadCard { max-width: 980px; margin-left: auto; margin-right: auto; }
 .dheader { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; }
 .link-back { color: var(--text-sub); text-decoration: none; font-size: 14px; font-weight: 600; white-space: nowrap; }
 .link-back:hover { color: var(--text); }
 
-.designer-main { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+.designer-main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 22px; align-items: start; }
 @media (max-width: 1000px) { .designer-main { grid-template-columns: 1fr; } }
 
 .grid-pane, .box-pane {
@@ -12,7 +15,7 @@
 /* 넓은 표가 1fr 칸을 부풀리지 않도록(가로 스크롤로 가둠) */
 .grid-pane { min-width: 0; }
 .grid-scroll { min-width: 0; }
-.box-pane { position: sticky; top: 16px; }
+.box-pane { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
 .pane-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .pane-head h2 { font-size: 18px; }
 .hint { font-size: 12px; color: var(--text-sub); }
