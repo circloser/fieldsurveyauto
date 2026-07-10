@@ -31,6 +31,15 @@ Thumbs.db
 data/
 field-survey-db/data/
 
+# ===== 포터블 빌드 산출물(용량 큼 — 커밋 금지) =====
+build/
+dist/
+*.log
+build_log*.txt
+field-survey-db/build/
+field-survey-db/dist/
+field-survey-db/build_log*.txt
+
 # ===== 테스트 픽스처(실데이터 포함) =====
 **/tests/fixtures/*.hwpx
 **/tests/fixtures/*.pdf

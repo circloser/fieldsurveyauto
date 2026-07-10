@@ -54,6 +54,12 @@ def _get_hwp():
         _HWP = Hwp(visible=False, new=True)
     except Exception as e:  # noqa: BLE001
         raise RuntimeError(f"한글을 시작할 수 없습니다(한글 설치 필요): {e}") from e
+    # 보안 승인 모듈을 COM으로 명시 등록. 이걸 안 하면 파일 열기/저장 때 숨겨진
+    # '보안 승인' 대화상자가 떠서 프로그램이 멈춘다(visible=False라 안 보임).
+    try:
+        _HWP.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule")
+    except Exception:  # noqa: BLE001
+        pass
     return _HWP
 
 

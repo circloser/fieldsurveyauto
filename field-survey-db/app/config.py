@@ -1,17 +1,30 @@
-"""경로/설정 모음. 모든 작업 폴더는 프로젝트 안에만 만들어집니다(로컬 전용)."""
+"""경로/설정 모음. 로컬 전용. 포터블(exe·PyInstaller) 실행도 지원합니다.
+
+- 개발/venv 실행: 프로젝트 폴더 기준.
+- 포터블(exe) 실행: 정적파일은 번들(_MEIPASS) 안에서 읽고,
+  작업 폴더(data/)는 exe 옆에 만든다(폴더째 복사해도 유지·쓰기 가능).
+"""
+import sys
 from pathlib import Path
 
-# 프로젝트 루트 (이 파일 기준 상위 폴더)
-ROOT = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False):
+    # PyInstaller 번들. 정적자원=번들 내부, 쓰기 데이터=exe 옆.
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BUNDLE_DIR = Path(__file__).resolve().parent.parent
+    BASE_DIR = Path(__file__).resolve().parent.parent
 
-STATIC_DIR = ROOT / "static"
-DATA_DIR = ROOT / "data"
+ROOT = BASE_DIR  # 하위 호환
+
+STATIC_DIR = BUNDLE_DIR / "static"
+DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "output"
 PDF_CACHE_DIR = DATA_DIR / "pdf_cache"
 REPORT_CACHE_DIR = DATA_DIR / "report_cache"
 
-# 시작 포트 (흔치 않은 값). 사용 중이면 start.bat이 다음 포트를 찾습니다.
+# 시작 포트 (흔치 않은 값). 사용 중이면 run.py가 다음 포트를 찾습니다.
 DEFAULT_PORT = 8765
 
 APP_TITLE = "현장 조사표 DB화"

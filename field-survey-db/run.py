@@ -3,6 +3,7 @@
 - 포트가 이미 사용 중이면 다음 포트를 찾습니다(비개발자가 실수로 두 번 켜도 안전).
 - 실제로 열린 포트로 브라우저를 엽니다.
 """
+import multiprocessing
 import socket
 import threading
 import time
@@ -11,6 +12,7 @@ import webbrowser
 import uvicorn
 
 from app.config import DEFAULT_PORT
+from app.main import app
 
 
 def find_free_port(start: int, tries: int = 20) -> int:
@@ -42,8 +44,9 @@ def main() -> None:
     print("  종료하려면 이 창에서 Ctrl+C 를 누르세요.")
     print("=" * 52)
     threading.Thread(target=open_browser_when_ready, args=(port,), daemon=True).start()
-    uvicorn.run("app.main:app", host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()  # PyInstaller(Windows exe) 필수: 자기 재실행 방지
     main()
