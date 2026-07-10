@@ -1,0 +1,5 @@
+# 선택(옵션): 🤖 AI 자동 양식 이해 기능 — Claude API 사용.
+# 이 기능을 쓸 때만 설치하세요. 설치해도 대량 실데이터 추출은 계속 로컬에서만 처리됩니다.
+#   pip install -r requirements-ai.txt
+# 그리고 환경변수 ANTHROPIC_API_KEY 를 설정한 뒤 프로그램을 다시 시작하세요.
+anthropic>=0.69

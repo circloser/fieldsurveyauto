@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>템플릿 디자이너 · 현장 조사표 DB화</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/designer.css" />
+</head>
+<body>
+  <div class="dwrap">
+    <header class="dheader">
+      <div>
+        <div class="logo"><span class="dot"></span> 템플릿 디자이너</div>
+        <h1>추출 항목 지정</h1>
+        <p class="subtitle">양식을 불러오면 추출할 칸에 박스를 <b>자동으로 제안</b>합니다. 확인·수정 후 저장하면 같은 양식 수천 장을 일괄 처리할 수 있습니다.</p>
+      </div>
+      <a class="link-back" href="/">← 일반 변환으로</a>
+    </header>
+
+    <div class="card" id="loadCard">
+      <h2>1. 양식 불러오기</h2>
+      <p class="desc">기준이 될 조사표 hwpx 파일 하나를 올려주세요.</p>
+      <div class="dropzone" id="dropzone">
+        <strong>양식 파일 놓기</strong> 또는 클릭
+        <input type="file" id="fileInput" accept=".hwpx" hidden />
+      </div>
+    </div>
+
+    <div class="designer-main" id="main" hidden>
+      <div class="grid-pane">
+        <div class="pane-head">
+          <h2>2. 박스 확인·수정</h2>
+          <span class="hint">파란 칸 = 추출됨 · <b>드래그해서 새 박스</b> · 파란 칸 클릭 = 선택</span>
+        </div>
+        <div class="table-picker" id="tablePicker"></div>
+        <div id="gridHost"></div>
+      </div>
+
+      <aside class="box-pane">
+        <div class="pane-head">
+          <h2>추출 항목 <span id="boxCount" class="pill">0</span></h2>
+          <button class="mini-btn" id="sortPosBtn" title="문서에 나온 위치 순서대로 정렬">↕ 문서 순서로</button>
+        </div>
+        <p class="muted" style="margin-top:6px">순서 = 엑셀 열 순서. <b>드래그로 순서 변경</b> · ↑↓ 버튼 · 이름 편집.</p>
+        <ol class="box-list" id="boxList"></ol>
+
+        <div class="save-row">
+          <input type="text" id="tplName" placeholder="템플릿 이름 (예: 인공구조물표)" />
+          <button class="btn" id="saveBtn">템플릿 저장</button>
+        </div>
+        <p class="muted" id="saveMsg"></p>
+
+        <hr class="sep" />
+        <h2 style="font-size:16px">3. 저장된 템플릿</h2>
+        <ul class="tpl-list" id="tplList"></ul>
+
+        <hr class="sep" />
+        <h2 style="font-size:16px">4. 이 템플릿으로 일괄 처리</h2>
+        <p class="desc">같은 양식 파일 여러 개를 올리면 박스 순서대로 엑셀이 만들어집니다.</p>
+        <input type="file" id="applyInput" accept=".hwpx" multiple />
+        <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
+        <div id="applyResult"></div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay" hidden><div class="spinner"></div><p id="overlayMsg">불러오는 중…</p></div>
+
+  <script src="/static/designer.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# 스캔(이미지) PDF OCR 전용 — 선택 설치 (용량 큼, torch 포함)
+# 타이핑 hwpx·PDF만 쓰면 설치 안 해도 됩니다. 스캔본을 읽을 때만 필요.
+#   설치: .venv\Scripts\python.exe -m pip install -r requirements-ocr.txt
+easyocr==1.7.2

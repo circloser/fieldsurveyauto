@@ -1,0 +1,4 @@
+# 개발/테스트 전용 (일반 사용자는 설치 안 해도 됨)
+-r requirements.txt
+pytest==8.3.4
+httpx==0.28.1

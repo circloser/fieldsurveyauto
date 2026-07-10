@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>현장 조사표 DB화</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo"><span class="dot"></span> 국립생태원 · 습지복원팀</div>
+      <h1>현장 조사표 DB화</h1>
+      <p class="subtitle">조사표(hwpx)를 올리면 자동으로 엑셀 DB로 정리합니다. 자료는 이 컴퓨터 밖으로 나가지 않습니다.</p>
+      <a class="designer-cta" href="/pdf-designer">🧩 새 양식 템플릿 만들기 (실제 문서 위에 박스 지정) →</a>
+    </header>
+
+    <div class="card">
+      <h2>1. 조사표 올리기</h2>
+      <p class="desc">hwpx 파일을 여러 개 한꺼번에 올릴 수 있습니다. (hwp·pdf는 다음 버전 지원)</p>
+      <div class="dropzone" id="dropzone">
+        <strong>여기로 파일을 끌어다 놓기</strong><br />
+        또는 클릭해서 선택
+        <input type="file" id="fileInput" multiple accept=".hwpx,.hwp,.pdf" hidden />
+      </div>
+      <ul class="filelist" id="filelist"></ul>
+      <button class="btn" id="processBtn" disabled>변환 시작</button>
+    </div>
+
+    <div class="card" id="resultCard" hidden>
+      <h2>2. 결과</h2>
+      <div class="stats" id="stats"></div>
+      <button class="btn btn-download" id="downloadBtn">📥 엑셀 다운로드</button>
+      <div class="table-scroll">
+        <table class="preview" id="previewTable"></table>
+      </div>
+      <p class="muted" id="flagNote"></p>
+    </div>
+
+    <div class="card" id="reviewCard" hidden>
+      <h2>3. 검수 및 수정</h2>
+      <p class="desc">노란색 칸은 자동 추출이 애매한 값입니다. 값을 고치면 <b>자동 저장</b>되고 엑셀에도 반영됩니다.</p>
+      <div id="reviewList"></div>
+    </div>
+
+    <footer>버전 <span id="footVersion">-</span> · 로컬 전용 · 완전 무료</footer>
+  </div>
+
+  <div class="overlay" id="overlay" hidden>
+    <div class="spinner"></div>
+    <p>변환 중입니다… 잠시만 기다려 주세요</p>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

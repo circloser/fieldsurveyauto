@@ -1,0 +1,36 @@
+# ===== 로컬 도구/환경 =====
+.claude/
+.omc/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.idea/
+.vscode/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== 비밀/키 (절대 커밋 금지) =====
+.env
+.env.*
+*.key
+*_secret*
+
+# ===== 실데이터 / 개인정보(PII) — 조사표 원본·추출 결과는 절대 커밋 금지 =====
+# (확장자 통째로 차단해 미래 파일도 실수로 올라가지 않게 함)
+*.hwpx
+*.hwp
+*.pdf
+*.xlsx
+*.xls
+
+# ===== 런타임 생성물(데이터·캐시·업로드·출력) =====
+data/
+field-survey-db/data/
+
+# ===== 테스트 픽스처(실데이터 포함) =====
+**/tests/fixtures/*.hwpx
+**/tests/fixtures/*.pdf

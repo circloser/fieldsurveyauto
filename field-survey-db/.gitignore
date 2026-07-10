@@ -1,0 +1,11 @@
+.venv/
+data/uploads/
+data/output/
+__pycache__/
+*.pyc
+
+# 실데이터 포함 가능 - 버전관리 제외
+tests/fixtures/*.hwpx
+tests/fixtures/*.pdf
+
+tests/fixtures/*.pdf

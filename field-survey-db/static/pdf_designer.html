@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>템플릿 디자이너 (PDF) · 현장 조사표 DB화</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/designer.css" />
+  <link rel="stylesheet" href="/static/pdf_designer.css" />
+</head>
+<body>
+  <div class="dwrap">
+    <header class="dheader">
+      <div>
+        <div class="logo"><span class="dot"></span> 국립생태원 · 습지복원팀</div>
+        <h1>현장 조사표 DB화</h1>
+        <p class="subtitle">양식을 올리면 <b>실제 문서 그대로</b> 보여주고 추출할 칸에 박스를 <b>자동 생성</b>합니다. hwpx·PDF·스캔본 모두 같은 방식으로 처리됩니다.</p>
+      </div>
+    </header>
+
+    <div class="security-badge">
+      <span class="sb-lock">🔒</span>
+      <div>
+        <b>보안 — 자료는 이 컴퓨터에서만 분석됩니다.</b>
+        올린 조사표는 <b>이 프로그램이 도는 컴퓨터(로컬)에서만</b> 처리되며, 인터넷으로 <b>전송·저장되지 않습니다.</b>
+        <span class="sb-note">※ 선택 기능 ‘🤖 AI 자동 이해’를 켤 때만, 해당 양식의 칸 글자가 외부(Claude)로 전송됩니다.</span>
+      </div>
+    </div>
+
+    <div class="card" id="loadCard">
+      <h2>1. 양식 불러오기</h2>
+      <p class="desc">기준이 될 조사표(hwpx 또는 pdf) 하나를 올려주세요. hwpx는 한글로 PDF 변환 후 표시됩니다(첫 파일은 다소 걸립니다).</p>
+      <div class="dropzone" id="dropzone">
+        <strong>양식 파일 놓기</strong> 또는 클릭
+        <input type="file" id="fileInput" accept=".hwpx,.hwp,.pdf" hidden />
+      </div>
+    </div>
+
+    <div class="designer-main" id="main" hidden>
+      <div class="grid-pane">
+        <div class="pane-head">
+          <h2>2. 박스 확인·정리</h2>
+          <span class="hint">표 칸마다 박스 자동 생성 → <b>필요 없는 건 선택 후 Delete(또는 ✕)로 삭제</b> · 이름 확인 · 값이 빠진 곳은 드래그로 추가</span>
+        </div>
+        <div class="tools-row">
+          <button class="mini-btn" id="aiBtn" title="Claude AI가 양식을 읽고 추출 항목을 자동으로 찾아 이름까지 붙입니다 (외부 API·인터넷 사용)">🤖 AI 자동 이해</button>
+          <button class="mini-btn" id="suggestBtn" title="표 칸마다 박스를 다시 자동 생성">✨ 칸 박스 다시 생성</button>
+          <button class="mini-btn" id="clearBtn" title="이 문서의 모든 박스 지우기">🗑 전체 지우기</button>
+          <span class="zoom-ctl">
+            <button class="mini-btn" id="zoomOut" title="축소">－</button>
+            <span id="zoomLabel" class="zoom-label">100%</span>
+            <button class="mini-btn" id="zoomIn" title="확대">＋</button>
+            <button class="mini-btn" id="zoomFit" title="너비 맞춤">너비맞춤</button>
+          </span>
+        </div>
+        <div class="page-nav" id="pageNav"></div>
+        <div id="pageHost"></div>
+      </div>
+
+      <aside class="box-pane">
+        <div class="pane-head">
+          <h2>추출 항목 <span id="boxCount" class="pill">0</span></h2>
+          <button class="mini-btn" id="sortPosBtn" title="문서 위치 순서대로">↕ 문서 순서로</button>
+        </div>
+        <p class="muted" style="margin-top:6px">순서 = 엑셀 열 순서. 드래그로 순서 변경 · 이름 편집.</p>
+        <ol class="box-list" id="boxList"></ol>
+
+        <div class="save-row">
+          <input type="text" id="tplName" placeholder="템플릿 이름" />
+          <button class="btn" id="saveBtn">템플릿 저장</button>
+        </div>
+        <p class="muted" id="saveMsg"></p>
+
+        <hr class="sep" />
+        <h2 style="font-size:16px">3. 저장된 템플릿</h2>
+        <ul class="tpl-list" id="tplList"></ul>
+
+        <hr class="sep" />
+        <h2 style="font-size:16px">4. 보고서 양식 <span class="pill">선택</span></h2>
+        <p class="desc">엑셀 보고서 양식(.xlsx)을 올리면 <b>아래에서 표를 보고 편집</b>할 수 있습니다. 값 넣을 칸에 <b>{추출항목이름}</b>, 수식은 <b>=B3+B4</b> 처럼 입력. (안 올리면 요약표만)</p>
+        <input type="file" id="reportInput" accept=".xlsx" />
+        <p class="muted" id="reportMsg"></p>
+        <div id="reportEditor" hidden>
+          <div class="rpt-toolbar">
+            <span class="muted">셀을 클릭해 편집 · 추출항목 삽입:</span>
+            <select id="rptFieldSel"><option value="">— 추출 항목 —</option></select>
+            <button class="mini-btn" id="rptInsertBtn">삽입</button>
+          </div>
+          <div class="rpt-scroll"><table class="rpt-grid" id="rptGrid"></table></div>
+        </div>
+
+        <hr class="sep" />
+        <h2 style="font-size:16px">5. 일괄 처리</h2>
+        <p class="desc">같은 양식 파일(hwpx·pdf) 여러 개 → 추출 → 엑셀(요약표 + 보고서).</p>
+        <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
+        <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
+        <div id="applyResult"></div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay" hidden><div class="spinner"></div><p id="overlayMsg">불러오는 중…</p></div>
+  <script src="/static/pdf_designer.js"></script>
+</body>
+</html>

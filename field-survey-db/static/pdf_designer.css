@@ -1,0 +1,69 @@
+.tools-row { display: flex; gap: 8px; margin: 12px 0 4px; }
+
+/* 보안 안내 배지 */
+.security-badge {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: #f0faf3; border: 1px solid #cdeBD6; border-left: 4px solid #2bb673;
+  border-radius: 12px; padding: 12px 14px; margin: 4px 0 18px;
+  font-size: 13px; line-height: 1.5; color: #1f6b46;
+}
+.security-badge .sb-lock { font-size: 18px; line-height: 1.3; }
+.security-badge b { color: #14603a; }
+.security-badge .sb-note {
+  display: block; margin-top: 4px; font-size: 12px; color: #5f8f77;
+}
+
+/* 보고서 양식 격자 편집기 */
+#reportEditor { margin-top: 10px; }
+.rpt-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.rpt-toolbar select { border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-family: inherit; font-size: 13px; max-width: 160px; }
+.rpt-scroll { overflow: auto; max-height: 320px; border: 1px solid var(--border); border-radius: 8px; }
+.rpt-grid { border-collapse: collapse; }
+.rpt-grid th { background: var(--surface); color: var(--text-sub); font-size: 11px; font-weight: 700; padding: 2px 6px; border: 1px solid var(--border); position: sticky; top: 0; }
+.rpt-grid tbody th { position: static; }
+.rpt-grid td { border: 1px solid var(--border); padding: 0; }
+.rpt-grid input { border: none; padding: 4px 6px; font-size: 12px; font-family: inherit; width: 110px; background: transparent; }
+.rpt-grid input:focus { outline: 2px solid var(--accent); outline-offset: -2px; background: #fff; }
+.rpt-grid input.ph { background: #eaf3ff; color: var(--accent); font-weight: 600; }
+.rpt-grid input.formula { background: #fff7e0; color: #b0820a; }
+.page-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+
+#pageHost { display: flex; justify-content: flex-start; overflow: auto; max-height: 78vh; }
+#pageHost.panning, #pageHost.panning .pdf-page, #pageHost.panning .pbox { cursor: grabbing !important; }
+.pdf-page {
+  position: relative; user-select: none; cursor: crosshair; flex: none; margin: 0 auto;
+  box-shadow: 0 1px 6px rgba(0,0,0,.12); border: 1px solid var(--border);
+}
+.pdf-page img { display: block; width: 100%; height: 100%; pointer-events: none; }
+
+.zoom-ctl { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.zoom-label { font-size: 12px; font-weight: 700; color: var(--text-sub); min-width: 40px; text-align: center; }
+.tools-row { align-items: center; }
+
+.pbox {
+  position: absolute; box-sizing: border-box;
+  border: 2px solid var(--accent); background: rgba(49,130,246,.12);
+  cursor: move; z-index: 2;
+}
+/* 선택된 박스는 항상 최상단(크기조절 점이 다른 박스에 가려지지 않게) */
+.pbox.sel { border-color: #1b64da; background: rgba(27,100,218,.20); z-index: 100; }
+.pbox-resize {
+  position: absolute; right: -7px; bottom: -7px; width: 13px; height: 13px;
+  background: #1b64da; border: 2px solid #fff; border-radius: 2px;
+  cursor: nwse-resize; z-index: 101; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+}
+.pbox:not(.sel) .pbox-resize { opacity: 0; }
+.pbox.sel .pbox-resize, .pbox:hover .pbox-resize { opacity: 1; }
+.pbox.drawing { background: rgba(27,100,218,.14); border-style: dashed; pointer-events: none; z-index: 5; }
+.pbox-tag {
+  position: absolute; top: -16px; left: -2px;
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 0 5px; border-radius: 4px 4px 4px 0; white-space: nowrap; max-width: 200px;
+  overflow: hidden; text-overflow: ellipsis; display: flex; gap: 4px; align-items: center;
+}
+.pbox.sel .pbox-tag { background: #1b64da; }
+.pbox-x { cursor: pointer; opacity: .85; font-size: 9px; }
+.pbox-x:hover { color: #ffd7dc; }
+
+.grid-pane { min-width: 0; }
+#pageHost { overflow: auto; }
