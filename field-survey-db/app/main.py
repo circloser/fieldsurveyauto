@@ -36,6 +36,20 @@ config.ensure_dirs()
 
 app = FastAPI(title=config.APP_TITLE, version=config.APP_VERSION)
 
+
+@app.middleware("http")
+async def _no_cache_static(request, call_next):
+    """화면 파일(html/css/js)은 캐시 금지 — 업데이트가 즉시 반영되게.
+
+    브라우저가 옛 css/js를 캐시로 계속 쓰면 '업데이트가 안 된' 것처럼 보인다.
+    로컬 단일 사용자 앱이라 캐시를 꺼도 성능 손해가 없다.
+    """
+    response = await call_next(request)
+    p = request.url.path
+    if p == "/" or p.startswith("/static") or p.endswith((".html", ".css", ".js")):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 _STORE = CorrectionStore(config.DATA_DIR / "corrections.json")
 _TEMPLATES = TemplateStore(config.DATA_DIR / "templates.json")
 # 마지막 처리 결과(다운로드/검수용). 로컬 단일 사용자 기준의 단순 보관.
