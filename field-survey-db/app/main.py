@@ -188,6 +188,12 @@ async def designer_load(file: UploadFile) -> JSONResponse:
     })
 
 
+def _tpl_pdf_path(name: str):
+    """템플릿 이름 → 함께 저장된 양식 PDF 경로(파일명 안전화)."""
+    safe = "".join(c for c in name if c not in '\\/:*?"<>|').strip() or "template"
+    return config.TEMPLATE_PDF_DIR / f"{safe}.pdf"
+
+
 @app.post("/api/designer/save")
 def designer_save(payload: dict = Body(...)) -> JSONResponse:
     name = (payload.get("name") or "").strip()
@@ -195,7 +201,18 @@ def designer_save(payload: dict = Body(...)) -> JSONResponse:
     if not name:
         return JSONResponse({"error": "템플릿 이름이 필요합니다."}, status_code=400)
     _TEMPLATES.save(name, boxes)
-    return JSONResponse({"ok": True, "templates": _TEMPLATES.list_names()})
+    # 지금 열려 있는 양식 PDF를 템플릿과 함께 보관 → 나중에 불러올 때 그대로 보여줌
+    pdf_saved = False
+    doc_id = (payload.get("doc_id") or "").strip()
+    entry = _PDF_DOCS.get(doc_id)
+    if entry:
+        try:
+            shutil.copyfile(entry["pdf_path"], _tpl_pdf_path(name))
+            pdf_saved = True
+        except OSError:
+            pass  # PDF 보관 실패해도 박스 저장은 유효
+    return JSONResponse({"ok": True, "pdf_saved": pdf_saved,
+                         "templates": _TEMPLATES.list_names()})
 
 
 @app.get("/api/designer/templates")
@@ -208,13 +225,33 @@ def designer_template_get(name: str) -> JSONResponse:
     tpl = _TEMPLATES.get(name)
     if not tpl:
         return JSONResponse({"error": "템플릿을 찾을 수 없습니다."}, status_code=404)
-    return JSONResponse(tpl)
+    out = dict(tpl)
+    # 함께 저장된 양식 PDF가 있으면 문서로 등록해 캔버스에 바로 보여준다
+    pdf = _tpl_pdf_path(name)
+    if pdf.exists():
+        try:
+            doc = read_pdf(str(pdf))
+            doc_id = uuid.uuid4().hex[:10]
+            _PDF_DOCS[doc_id] = {"pdf_path": str(pdf), "doc": doc}
+            out["doc_id"] = doc_id
+            out["pages"] = [{"page_no": p.page_no, "width": p.width, "height": p.height,
+                             "needs_ocr": p.needs_ocr, "ocr": getattr(p, "ocr", False)}
+                            for p in doc.pages]
+        except Exception:  # noqa: BLE001
+            pass  # PDF가 손상돼도 박스는 그대로 사용 가능(템플릿 모드)
+    return JSONResponse(out)
 
 
 @app.post("/api/designer/template/delete")
 def designer_template_delete(payload: dict = Body(...)) -> JSONResponse:
     name = (payload.get("name") or "").strip()
     _TEMPLATES.delete(name)
+    pdf = _tpl_pdf_path(name)
+    if pdf.exists():
+        try:
+            pdf.unlink()
+        except OSError:
+            pass
     return JSONResponse({"ok": True, "templates": _TEMPLATES.list_names()})
 
 

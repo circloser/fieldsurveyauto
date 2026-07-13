@@ -369,8 +369,10 @@ $("saveBtn").addEventListener("click", async () => {
   const name = $("tplName").value.trim();
   if (!name) { alert("템플릿 이름을 입력하세요."); return; }
   reindex();
-  const d = await (await fetch("/api/designer/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, boxes: BOXES }) })).json();
-  $("saveMsg").textContent = d.ok ? `✅ '${name}' 저장됨 (${BOXES.length}개)` : "저장 실패";
+  const d = await (await fetch("/api/designer/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, boxes: BOXES, doc_id: DOC_ID }) })).json();
+  $("saveMsg").textContent = d.ok
+    ? `✅ '${name}' 저장됨 (${BOXES.length}개${d.pdf_saved ? " · 양식 PDF 포함" : ""})`
+    : "저장 실패";
   if (d.ok) loadTemplates();
 });
 async function loadTemplates() {
@@ -402,14 +404,21 @@ async function loadTemplate(name) {
   const d = await (await fetch("/api/designer/template?name=" + encodeURIComponent(name))).json();
   if (d.error) { alert(d.error); return; }
   BOXES = (d.boxes || []).map((b) => ({ ...b })); selected = null;
-  if (!DOC_ID) {  // 양식 없이 불러오면 템플릿 모드로
+  if (d.doc_id && d.pages && d.pages.length) {
+    // 템플릿과 함께 저장된 양식 PDF가 있으면 캔버스에 그대로 보여준다
+    DOC_ID = d.doc_id; PAGES = d.pages;
+    exitTplMode();
+    activePage = pageWithMostBoxes();
+  } else if (!DOC_ID) {  // PDF 없는(옛) 템플릿을 양식 없이 불러오면 템플릿 모드로
     TPL_MODE = true; PAGES = []; activePage = 0;
     $("tplBannerName").textContent = `'${name}'`;
     $("tplBanner").hidden = false;
     document.querySelector(".grid-pane").style.display = "none";
   }
+  $("main").hidden = false;
   $("tplName").value = name; renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
-  $("saveMsg").textContent = `📄 '${name}' 불러옴 (${BOXES.length}개)`;
+  if (!TPL_MODE) fitZoom();
+  $("saveMsg").textContent = `📄 '${name}' 불러옴 (${BOXES.length}개${d.doc_id ? " · 양식 PDF 표시" : ""})`;
 }
 async function deleteTemplate(name) {
   if (!confirm(`'${name}' 삭제할까요?`)) return;
@@ -527,19 +536,13 @@ function hideOverlay() { $("overlay").hidden = true; }
 $("startTplBtn").addEventListener("click", async () => {
   const name = $("startTplSel").value;
   if (!name) { alert("시작할 템플릿을 선택하세요."); return; }
-  const d = await (await fetch("/api/designer/template?name=" + encodeURIComponent(name))).json();
-  if (d.error) { alert(d.error); return; }
-  BOXES = (d.boxes || []).map((b) => ({ ...b }));
-  DOC_ID = null; PAGES = []; selected = null; activePage = 0;
-  TPL_MODE = true;
-  $("tplName").value = name;
-  $("tplBannerName").textContent = `'${name}'`;
-  $("main").hidden = false;
-  $("tplBanner").hidden = false;
-  document.querySelector(".grid-pane").style.display = "none";  // 캔버스 숨김(양식 없음)
-  renderPageNav(); renderPage(); renderBoxes(); loadTemplates(); fillFieldSelect();
-  $("saveMsg").textContent = `📄 '${name}' 불러옴 (${BOXES.length}개) — 일괄 처리로 바로 추출할 수 있습니다.`;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  showOverlay("템플릿과 양식을 불러오는 중…");
+  try {
+    DOC_ID = null; PAGES = []; activePage = 0;   // 진입 화면에서 새로 시작
+    await loadTemplate(name);                     // PDF 있으면 캔버스, 없으면 템플릿 모드
+    loadTemplates();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } finally { hideOverlay(); }
 });
 $("tplEditBtn").addEventListener("click", () => fi.click());
 $("tplHomeBtn").addEventListener("click", () => location.reload());

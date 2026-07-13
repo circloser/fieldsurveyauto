@@ -23,6 +23,7 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "output"
 PDF_CACHE_DIR = DATA_DIR / "pdf_cache"
 REPORT_CACHE_DIR = DATA_DIR / "report_cache"
+TEMPLATE_PDF_DIR = DATA_DIR / "template_pdfs"   # 템플릿과 함께 저장하는 원본 양식 PDF
 
 # 시작 포트 (흔치 않은 값). 사용 중이면 run.py가 다음 포트를 찾습니다.
 DEFAULT_PORT = 8765
@@ -33,5 +34,6 @@ APP_VERSION = "0.5.0 (MVP: 업로드→추출→엑셀)"
 
 def ensure_dirs() -> None:
     """작업 폴더가 없으면 만듭니다."""
-    for d in (DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, PDF_CACHE_DIR, REPORT_CACHE_DIR):
+    for d in (DATA_DIR, UPLOAD_DIR, OUTPUT_DIR, PDF_CACHE_DIR, REPORT_CACHE_DIR,
+              TEMPLATE_PDF_DIR):
         d.mkdir(parents=True, exist_ok=True)
