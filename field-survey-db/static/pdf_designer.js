@@ -1,6 +1,7 @@
 // PDF 통합 픽셀박스 디자이너
 const $ = (id) => document.getElementById(id);
 let DOC_ID = null, PAGES = [], BOXES = [], selected = null;
+let TPL_MODE = false;   // 양식 없이 템플릿만 불러온 상태(캔버스 없음, 일괄 처리 중심)
 let activePage = 0;
 let zoomW = 700;            // 페이지 표시 너비(px) = 확대/축소 상태
 const ZOOM_MIN = 420, ZOOM_MAX = 1800, ZOOM_STEP = 1.25;
@@ -24,18 +25,27 @@ fi.addEventListener("change", () => { if (fi.files[0]) loadForm(fi.files[0]); })
 async function loadForm(file) {
   showOverlay("양식을 PDF로 변환·분석하는 중… (첫 파일은 다소 걸립니다)");
   const fd = new FormData(); fd.append("file", file);
+  // 템플릿 모드에서 양식을 올리면: 자동제안 대신 불러온 템플릿 박스를 유지(편집 이어가기)
+  const keepBoxes = (TPL_MODE && BOXES.length) ? BOXES : null;
   try {
     const res = await fetch("/api/pdf/load", { method: "POST", body: fd });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     DOC_ID = data.doc_id; PAGES = data.pages;
-    BOXES = data.boxes.map((b, i) => ({ ...b, order: b.order ?? i + 1 }));
+    BOXES = keepBoxes || data.boxes.map((b, i) => ({ ...b, order: b.order ?? i + 1 }));
+    exitTplMode();
     activePage = pageWithMostBoxes(); selected = null;
     $("main").hidden = false;
     renderPageNav(); renderPage(); renderBoxes(); loadTemplates();
     fitZoom();  // 너비에 맞춰 시작
   } catch (e) { alert("불러오기 실패: " + e.message); }
   finally { hideOverlay(); }
+}
+
+function exitTplMode() {
+  TPL_MODE = false;
+  $("tplBanner").hidden = true;
+  document.querySelector(".grid-pane").style.display = "";
 }
 function pageWithMostBoxes() {
   const c = {}; BOXES.forEach((b) => (c[b.page] = (c[b.page] || 0) + 1));
@@ -59,6 +69,7 @@ function renderPageNav() {
 function renderPage() {
   const p = PAGES[activePage] || PAGES.find((x) => x.page_no === activePage);
   const host = $("pageHost"); host.innerHTML = "";
+  if (!p) return;   // 템플릿 모드(양식 없음) 등 페이지가 없으면 빈 캔버스
   const sc = scaleOf(p);
   const wrap = document.createElement("div");
   wrap.className = "pdf-page";
@@ -194,7 +205,10 @@ function renderBoxes() {
   $("boxCount").textContent = BOXES.length;
   const list = $("boxList"); list.innerHTML = "";
   const page = activePage;
-  const pageBoxes = [...BOXES].filter((b) => b.page === page).sort((a, b) => a.order - b.order);
+  // 템플릿 모드: 캔버스가 없으므로 전체 항목을 한 목록으로 보여준다
+  const pageBoxes = TPL_MODE
+    ? [...BOXES].sort((a, b) => a.order - b.order)
+    : [...BOXES].filter((b) => b.page === page).sort((a, b) => a.order - b.order);
   if (!pageBoxes.length) { list.innerHTML = `<li class="empty-hint">이 쪽에는 항목이 없습니다. 문서에서 드래그해 추가하세요.</li>`; return; }
   pageBoxes.forEach((box) => {
     const idx = BOXES.indexOf(box);
@@ -360,7 +374,18 @@ $("saveBtn").addEventListener("click", async () => {
   if (d.ok) loadTemplates();
 });
 async function loadTemplates() {
-  try { const d = await (await fetch("/api/designer/templates")).json(); renderTplList(d.templates || []); } catch (e) {}
+  try {
+    const d = await (await fetch("/api/designer/templates")).json();
+    const names = d.templates || [];
+    renderTplList(names);
+    // 진입 화면의 '템플릿으로 바로 시작' 선택지도 함께 갱신
+    const sel = $("startTplSel");
+    if (sel) {
+      sel.innerHTML = `<option value="">— 저장된 템플릿 선택 —</option>` +
+        names.map((n) => `<option value="${n}">${n}</option>`).join("");
+      $("tplStart").hidden = names.length === 0;
+    }
+  } catch (e) {}
 }
 function renderTplList(names) {
   const host = $("tplList"); host.innerHTML = "";
@@ -374,11 +399,16 @@ function renderTplList(names) {
   });
 }
 async function loadTemplate(name) {
-  if (!DOC_ID) { alert("먼저 양식을 불러오세요."); return; }
   const d = await (await fetch("/api/designer/template?name=" + encodeURIComponent(name))).json();
   if (d.error) { alert(d.error); return; }
   BOXES = (d.boxes || []).map((b) => ({ ...b })); selected = null;
-  $("tplName").value = name; renderPageNav(); renderPage(); renderBoxes();
+  if (!DOC_ID) {  // 양식 없이 불러오면 템플릿 모드로
+    TPL_MODE = true; PAGES = []; activePage = 0;
+    $("tplBannerName").textContent = `'${name}'`;
+    $("tplBanner").hidden = false;
+    document.querySelector(".grid-pane").style.display = "none";
+  }
+  $("tplName").value = name; renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
   $("saveMsg").textContent = `📄 '${name}' 불러옴 (${BOXES.length}개)`;
 }
 async function deleteTemplate(name) {
@@ -492,6 +522,30 @@ function renderApply(d) {
 
 function showOverlay(m) { $("overlayMsg").textContent = m || "처리 중…"; $("overlay").hidden = false; }
 function hideOverlay() { $("overlay").hidden = true; }
+
+// ---------- 템플릿으로 바로 시작(양식 업로드 없이) ----------
+$("startTplBtn").addEventListener("click", async () => {
+  const name = $("startTplSel").value;
+  if (!name) { alert("시작할 템플릿을 선택하세요."); return; }
+  const d = await (await fetch("/api/designer/template?name=" + encodeURIComponent(name))).json();
+  if (d.error) { alert(d.error); return; }
+  BOXES = (d.boxes || []).map((b) => ({ ...b }));
+  DOC_ID = null; PAGES = []; selected = null; activePage = 0;
+  TPL_MODE = true;
+  $("tplName").value = name;
+  $("tplBannerName").textContent = `'${name}'`;
+  $("main").hidden = false;
+  $("tplBanner").hidden = false;
+  document.querySelector(".grid-pane").style.display = "none";  // 캔버스 숨김(양식 없음)
+  renderPageNav(); renderPage(); renderBoxes(); loadTemplates(); fillFieldSelect();
+  $("saveMsg").textContent = `📄 '${name}' 불러옴 (${BOXES.length}개) — 일괄 처리로 바로 추출할 수 있습니다.`;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+$("tplEditBtn").addEventListener("click", () => fi.click());
+$("tplHomeBtn").addEventListener("click", () => location.reload());
+
+// 첫 화면에서도 저장된 템플릿을 바로 보여준다
+loadTemplates();
 
 // AI 기능 준비 상태 표시(패키지+API키). 준비 안 됐으면 버튼에 안내.
 (async () => {

@@ -34,9 +34,29 @@
         <strong>양식 파일 놓기</strong> 또는 클릭
         <input type="file" id="fileInput" accept=".hwpx,.hwp,.pdf" hidden />
       </div>
+
+      <div class="tpl-start" id="tplStart" hidden>
+        <div class="or-sep"><span>또는</span></div>
+        <p class="tpl-start-label">저장된 템플릿으로 <b>양식 없이 바로 처리</b></p>
+        <div class="tpl-start-row">
+          <select id="startTplSel"><option value="">— 저장된 템플릿 선택 —</option></select>
+          <button class="btn-inline" id="startTplBtn">시작</button>
+        </div>
+        <p class="muted" style="margin-top:8px">고르면 곧바로 <b>‘일괄 처리’</b>로 넘어갑니다. 박스를 수정하려면 기준 양식을 올리세요.</p>
+      </div>
     </div>
 
     <div class="designer-main" id="main" hidden>
+      <div class="tpl-banner" id="tplBanner" hidden>
+        <div class="tpl-banner-msg">
+          📄 <b id="tplBannerName">템플릿</b> 을 불러왔습니다 — 오른쪽 <b>‘일괄 처리’</b>에 조사표들을 올려 추출하세요.
+          <span class="muted">박스를 수정하려면 기준 양식을 올리세요.</span>
+        </div>
+        <div class="tpl-banner-actions">
+          <button class="mini-btn" id="tplEditBtn">📤 기준 양식 올려서 편집</button>
+          <button class="mini-btn" id="tplHomeBtn">← 처음으로</button>
+        </div>
+      </div>
       <div class="grid-pane">
         <div class="pane-head">
           <h2>2. 박스 확인·정리</h2>
