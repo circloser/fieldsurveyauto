@@ -30,7 +30,16 @@ def _load_engine():
     # 1) EasyOCR (한국어 정식 지원, pip만으로 설치)
     try:
         import easyocr
-        _ENGINE = easyocr.Reader(["ko", "en"], gpu=False)
+        # 포터블(exe) 배포: 번들에 모델이 동봉돼 있으면 그걸 사용(인터넷 불필요).
+        # 없으면 easyocr 기본 동작(~/.EasyOCR, 필요 시 자동 다운로드).
+        kwargs = {}
+        import os
+        import sys
+        if getattr(sys, "frozen", False):
+            bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "easyocr_models")
+            if os.path.isdir(bundled):
+                kwargs["model_storage_directory"] = bundled
+        _ENGINE = easyocr.Reader(["ko", "en"], gpu=False, **kwargs)
         _ENGINE_KIND = "easyocr"
         return _ENGINE_KIND
     except Exception:  # noqa: BLE001
