@@ -433,6 +433,7 @@ $("applyBtn").addEventListener("click", async () => {
   showOverlay("추출하는 중… (파일마다 PDF 변환)");
   const fd = new FormData(); fd.append("boxes", JSON.stringify(BOXES));
   for (const f of files) fd.append("files", f);
+  fd.append("sheet_name_field", $("sheetNameSel").value || "");
   if (REPORT.report_id) {
     fd.append("report_id", REPORT.report_id);
     fd.append("report_edits", JSON.stringify(REPORT.edits));
@@ -496,10 +497,14 @@ function renderReportGrid() {
 }
 
 function fillFieldSelect() {
-  const sel = $("rptFieldSel");
   const names = [...new Set(BOXES.map((b) => b.field).filter(Boolean))].sort();
-  sel.innerHTML = `<option value="">— 추출 항목 —</option>` +
-    names.map((n) => `<option value="${n}">${n}</option>`).join("");
+  const opts = names.map((n) => `<option value="${n}">${n}</option>`).join("");
+  $("rptFieldSel").innerHTML = `<option value="">— 추출 항목 —</option>` + opts;
+  // 대상지별 시트 이름 선택(일괄 처리)도 같은 항목으로 채움 — 선택 유지
+  const ss = $("sheetNameSel");
+  const keep = ss.value;
+  ss.innerHTML = `<option value="">사용 안 함 (요약표만)</option>` + opts;
+  if (names.includes(keep)) ss.value = keep;
 }
 
 $("rptInsertBtn").addEventListener("click", () => {
@@ -549,6 +554,22 @@ $("tplHomeBtn").addEventListener("click", () => location.reload());
 
 // 첫 화면에서도 저장된 템플릿을 바로 보여준다
 loadTemplates();
+
+// 실행 환경 자동 점검 — 한글(HWP) 없으면 안내(설치 없이 PDF는 그대로 가능)
+(async () => {
+  try {
+    const s = await (await fetch("/api/env_status")).json();
+    if (s.hwp === false) {
+      const el = document.createElement("div");
+      el.className = "env-warn";
+      el.innerHTML = `⚠️ 이 컴퓨터에는 <b>한글(HWP)</b>이 없어 hwpx 변환은 사용할 수 없습니다. ` +
+        `<b>PDF 파일은 그대로 사용 가능</b>합니다. hwpx도 쓰려면 ` +
+        `<a href="${s.hwp_download}" target="_blank" rel="noopener">한컴 다운로드 페이지</a>에서 한글을 설치하세요.`;
+      const badge = document.querySelector(".security-badge");
+      badge.parentNode.insertBefore(el, badge.nextSibling);
+    }
+  } catch (e) {}
+})();
 
 // AI 기능 준비 상태 표시(패키지+API키). 준비 안 됐으면 버튼에 안내.
 (async () => {

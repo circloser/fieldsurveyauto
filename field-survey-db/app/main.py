@@ -384,6 +384,34 @@ def pdf_suggest(doc_id: str) -> JSONResponse:
     return JSONResponse({"boxes": _suggest_all(entry["doc"], entry["pdf_path"])})
 
 
+def hwp_installed() -> bool:
+    """한글(HWP) 설치 여부 — COM ProgID 레지스트리로 빠르게 확인(한글 실행 안 함)."""
+    try:
+        import winreg
+        winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "HWPFrame.HwpObject"))
+        return True
+    except OSError:
+        return False
+
+
+@app.get("/api/env_status")
+def env_status() -> JSONResponse:
+    """실행 환경 자동 점검 — 다른 PC에서 처음 켤 때 무엇이 되고 안 되는지 안내용."""
+    try:
+        from core import ocr as _ocr
+        ocr_ok = _ocr.available()
+    except Exception:  # noqa: BLE001
+        ocr_ok = False
+    from core.llm_understand import available as _ai
+    ai_ok, _ = _ai()
+    return JSONResponse({
+        "hwp": hwp_installed(),   # hwpx 변환 가능 여부(없어도 PDF는 가능)
+        "ocr": ocr_ok,            # 스캔 PDF 글자 인식(선택)
+        "ai": ai_ok,              # AI 자동 이해(선택)
+        "hwp_download": "https://www.hancom.com/cs_center/csDownload.do",
+    })
+
+
 @app.get("/api/pdf/ai_status")
 def pdf_ai_status() -> JSONResponse:
     """AI 자동 이해 사용 가능 여부(패키지+API키)."""
@@ -427,6 +455,7 @@ def pdf_page_image(doc_id: str, page_no: int):
 @app.post("/api/pdf/apply")
 async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
                     report_id: str = Form(""), report_edits: str = Form(""),
+                    sheet_name_field: str = Form(""),
                     report_template: UploadFile | None = None) -> JSONResponse:
     import json as _json
     try:
@@ -490,14 +519,16 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         excel_path = config.OUTPUT_DIR / f"현장조사표_보고서_{stamp}.xlsx"
         try:
             from core.report import build_report_workbook
-            build_report_workbook(tpl_path, rows, fields, str(excel_path))
+            build_report_workbook(tpl_path, rows, fields, str(excel_path),
+                                  sheet_name_field=sheet_name_field or None)
             report_used = True
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"error": f"보고서 양식 처리 실패(엑셀 양식이 맞는지 확인): {e}"},
                                 status_code=400)
     else:
         excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
-        write_template_excel(rows, fields, str(excel_path))
+        write_template_excel(rows, fields, str(excel_path),
+                             sheet_name_field=sheet_name_field or None)
     _PDF_APPLY["excel_path"] = str(excel_path)
     return JSONResponse({"rows": rows, "fields": fields, "ok_count": len(rows),
                          "failed": failed, "match_info": match_info,

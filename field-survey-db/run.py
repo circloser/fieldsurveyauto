@@ -36,12 +36,23 @@ def open_browser_when_ready(port: int) -> None:
     webbrowser.open(url)
 
 
+def _env_report() -> None:
+    """처음 켤 때 이 PC에서 무엇이 되는지 자동 점검해 안내."""
+    from app.main import hwp_installed
+    if hwp_installed():
+        print("  [점검] 한글(HWP): 설치됨 — hwpx 변환 가능")
+    else:
+        print("  [점검] 한글(HWP): 없음 — hwpx 변환 불가(PDF 파일은 그대로 사용 가능)")
+        print("         hwpx도 쓰려면 한글을 설치하세요: https://www.hancom.com/cs_center/csDownload.do")
+
+
 def main() -> None:
     port = find_free_port(DEFAULT_PORT)
     print("=" * 52)
     print("  현장 조사표 DB화 - 로컬 서버 시작")
     print(f"  주소: http://127.0.0.1:{port}")
     print("  종료하려면 이 창에서 Ctrl+C 를 누르세요.")
+    _env_report()
     print("=" * 52)
     threading.Thread(target=open_browser_when_ready, args=(port,), daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

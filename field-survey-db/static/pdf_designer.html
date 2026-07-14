@@ -112,6 +112,13 @@
         <hr class="sep" />
         <h2 style="font-size:16px">5. 일괄 처리</h2>
         <p class="desc">같은 양식 파일(hwpx·pdf) 여러 개 → 추출 → 엑셀(요약표 + 보고서).</p>
+        <div class="sheetname-row">
+          <label for="sheetNameSel">대상지별 시트 이름:</label>
+          <select id="sheetNameSel">
+            <option value="">사용 안 함 (요약표만)</option>
+          </select>
+        </div>
+        <p class="muted" style="margin:4px 0 8px">예: ‘하천명’을 고르면 파일마다 <b>그 값(대상지 이름)으로 된 시트</b>가 생깁니다. 보고서 양식(4번)이 있으면 그 양식으로, 없으면 항목·값 표로 만듭니다.</p>
         <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
         <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
         <div id="applyResult"></div>

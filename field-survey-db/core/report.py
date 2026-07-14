@@ -98,10 +98,23 @@ def _sheet_name(base: str, existing: set[str]) -> str:
     return name
 
 
+def record_sheet_base(rec: dict, sheet_name_field: str | None) -> str:
+    """시트 이름의 원천 문자열 — 대상지명 같은 추출값 우선, 없으면 파일명."""
+    if sheet_name_field:
+        v = str(rec.get(sheet_name_field, "") or "").strip()
+        if v:
+            return v
+    return str(rec.get("_파일명", "") or "")
+
+
 def build_report_workbook(template_path: str, records: list[dict],
                           summary_fields: list[str], out_path: str,
-                          max_reports: int = 300) -> str:
-    """양식을 파일마다 복사해 채우고, 앞에 요약(DB) 시트를 붙여 저장."""
+                          max_reports: int = 300,
+                          sheet_name_field: str | None = None) -> str:
+    """양식을 파일마다 복사해 채우고, 앞에 요약(DB) 시트를 붙여 저장.
+
+    sheet_name_field 가 있으면 그 추출값(예: 대상지명)으로 시트 이름을 짓는다.
+    """
     wb = load_workbook(template_path)
     master = wb.worksheets[0]
 
@@ -110,7 +123,8 @@ def build_report_workbook(template_path: str, records: list[dict],
         if made >= max_reports:
             break
         ws = wb.copy_worksheet(master)
-        ws.title = _sheet_name(rec.get("_파일명", ""), set(wb.sheetnames) - {ws.title})
+        base = record_sheet_base(rec, sheet_name_field)
+        ws.title = _sheet_name(base, set(wb.sheetnames) - {ws.title})
         _fill_ws(ws, rec)
         made += 1
 

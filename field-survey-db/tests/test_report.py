@@ -43,6 +43,48 @@ def test_read_grid_and_edit(tmp_path):
     assert g2["cells"][6][0] == "추가"
 
 
+def test_build_report_sheet_name_field(tmp_path):
+    """시트 이름 = 추출값(대상지). 중복은 접미사, 금지문자 치환, 빈값은 파일명 폴백."""
+    tpl = tmp_path / "tpl.xlsx"
+    _make_template(tpl)
+    recs = [
+        {"_파일명": "a.pdf", "하천명": "해남천", "보 길이": "30", "조사일시": ""},
+        {"_파일명": "b.pdf", "하천명": "해남천", "보 길이": "25", "조사일시": ""},   # 중복 이름
+        {"_파일명": "c.pdf", "하천명": "가곡천[본류]/상류", "보 길이": "", "조사일시": ""},  # 금지문자
+        {"_파일명": "d.pdf", "하천명": "", "보 길이": "", "조사일시": ""},           # 빈값 → 파일명
+    ]
+    out = tmp_path / "out.xlsx"
+    build_report_workbook(str(tpl), recs, ["하천명"], str(out), sheet_name_field="하천명")
+    wb = load_workbook(out)
+    assert "해남천" in wb.sheetnames
+    assert any(s.startswith("해남천_") for s in wb.sheetnames)      # 중복 → 접미사
+    assert "가곡천[본류]/상류" not in wb.sheetnames                  # 금지문자 원문 없음
+    assert any("가곡천" in s for s in wb.sheetnames)
+    assert "d.pdf" in wb.sheetnames                                  # 빈값 → 파일명 폴백
+
+
+def test_write_template_excel_per_site_sheets(tmp_path):
+    """보고서 양식 없이도 대상지별 시트(항목|값)가 생긴다."""
+    from core.template.writer import write_template_excel
+    rows = [
+        {"_파일명": "a.pdf", "하천명": "해남천", "보 길이": "30"},
+        {"_파일명": "b.pdf", "하천명": "가곡천", "보 길이": "25"},
+    ]
+    out = tmp_path / "flat.xlsx"
+    write_template_excel(rows, ["하천명", "보 길이"], str(out), sheet_name_field="하천명")
+    wb = load_workbook(out)
+    assert wb.sheetnames[0] == "추출결과"
+    assert "해남천" in wb.sheetnames and "가곡천" in wb.sheetnames
+    s = wb["해남천"]
+    assert [s["A1"].value, s["B1"].value] == ["항목", "값"]
+    assert [s["A2"].value, s["B2"].value] == ["파일명", "a.pdf"]
+    assert [s["A3"].value, s["B3"].value] == ["하천명", "해남천"]
+    # 옵션 미사용이면 기존과 동일(시트 1개)
+    out2 = tmp_path / "flat2.xlsx"
+    write_template_excel(rows, ["하천명"], str(out2))
+    assert load_workbook(out2).sheetnames == ["추출결과"]
+
+
 def test_build_report(tmp_path):
     tpl = tmp_path / "tpl.xlsx"
     _make_template(tpl)
