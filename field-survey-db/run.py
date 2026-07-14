@@ -5,9 +5,17 @@
 """
 import multiprocessing
 import socket
+import sys
 import threading
 import time
 import webbrowser
+
+# Windows 콘솔(cp949)이 표현 못 하는 문자가 있어도 죽지 않게(포터블 exe 안전장치).
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
 
 import uvicorn
 
@@ -40,9 +48,9 @@ def _env_report() -> None:
     """처음 켤 때 이 PC에서 무엇이 되는지 자동 점검해 안내."""
     from app.main import hwp_installed
     if hwp_installed():
-        print("  [점검] 한글(HWP): 설치됨 — hwpx 변환 가능")
+        print("  [점검] 한글(HWP): 설치됨 - hwpx 변환 가능")
     else:
-        print("  [점검] 한글(HWP): 없음 — hwpx 변환 불가(PDF 파일은 그대로 사용 가능)")
+        print("  [점검] 한글(HWP): 없음 - hwpx 변환 불가(PDF 파일은 그대로 사용 가능)")
         print("         hwpx도 쓰려면 한글을 설치하세요: https://www.hancom.com/cs_center/csDownload.do")
 
 
