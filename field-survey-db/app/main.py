@@ -443,6 +443,81 @@ def pdf_ai_understand(doc_id: str) -> JSONResponse:
     return JSONResponse({"boxes": boxes})
 
 
+def _editable_pdf(entry: dict, doc_id: str) -> str:
+    """문서 PDF를 편집 작업본으로 전환(원본 업로드·템플릿 PDF를 건드리지 않게)."""
+    work = config.PDF_CACHE_DIR / f"edit_{doc_id}.pdf"
+    if entry["pdf_path"] != str(work):
+        shutil.copyfile(entry["pdf_path"], work)
+        entry["pdf_path"] = str(work)
+    return str(work)
+
+
+def _pages_dto(doc) -> list[dict]:
+    return [{"page_no": p.page_no, "width": p.width, "height": p.height,
+             "needs_ocr": p.needs_ocr, "ocr": getattr(p, "ocr", False)} for p in doc.pages]
+
+
+@app.post("/api/pdf/pages/delete")
+def pdf_pages_delete(payload: dict = Body(...)) -> JSONResponse:
+    """양식에서 페이지 삭제 — 필요 없는 장을 빼고 템플릿을 구성."""
+    entry = _PDF_DOCS.get(payload.get("doc_id") or "")
+    page_no = int(payload.get("page_no", -1))
+    if not entry:
+        return JSONResponse({"error": "문서를 찾을 수 없습니다."}, status_code=404)
+    import fitz
+    path = _editable_pdf(entry, payload["doc_id"])
+    src = fitz.open(path)
+    if len(src) <= 1:
+        src.close()
+        return JSONResponse({"error": "마지막 페이지는 삭제할 수 없습니다."}, status_code=400)
+    if not (0 <= page_no < len(src)):
+        src.close()
+        return JSONResponse({"error": "잘못된 페이지 번호입니다."}, status_code=400)
+    src.delete_page(page_no)
+    tmp = path + ".tmp"
+    src.save(tmp)
+    src.close()
+    shutil.move(tmp, path)
+    entry["doc"] = read_pdf(path)
+    return JSONResponse({"pages": _pages_dto(entry["doc"])})
+
+
+@app.post("/api/pdf/pages/add")
+async def pdf_pages_add(file: UploadFile, doc_id: str = Form("")) -> JSONResponse:
+    """양식 뒤에 페이지 추가 — 다른 파일(hwpx/pdf)의 페이지를 이어붙이고 자동 박스 제안."""
+    entry = _PDF_DOCS.get(doc_id)
+    if not entry:
+        return JSONResponse({"error": "문서를 찾을 수 없습니다."}, status_code=404)
+    req_dir = config.UPLOAD_DIR / ("pdfadd_" + uuid.uuid4().hex[:8])
+    req_dir.mkdir(parents=True, exist_ok=True)
+    dest = req_dir / (file.filename or "extra.pdf")
+    with dest.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    try:
+        extra_pdf = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"추가 파일 변환 실패: {e}"}, status_code=400)
+    import fitz
+    path = _editable_pdf(entry, doc_id)
+    base = fitz.open(path)
+    first_new = len(base)
+    extra = fitz.open(extra_pdf)
+    base.insert_pdf(extra)
+    extra.close()
+    tmp = path + ".tmp"
+    base.save(tmp)
+    base.close()
+    shutil.move(tmp, path)
+    entry["doc"] = read_pdf(path)
+    # 새로 붙은 페이지에 자동 박스 제안(표 칸 기반, 없으면 단어 방식)
+    new_boxes: list[dict] = []
+    for p in entry["doc"].pages[first_new:]:
+        cb = suggest_cells_maximal(path, p.page_no)
+        new_boxes.extend(cb if cb else suggest_pixel_boxes(p))
+    return JSONResponse({"pages": _pages_dto(entry["doc"]),
+                         "first_new_page": first_new, "new_boxes": new_boxes})
+
+
 @app.get("/api/pdf/page/{doc_id}/{page_no}")
 def pdf_page_image(doc_id: str, page_no: int):
     entry = _PDF_DOCS.get(doc_id)
@@ -493,7 +568,8 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
             if not bundle_maps:
                 bundle_maps = [match_pages(box_list, doc.pages)]  # 기존 동작(1행) 유지
             for bi, page_map in enumerate(bundle_maps, start=1):
-                row = apply_pixel_template(doc.pages, box_list, page_map=page_map)
+                row = apply_pixel_template(doc.pages, box_list, page_map=page_map,
+                                           pdf_path=pdf_path)  # 유기적(라벨 칸 기준) 추출
                 row["_파일명"] = (uf.filename if len(bundle_maps) == 1
                                   else f"{uf.filename} #{bi}")
                 rows.append(row)

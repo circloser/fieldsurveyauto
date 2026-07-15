@@ -75,6 +75,54 @@ def test_page_auto_matching(request):
         sub_path.unlink(missing_ok=True)
 
 
+def _draw_form(path, rows, y_top):
+    """간단 조사표 합성 — 라벨|값 2열 표를 y_top부터 그린다(칸 테두리 + 텍스트)."""
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=500)
+    font = fitz.Font("cjk")   # 한글 지원 내장 폰트
+    tw = fitz.TextWriter(page.rect)
+    x0, x1, x2, rh = 40, 160, 360, 28
+    for i, (label, value) in enumerate(rows):
+        y = y_top + i * rh
+        page.draw_rect(fitz.Rect(x0, y, x1, y + rh), color=(0, 0, 0), width=0.8)
+        page.draw_rect(fitz.Rect(x1, y, x2, y + rh), color=(0, 0, 0), width=0.8)
+        tw.append((x0 + 6, y + 18), label, font=font, fontsize=10)
+        if value:
+            tw.append((x1 + 6, y + 18), value, font=font, fontsize=10)
+    tw.write_text(page)
+    doc.save(str(path))
+    doc.close()
+
+
+def test_organic_extraction_survives_row_insert(tmp_path):
+    """조사표에 줄이 추가되고 위치가 밀려도 라벨 칸 기준(유기적)으로 값이 정확."""
+    from core.pdf_pipeline import suggest_from_cells
+
+    base = tmp_path / "form_base.pdf"
+    _draw_form(base, [("하천명", "해남천"), ("관리기관", "전남 해남군"), ("보길이", "30")],
+               y_top=60)
+    boxes = suggest_from_cells(str(base), 0)   # 원본 위치로 만든 템플릿
+    assert {b["field"] for b in boxes} >= {"하천명", "관리기관", "보길이"}
+
+    # 변형본: 맨 위에 새 행 추가 + 전체 2행(56pt) 아래로 밀림 — 값도 다르게
+    drift = tmp_path / "form_drift.pdf"
+    _draw_form(drift, [("조사구분", "정기"), ("비고", "줄추가"),
+                       ("하천명", "가곡천"), ("관리기관", "강원 삼척시"), ("보길이", "25")],
+               y_top=116)
+    dd = read_pdf(str(drift), ocr_scanned=False)
+
+    organic = apply_pixel_template(dd.pages, boxes, pdf_path=str(drift))
+    assert organic.get("하천명") == "가곡천"        # 밀려도 라벨 따라 정확
+    assert organic.get("관리기관") == "강원 삼척시"
+    assert organic.get("보길이") == "25"
+
+    # 대조: 좌표만 쓰면(기존 방식) 밀린 만큼 어긋난다 → 유기적 방식의 필요성 입증
+    naive = apply_pixel_template(dd.pages, boxes)
+    assert naive.get("하천명") != "가곡천"
+
+
 def test_multi_bundle_one_row_each(request):
     """한 파일에 같은 조사표가 2묶음(9쪽×2=18쪽) → 묶음마다 페이지 매핑 1개씩."""
     import fitz

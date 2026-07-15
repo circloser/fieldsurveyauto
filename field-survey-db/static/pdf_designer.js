@@ -53,16 +53,66 @@ function pageWithMostBoxes() {
   return best;
 }
 
+let EDIT_VER = 0;   // 페이지 편집(삭제/추가) 시 증가 — 페이지 이미지 캐시 무효화
+
 function renderPageNav() {
   const host = $("pageNav"); host.innerHTML = "";
   const c = {}; BOXES.forEach((b) => (c[b.page] = (c[b.page] || 0) + 1));
   PAGES.forEach((p) => {
     const b = document.createElement("button");
     b.className = "tp-btn" + (p.page_no === activePage ? " active" : "");
-    b.innerHTML = `${p.page_no + 1}쪽<span class="n">${c[p.page_no] ? c[p.page_no] + "개" : ""}</span>`;
-    b.addEventListener("click", () => { activePage = p.page_no; selected = null; renderPageNav(); renderPage(); renderBoxes(); });
+    b.innerHTML = `${p.page_no + 1}쪽<span class="n">${c[p.page_no] ? c[p.page_no] + "개" : ""}</span>` +
+      (p.page_no === activePage && PAGES.length > 1
+        ? `<span class="tp-del" title="이 페이지를 양식에서 삭제">✕</span>` : "");
+    b.addEventListener("click", (e) => {
+      if (e.target.classList.contains("tp-del")) { deletePage(p.page_no); return; }
+      activePage = p.page_no; selected = null; renderPageNav(); renderPage(); renderBoxes();
+    });
     host.appendChild(b);
   });
+  if (DOC_ID) {   // 다른 파일의 페이지를 뒤에 추가
+    const add = document.createElement("button");
+    add.className = "tp-btn tp-add";
+    add.textContent = "＋쪽 추가";
+    add.title = "다른 파일(hwpx/pdf)의 페이지를 이 양식 뒤에 추가";
+    add.addEventListener("click", () => $("addPageInput").click());
+    host.appendChild(add);
+  }
+}
+
+async function deletePage(pno) {
+  if (!confirm(`${pno + 1}쪽을 양식에서 삭제할까요?\n(이 쪽의 추출 항목 ${BOXES.filter((b) => b.page === pno).length}개도 함께 삭제됩니다)`)) return;
+  showOverlay("페이지 삭제 중…");
+  try {
+    const d = await (await fetch("/api/pdf/pages/delete", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc_id: DOC_ID, page_no: pno }),
+    })).json();
+    if (d.error) throw new Error(d.error);
+    PAGES = d.pages; EDIT_VER++;
+    BOXES = BOXES.filter((b) => b.page !== pno)
+                 .map((b) => (b.page > pno ? { ...b, page: b.page - 1 } : b));
+    sortBoxesByPosition();
+    if (activePage >= PAGES.length) activePage = PAGES.length - 1;
+    selected = null;
+    renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
+  } catch (e) { alert("페이지 삭제 실패: " + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function addPagesFile(file) {
+  showOverlay("페이지 추가 중… (hwpx는 PDF 변환에 시간이 걸립니다)");
+  const fd = new FormData(); fd.append("file", file); fd.append("doc_id", DOC_ID);
+  try {
+    const d = await (await fetch("/api/pdf/pages/add", { method: "POST", body: fd })).json();
+    if (d.error) throw new Error(d.error);
+    PAGES = d.pages; EDIT_VER++;
+    const start = Math.max(0, ...BOXES.map((b) => b.order || 0));
+    (d.new_boxes || []).forEach((b, i) => BOXES.push({ ...b, order: start + i + 1 }));
+    activePage = d.first_new_page; selected = null;
+    renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
+  } catch (e) { alert("페이지 추가 실패: " + e.message); }
+  finally { hideOverlay(); }
 }
 
 // ---------- 페이지 렌더 ----------
@@ -76,7 +126,7 @@ function renderPage() {
   wrap.style.width = zoomW + "px";
   wrap.style.height = (p.height * sc) + "px";   // 비율 유지(폭*페이지비율)
   const img = document.createElement("img");
-  img.src = `/api/pdf/page/${DOC_ID}/${p.page_no}`;
+  img.src = `/api/pdf/page/${DOC_ID}/${p.page_no}?v=${EDIT_VER}`;
   img.draggable = false;
   wrap.appendChild(img);
 
@@ -556,6 +606,11 @@ $("startTplBtn").addEventListener("click", async () => {
 });
 $("tplEditBtn").addEventListener("click", () => fi.click());
 $("tplHomeBtn").addEventListener("click", () => location.reload());
+$("addPageInput").addEventListener("change", () => {
+  const f = $("addPageInput").files[0];
+  if (f && DOC_ID) addPagesFile(f);
+  $("addPageInput").value = "";
+});
 
 // 첫 화면에서도 저장된 템플릿을 바로 보여준다
 loadTemplates();

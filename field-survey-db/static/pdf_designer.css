@@ -44,6 +44,13 @@
 .rpt-grid input.ph { background: #eaf3ff; color: var(--accent); font-weight: 600; }
 .rpt-grid input.formula { background: #fff7e0; color: #b0820a; }
 .page-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.tp-del {
+  margin-left: 6px; padding: 0 3px; border-radius: 4px; cursor: pointer;
+  color: #ffd7dc; font-size: 11px;
+}
+.tp-del:hover { background: rgba(255,255,255,.2); color: #fff; }
+.tp-add { border-style: dashed; color: var(--accent); background: #f5f9ff; }
+.tp-add:hover { background: #eaf3ff; }
 
 /* 일괄 처리 — 대상지별 시트 이름 선택 */
 .sheetname-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }

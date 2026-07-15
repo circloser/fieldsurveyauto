@@ -290,6 +290,36 @@ def suggest_pixel_boxes(page: PdfPage) -> list[dict]:
 
 # ---------- 픽셀박스 추출 ----------
 
+def _cell_anchor_value(cells: list[Cell], box: dict) -> str | None:
+    """유기적 추출 — 입력 페이지의 표 칸에서 라벨 칸을 찾아 인접 값 칸을 읽는다.
+
+    조사표에 줄이 추가되거나 위치가 밀려도 라벨을 따라가므로 값이 어긋나지 않는다.
+    같은 라벨이 여러 개면 템플릿 박스 위치에 가장 가까운 것을 고른다.
+    라벨 칸을 못 찾으면 None(호출부에서 좌표 방식으로 폴백).
+    """
+    anchor = box.get("anchor") or {}
+    want = normalize_key(anchor.get("label") or "")
+    if not want or not cells:
+        return None
+    cands = [c for c in cells if normalize_key(c.text) == want]
+    if not cands:
+        cands = [c for c in cells if want and want in normalize_key(c.text)]
+    if not cands:
+        return None
+    bx, by = float(box["x0"]), float(box["y0"])
+    lab = min(cands, key=lambda c: (c.x0 - bx) ** 2 + (c.y0 - by) ** 2)
+    rel = anchor.get("relation", "right")
+    if rel == "below":
+        nxt = [c for c in cells if abs(c.y0 - lab.y1) < 4 and _hoverlap(lab, c)]
+        nxt.sort(key=lambda c: c.y0)
+    else:
+        nxt = [c for c in cells if abs(c.x0 - lab.x1) < 4 and _voverlap(lab, c)]
+        nxt.sort(key=lambda c: c.x0)
+    if not nxt:
+        return None
+    return normalize(nxt[0].text)
+
+
 def _box_value(page: PdfPage, box: dict) -> str:
     mode = box.get("mode", "text")
     bbox = {"x0": box["x0"], "y0": box["y0"], "x1": box["x1"], "y1": box["y1"]}
@@ -374,10 +404,25 @@ def match_bundles(boxes: list[dict], pages: list[PdfPage],
 
 
 def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
-                         page_map: dict[int, int] | None = None) -> dict[str, str]:
-    """박스를 적용해 {field: value}. page_map 이 있으면 템플릿 페이지를 입력 페이지로 치환."""
+                         page_map: dict[int, int] | None = None,
+                         pdf_path: str | None = None) -> dict[str, str]:
+    """박스를 적용해 {field: value}. page_map 이 있으면 템플릿 페이지를 입력 페이지로 치환.
+
+    pdf_path 를 주면 유기적 추출: 입력 페이지의 표 칸을 감지해 라벨 칸 기준으로 값을
+    읽는다(줄 추가·위치 밀림에 강함). 라벨을 못 찾은 박스만 좌표 방식으로 폴백.
+    """
     ordered = sorted(boxes, key=lambda b: b.get("order", 0))
     by_page = {p.page_no: p for p in pages}
+    cells_cache: dict[int, list[Cell]] = {}
+
+    def cells_for(pno: int) -> list[Cell]:
+        if pno not in cells_cache:
+            try:
+                cells_cache[pno] = detect_cells(pdf_path, pno)
+            except Exception:  # noqa: BLE001
+                cells_cache[pno] = []
+        return cells_cache[pno]
+
     out: dict[str, str] = {}
     for b in ordered:
         tpage = int(b.get("page", 0))
@@ -386,7 +431,16 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
             page = by_page.get(ipage) if ipage is not None else None
         else:
             page = by_page.get(tpage)
-        out[b["field"]] = _box_value(page, b) if page else ""
+        if page is None:
+            out[b["field"]] = ""
+            continue
+        val = None
+        # 유기적(칸-앵커) 우선 — 일반 텍스트 박스에만(굵게/체크는 기존 방식 유지)
+        if pdf_path and b.get("mode", "text") == "text" and (b.get("anchor") or {}).get("label"):
+            cells = cells_for(page.page_no)
+            if cells:
+                val = _cell_anchor_value(cells, b)
+        out[b["field"]] = val if val is not None else _box_value(page, b)
     return out
 
 
