@@ -522,6 +522,11 @@ function renderApply(d) {
   if (d.report_used) html += `<p class="muted">📋 보고서 양식 반영됨 (요약표 + 파일별 보고서 시트)</p>`;
   if (d.match_info && d.match_info.length) {
     const mi = d.match_info;
+    const multi = mi.filter((m) => (m.bundles || 1) > 1);
+    if (multi.length) {
+      html += `<p class="muted">📚 묶음 인식: ` +
+        multi.map((m) => `${m.name} → <b>${m.bundles}묶음(${m.bundles}행)</b>`).join(", ") + `</p>`;
+    }
     const anyPartial = mi.some((m) => m.matched < m.template_pages);
     if (anyPartial) {
       html += `<p class="muted">📄 페이지 자동 매칭: ` +

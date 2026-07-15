@@ -35,10 +35,10 @@ field-survey-db/data/
 build/
 dist/
 *.log
-build_log*.txt
+build_*.txt
 field-survey-db/build/
 field-survey-db/dist/
-field-survey-db/build_log*.txt
+field-survey-db/build_*.txt
 
 # ===== 테스트 픽스처(실데이터 포함) =====
 **/tests/fixtures/*.hwpx

@@ -75,6 +75,42 @@ def test_page_auto_matching(request):
         sub_path.unlink(missing_ok=True)
 
 
+def test_multi_bundle_one_row_each(request):
+    """한 파일에 같은 조사표가 2묶음(9쪽×2=18쪽) → 묶음마다 페이지 매핑 1개씩."""
+    import fitz
+
+    fx = request.path.parent / "fixtures" / "sample.pdf"
+    if not fx.exists():
+        pytest.skip("PDF 샘플 없음")
+    from core.pdf_pipeline import match_bundles, suggest_cells_maximal
+
+    full = read_pdf(str(fx), ocr_scanned=False)
+    tmpl = []
+    for p in full.pages:
+        tmpl += suggest_cells_maximal(str(fx), p.page_no)
+
+    dbl_path = fx.parent / "_test_double.pdf"
+    src = fitz.open(str(fx))
+    dbl = fitz.open()
+    dbl.insert_pdf(src)
+    dbl.insert_pdf(src)   # 같은 조사표 2묶음
+    dbl.save(str(dbl_path))
+    dbl.close(); src.close()
+    try:
+        dd = read_pdf(str(dbl_path), ocr_scanned=False)
+        bundles = match_bundles(tmpl, dd.pages)
+        assert len(bundles) == 2                       # 묶음 2개 = 행 2개
+        n = len(full.pages)
+        for tp, ip in bundles[0].items():
+            assert ip == tp                            # 1묶음: 앞 9쪽
+        for tp, ip in bundles[1].items():
+            assert ip == tp + n                        # 2묶음: 뒤 9쪽
+        # 단일 파일이면 묶음 1개(기존 동작 유지)
+        assert len(match_bundles(tmpl, full.pages)) == 1
+    finally:
+        dbl_path.unlink(missing_ok=True)
+
+
 def test_maximal_covers_all_cells(request, doc):
     fx = request.path.parent / "fixtures" / "sample.pdf"
     if not fx.exists():

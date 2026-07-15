@@ -21,6 +21,7 @@ from core.review.store import CorrectionStore
 from core.pdf_pipeline import (
     apply_pixel_template,
     field_order as pdf_field_order,
+    match_bundles,
     match_pages,
     suggest_cells_maximal,
     suggest_pixel_boxes,
@@ -487,12 +488,18 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         try:
             pdf_path = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
             doc = read_pdf(pdf_path)
-            # 페이지 자동 매칭: 템플릿 페이지 ↔ 입력 파일의 비슷한 페이지
-            page_map = match_pages(box_list, doc.pages)
-            row = apply_pixel_template(doc.pages, box_list, page_map=page_map)
-            row["_파일명"] = uf.filename
-            rows.append(row)
-            match_info.append({"name": uf.filename, "matched": len(page_map),
+            # 페이지 자동 매칭 — 한 파일에 같은 서식이 여러 묶음이면 묶음마다 한 행
+            bundle_maps = match_bundles(box_list, doc.pages)
+            if not bundle_maps:
+                bundle_maps = [match_pages(box_list, doc.pages)]  # 기존 동작(1행) 유지
+            for bi, page_map in enumerate(bundle_maps, start=1):
+                row = apply_pixel_template(doc.pages, box_list, page_map=page_map)
+                row["_파일명"] = (uf.filename if len(bundle_maps) == 1
+                                  else f"{uf.filename} #{bi}")
+                rows.append(row)
+            match_info.append({"name": uf.filename,
+                               "matched": len(bundle_maps[0]) if bundle_maps[0] else 0,
+                               "bundles": len(bundle_maps),
                                "template_pages": n_tmpl_pages, "input_pages": len(doc.pages)})
         except Exception as e:  # noqa: BLE001
             failed.append({"name": uf.filename, "error": str(e)})

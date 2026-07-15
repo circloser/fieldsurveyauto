@@ -345,6 +345,34 @@ def match_pages(boxes: list[dict], pages: list[PdfPage], threshold: float = 0.35
     return mapping
 
 
+def match_bundles(boxes: list[dict], pages: list[PdfPage],
+                  threshold: float = 0.35, max_bundles: int = 200) -> list[dict[int, int]]:
+    """한 파일 안에 같은 서식이 여러 묶음 반복될 때, 묶음마다 페이지 매핑을 찾는다.
+
+    match_pages 를 반복 적용: 매칭된 입력 페이지를 제외하고 다시 매칭 → 다음 묶음.
+    반환: [ {템플릿_페이지: 입력_페이지}, ... ] (묶음 순서 = 입력 페이지 순서).
+    안전장치: 두 번째 묶음부터는 첫 묶음 매칭 페이지 수의 절반 이상 매칭돼야
+    묶음으로 인정(꼬리 페이지의 우연한 약한 매칭으로 헛 행이 생기지 않게).
+    """
+    remaining = list(pages)
+    bundles: list[dict[int, int]] = []
+    first_n = 0
+    while remaining and len(bundles) < max_bundles:
+        m = match_pages(boxes, remaining, threshold)
+        if not m:
+            break
+        if bundles and len(m) < max(1, round(first_n * 0.5)):
+            break  # 첫 묶음보다 훨씬 부실한 매칭 → 진짜 묶음 아님
+        if not bundles:
+            first_n = len(m)
+        bundles.append(m)
+        used = set(m.values())
+        remaining = [p for p in remaining if p.page_no not in used]
+    # 묶음을 문서 순서(첫 매칭 페이지 기준)로 정렬해 행 순서를 자연스럽게
+    bundles.sort(key=lambda mm: min(mm.values()))
+    return bundles
+
+
 def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
                          page_map: dict[int, int] | None = None) -> dict[str, str]:
     """박스를 적용해 {field: value}. page_map 이 있으면 템플릿 페이지를 입력 페이지로 치환."""
