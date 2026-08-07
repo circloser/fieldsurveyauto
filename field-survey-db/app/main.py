@@ -462,15 +462,28 @@ def vision_status() -> JSONResponse:
 
 
 def _vision_groups(rows: list[dict]) -> list[dict]:
-    """서식별로 (라벨, 필드순서, 행들) 묶음 — 엑셀 시트 분리용. 스키마 있는 서식만."""
+    """서식별로 (라벨, 필드순서, 행들) 묶음 — 엑셀 시트 분리용.
+
+    스키마 있는 서식은 고정 열, 범용(미상)은 등장한 항목들의 합집합을 열로.
+    값이 하나도 없는 서식(사진 등)은 시트를 만들지 않는다.
+    """
     groups: list[dict] = []
     for form in dict.fromkeys(r["form"] for r in rows):  # 등장 순서 유지
+        frows = [r for r in rows if r["form"] == form]
         schema, _ = vision_schema(form)
-        if schema is None:
-            continue
-        fields = list(schema["properties"].keys())
-        frows = [{"_파일명": r["_파일명"], **r["values"]} for r in rows if r["form"] == form]
-        groups.append({"label": FORM_LABELS_KO.get(form, form), "fields": fields, "rows": frows})
+        if schema is not None:
+            fields = list(schema["properties"].keys())
+        else:
+            fields = []
+            for r in frows:
+                for k in r["values"]:
+                    if k not in fields:
+                        fields.append(k)
+            if not fields:
+                continue
+        label = frows[0].get("label") or FORM_LABELS_KO.get(form, form)
+        excel_rows = [{"_파일명": r["_파일명"], **r["values"]} for r in frows]
+        groups.append({"label": label, "fields": fields, "rows": excel_rows})
     return groups
 
 

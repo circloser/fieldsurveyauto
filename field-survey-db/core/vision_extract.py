@@ -59,6 +59,79 @@ def build_content(png: bytes, schema_hint: str) -> list:
     ]
 
 
+# ── 범용(미상 서식) 추출 — 스키마 없이 '항목:값'을 통째로 뽑는다 ───────────────
+
+_GENERIC_SYSTEM = (
+    "당신은 어떤 현장 조사표든 디지털화하는 전문가입니다. 주어진 페이지 이미지를 사람처럼 "
+    "읽고, 사람이 '기재한' 모든 항목을 (항목 이름, 값) 쌍으로 빠짐없이 추출하세요.\n"
+    "규칙:\n"
+    "- 항목=문서의 라벨/칸 이름, 값=그 옆이나 아래에 적힌 내용.\n"
+    "- 체크(√·■)로 선택된 항목은 선택지 텍스트를 값으로. 표의 각 행도 항목:값으로.\n"
+    "- 설명문·안내문·사진·그림·빈 칸은 제외. 실제 기재된 데이터만.\n"
+    "- 추측·창작 금지. 보이는 그대로만."
+)
+
+_GENERIC_HINT = (
+    "이 페이지에 사람이 기재한 모든 '항목'과 '값'을 찾아 나열하세요. "
+    "(예: 항목='하천명' 값='탄천', 항목='보 길이' 값='20')"
+)
+
+_GENERIC_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"항목": {"type": "string"}, "값": {"type": "string"}},
+                "required": ["항목", "값"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
+
+def items_to_dict(items: list | None) -> dict:
+    """[{'항목','값'}] → {항목: 값}. 중복 항목은 접미어로 유일화(엑셀 열 충돌 방지)."""
+    out: dict[str, str] = {}
+    for it in items or []:
+        k = (it.get("항목") or "").strip()
+        v = (it.get("값") or "").strip()
+        if not k:
+            continue
+        if k in out:
+            n = 2
+            while f"{k} ({n})" in out:
+                n += 1
+            k = f"{k} ({n})"
+        out[k] = v
+    return out
+
+
+def extract_page_generic(pdf_path: str, page_no: int, dpi: int = 170) -> dict:
+    """미상 서식 페이지를 스키마 없이 Vision으로 추출 → {항목: 값}. 프록시 미설정 시 RuntimeError."""
+    ok, msg = available()
+    if not ok:
+        raise RuntimeError(msg)
+    png = render_page_png(pdf_path, page_no, dpi=dpi)
+    resp = _client().messages.create(
+        model=config.VISION_MODEL,
+        max_tokens=4000,
+        system=_GENERIC_SYSTEM,
+        messages=[{"role": "user", "content": build_content(png, _GENERIC_HINT)}],
+        output_config={"format": {"type": "json_schema", "schema": _GENERIC_SCHEMA}},
+    )
+    text = next((b.text for b in resp.content if b.type == "text"), "")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return items_to_dict(data.get("items"))
+
+
 def extract_page(pdf_path: str, page_no: int, json_schema: dict,
                  schema_hint: str = "", dpi: int = 170) -> dict:
     """한 페이지를 Vision 으로 추출 → {필드명: 값}. 프록시 미설정 시 RuntimeError."""

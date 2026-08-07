@@ -4,6 +4,7 @@ from openpyxl import load_workbook
 from core.bundle import _flags_for
 from core.extraction.form_detector import FORM_A
 from core.template.writer import write_bundle_excel
+from core.vision_extract import items_to_dict
 
 
 def test_flags_empty_and_format():
@@ -13,6 +14,21 @@ def test_flags_empty_and_format():
     assert flags.get("월류수심") == "형식오류"    # 숫자 필드인데 비숫자
     assert "하천명" not in flags                 # 정상 텍스트
     assert "보길이" not in flags                 # 정상 숫자
+
+
+def test_items_to_dict_generic():
+    # 범용 모드: 항목:값 배열 → dict, 빈 항목 제외, 중복 항목 유일화
+    items = [
+        {"항목": "하천명", "값": "탄천"},
+        {"항목": "", "값": "무시"},          # 항목 없음 → 제외
+        {"항목": "수온", "값": "18"},
+        {"항목": "수온", "값": "19"},          # 중복 → '수온 (2)'
+    ]
+    d = items_to_dict(items)
+    assert d["하천명"] == "탄천"
+    assert d["수온"] == "18" and d["수온 (2)"] == "19"
+    assert "무시" not in d.values() or "" not in d
+    assert items_to_dict(None) == {}
 
 
 def test_bundle_excel_sheets(tmp_path):

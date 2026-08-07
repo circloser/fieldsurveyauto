@@ -40,15 +40,21 @@ def _flags_for(form: str, values: dict) -> dict:
 
 
 def extract_bundle(pdf_path: str, use_vision_fallback: bool = True,
-                   dpi: int = 170) -> list[dict]:
-    """번들 PDF를 페이지별로 자동 추출. 스키마 없는 서식(B/D/E/photo)은 값 없이 라벨만."""
+                   use_generic: bool = True, dpi: int = 170) -> list[dict]:
+    """번들 PDF를 페이지별로 자동 추출.
+
+    - 알려진 서식(A~E): 해당 스키마로 추출.
+    - 미상 서식(정의 안 된 다른 조사표): use_generic 이면 스키마 없이 Vision으로
+      '항목:값'을 통째로 뽑는다(범용 모드) → 어떤 조사표든 표로.
+    - 사진(photo) 등 데이터 아님: 건너뜀.
+    """
     doc = read_pdf(pdf_path)
     rows: list[dict] = []
     for p in doc.pages:
         det = route_page(p)
         form = det.form_type
         source = "signature"
-        # 시그니처가 못 잡으면 Vision 분류 폴백(선택)
+        # 시그니처가 못 잡으면 Vision 분류로 알려진 6종에 맞춰보기(선택)
         if form == FORM_UNKNOWN and use_vision_fallback:
             v = classify_page_vision(pdf_path, p.page_no)
             if v != FORM_UNKNOWN:
@@ -61,12 +67,19 @@ def extract_bundle(pdf_path: str, use_vision_fallback: bool = True,
             "label": FORM_LABELS_KO.get(form, form),
             "confidence": det.confidence,
             "route_source": source,
+            "generic": False,
             "values": {},
+            "flags": {},
         }
         if schema is not None:
             row["values"] = vision_extract.extract_page(pdf_path, p.page_no, schema, hint, dpi=dpi)
             row["flags"] = _flags_for(form, row["values"])
-        else:
-            row["flags"] = {}
+        elif form == FORM_UNKNOWN and use_generic:
+            # 범용 모드: 정의 안 된 새 조사표도 자유형으로 추출
+            row["values"] = vision_extract.extract_page_generic(pdf_path, p.page_no, dpi=dpi)
+            row["generic"] = True
+            row["label"] = "범용(미상 서식)"
+            row["route_source"] = "generic"
+            row["flags"] = _flags_for(form, row["values"])
         rows.append(row)
     return rows

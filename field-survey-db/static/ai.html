@@ -116,9 +116,13 @@ function render(data) {
     const fields = Object.entries(r.values)
       .map(([k,v]) => fieldHtml(r._id, k, v, r.flags[k])).join('');
     const nflag = Object.keys(r.flags).length;
+    const isGeneric = r.route_source === 'generic';
+    const note = isGeneric
+      ? '🔎 범용 자동추출(정의된 서식 아님 — 검수 권장)'
+      : `신뢰도 ${(r.confidence*100).toFixed(0)}% · ${r.route_source}`;
     return `<div class="pagecard"><div class="pagehead">
       <span class="badge">${r.label}</span> ${r._파일명}
-      <span class="muted">신뢰도 ${(r.confidence*100).toFixed(0)}% · ${r.route_source}</span>
+      <span class="muted">${note}</span>
       ${nflag ? `<span class="muted" style="margin-left:auto">검수 ${nflag}건</span>` : ''}
     </div><div class="grid">${fields}</div></div>`;
   }).join('');
