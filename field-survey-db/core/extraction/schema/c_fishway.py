@@ -19,7 +19,8 @@ SCHEMA_C = [
     F("위도", "right", "위도"),
     F("경도", "right", "경도"),
     F("조사기관", "right", "조사기관"),
-    F("조사자", "right", "조사자"),
+    F("조사자1", "right", "조사자"),
+    F("조사자2", "right", "조사자", required=False),
     F("조사일시", "right", "조사일시"),
     F("기상상태", "right", "기상상태", required=False),
     # 어도 제원 — 라벨 아래 숫자

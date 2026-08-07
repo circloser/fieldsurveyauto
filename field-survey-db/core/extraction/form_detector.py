@@ -60,8 +60,7 @@ def _table_blob(table: Table) -> str:
     return "".join(normalize_key(c.text) for c in table.cells)
 
 
-def detect_form(table: Table) -> Detection:
-    blob = _table_blob(table)
+def _detect_from_blob(blob: str) -> Detection:
     best = Detection(FORM_UNKNOWN, 0.0, [])
     for form in _ORDER:
         signals = _SIGNALS[form]
@@ -76,3 +75,17 @@ def detect_form(table: Table) -> Detection:
         if conf > best.confidence:
             best = Detection(form, round(conf, 2), matched)
     return best
+
+
+def detect_form(table: Table) -> Detection:
+    return _detect_from_blob(_table_blob(table))
+
+
+def detect_form_words(words) -> Detection:
+    """표(Table) 없이 페이지 '단어들'로 서식 판별 — PDF/스캔·다중서식 번들 라우팅용.
+
+    words: .text 를 가진 객체들(예: core.pdf_reader.Word)의 반복 가능 객체.
+    표 선(벡터)이 없어도 되므로 스캔 페이지에도 쓸 수 있다.
+    """
+    blob = "".join(normalize_key(w.text) for w in words)
+    return _detect_from_blob(blob)

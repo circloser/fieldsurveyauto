@@ -38,6 +38,20 @@ hwpx·PDF를 **모두 PDF로 통일**해 위치 기반으로 처리. 화면은 *
 - 브라우저 엔드투엔드 검증 완료(로드/제안/편집/적용/다운로드)
 - 방식: 칸(셀) 기반. PDF 픽셀 박스는 다음 단계.
 
+## 🤖 AI(Vision) 추출 — 경진대회 방향 (신규, Phase 1)
+`보이는 대로 스키마만 정하고, 페이지 이미지를 Claude Vision이 통째로 읽어 값 추출`. 밀림·제목변경·스캔에 강건.
+- **키 보안**: 진짜 Claude 키는 Cloudflare Worker 프록시(`claude-proxy/`)에만. 클라이언트는 프록시 주소+앱토큰만 사용. 배포·가드(모델화이트리스트·토큰상한·레이트리밋) 검증 완료.
+- **엔드투엔드 실증**: `sample.pdf`(서식 A) → 프록시 → Vision → **24/24 항목 정확 추출** 확인. (하천명 해남천 등 기존 정답과 일치, 체크박스 재질/용도도 정확)
+- **강건화 뼈대**(독립 모듈, 파이프라인 미연결):
+  - `core/layout.py` — 퍼지 라벨(자모단위 OCR오타 관대) + 상대앵커(offset) → 틀어짐 대응
+  - `core/layout_fingerprint.py` — 배치 지문 매칭(제목 제외) → 제목 바뀐 양식 대응
+  - `core/vision_extract.py` + `core/extraction/schema/vision_schemas.py` — Vision 추출 + FieldSpec→JSON스키마 자동생성
+  - 테스트 `tests/test_layout.py`·`tests/test_layout_fingerprint.py` (합성데이터로 강건성 증명), 실행기 `scripts/try_vision.py`
+- **서식 라우터**(`core/form_router.py`·`core/bundle.py`): 페이지마다 서식 자동 판별(무료 시그니처, 제목 무관 → 애매하면 Vision 폴백) 후 알맞은 스키마로 추출. 다중서식 번들(A+B+C+사진) 한 파일 자동 처리 검증(test_3line 8p, 라우팅 8/8 정확). `detect_form_words` 추가, C 조사자 2명 분리(조사자1/2).
+- **정확도 평가**(`eval/`): 검증 골드 4건(A, 2명·3명·보철거 변형) = **99% (99/100)**. 채점 코어 `core/eval_score.py`, 실행기 `eval/run_eval.py`.
+- 계획 상세: `COMPETITION_PLAN.md`
+- 다음: 골드셋 확장(C·스캔·제목변형) → 하이브리드(신뢰도·규칙 교차검증) → B·D·E 스키마
+
 ## 남은 작업
 - **E 횡적연속성** 서식 추출 (등급·비율·면적, 다중 표)
 - **텍스트 PDF** 입력 지원 (샘플 PDF 필요)

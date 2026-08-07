@@ -4,6 +4,7 @@
 - 포터블(exe) 실행: 정적파일은 번들(_MEIPASS) 안에서 읽고,
   작업 폴더(data/)는 exe 옆에 만든다(폴더째 복사해도 유지·쓰기 가능).
 """
+import os
 import sys
 from pathlib import Path
 
@@ -30,6 +31,15 @@ DEFAULT_PORT = 8765
 
 APP_TITLE = "현장 조사표 DB화"
 APP_VERSION = "0.5.0 (MVP: 업로드→추출→엑셀)"
+
+# --- AI(Vision) 프록시 설정 -------------------------------------------------
+# 진짜 Claude 키는 프록시(Cloudflare Worker)에만 둔다. 이 프로그램은 아래 2개만 안다.
+#   FIELD_SURVEY_PROXY_URL   : 프록시 주소(예: https://...workers.dev)  → anthropic base_url
+#   FIELD_SURVEY_APP_TOKEN   : 프록시 인증용 앱 토큰(진짜 키 아님)
+#   FIELD_SURVEY_VISION_MODEL: 사용할 모델(기본 최상위)
+PROXY_BASE_URL = os.environ.get("FIELD_SURVEY_PROXY_URL", "").strip()
+PROXY_APP_TOKEN = os.environ.get("FIELD_SURVEY_APP_TOKEN", "").strip()
+VISION_MODEL = os.environ.get("FIELD_SURVEY_VISION_MODEL", "claude-opus-4-8").strip()
 
 
 def ensure_dirs() -> None:

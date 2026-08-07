@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "field-survey-claude-proxy",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-15",
+
+  // 요청/오류 로그 (본문은 코드에서 절대 로깅하지 않음)
+  "observability": { "enabled": true },
+
+  // 비용 폭주 방어: 60초당 최대 60건 (팀 규모에 맞게 조정)
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 60, "period": 60 }
+    }
+  ]
+
+  // 시크릿(코드/깃에 안 들어감, wrangler secret put 으로 설정):
+  //   ANTHROPIC_API_KEY  — 진짜 Claude 키 (서버에만 존재)
+  //   APP_TOKEN          — exe가 프록시에 인증할 앱 토큰 (유출 시 교체 가능)
+}

@@ -66,8 +66,9 @@ def map_block(block: FormBlock, source_file: str) -> Record:
         if result.status == OK:
             rec.values[result.name] = result.value
         else:
-            # 필수 필드만 플래그(선택 필드가 비어도 위험 아님)
-            if spec.required or result.status == ANCHOR_NOT_FOUND:
+            # 필수 필드만 플래그. 선택 필드는 비거나 라벨이 없어도 위험 아님
+            # (양식 변형에서 없는 항목은 정상 — 예: 조사자3 없는 2명 양식).
+            if spec.required:
                 rec.flags[result.name] = result.status
             if result.value:
                 rec.values[result.name] = result.value

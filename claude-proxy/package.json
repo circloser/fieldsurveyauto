@@ -1,0 +1,14 @@
+{
+  "name": "field-survey-claude-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "현장 조사표 DB화 — Claude API 프록시 (키를 서버에만 보관)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

@@ -21,6 +21,7 @@ SCHEMA_A = [
     F("조사기관", "right", "조사기관"),
     F("조사자1", "right", "조사자 1"),
     F("조사자2", "right", "조사자 2", required=False),
+    F("조사자3", "right", "조사자 3", required=False),
     F("조사일시", "right", "조사일시"),
     F("기상상태", "right", "기상상태", required=False),
     F("어도유무", "right", "어도유무"),
