@@ -49,8 +49,11 @@ hwpx·PDF를 **모두 PDF로 통일**해 위치 기반으로 처리. 화면은 *
   - 테스트 `tests/test_layout.py`·`tests/test_layout_fingerprint.py` (합성데이터로 강건성 증명), 실행기 `scripts/try_vision.py`
 - **서식 라우터**(`core/form_router.py`·`core/bundle.py`): 페이지마다 서식 자동 판별(무료 시그니처, 제목 무관 → 애매하면 Vision 폴백) 후 알맞은 스키마로 추출. 다중서식 번들(A+B+C+사진) 한 파일 자동 처리 검증(test_3line 8p, 라우팅 8/8 정확). `detect_form_words` 추가, C 조사자 2명 분리(조사자1/2).
 - **정확도 평가**(`eval/`): 검증 골드 8건(A 6 + C 2, 2명·3명·보철거·다중서식 번들) = **100% (190/190)**. 채점 코어 `core/eval_score.py`(좌표 기호 정규화 포함), 실행기 `eval/run_eval.py`. ※ Vision 미세 흔들림(예: 남외리/남와리) 드물게 발생 → 검수로 보완.
+- **웹앱 연결**(`/ai`, `/api/vision/*`, `static/ai.html`): 파일 업로드→서식 자동판별→Vision 추출→서식별 엑셀. 검수(빈값·형식오류 플래그, 인라인 수정). 프론트 브라우저 검증 완료.
+- **전 서식 커버리지**: A/B/C/D/E 모두 Vision 스키마 보유(사진만 skip). B/D/E는 `VISION_SCHEMAS`(Vision 전용, 규칙기반 SCHEMAS 불변)에 등록. sample.pdf 9p 중 8p 스키마 매칭.
 - 계획 상세: `COMPETITION_PLAN.md`
-- 다음: 골드셋 확장(C·스캔·제목변형) → 하이브리드(신뢰도·규칙 교차검증) → B·D·E 스키마
+- ⚠️ 라이브 Vision 이미지 호출이 계정 이미지 한도로 403(텍스트는 정상) — 결제/티어·일일리셋 필요. 한도 풀리면 코드 수정 없이 동작(B/D/E는 리셋 후 라이브 검증 예정).
+- 다음: 골드셋 확장(스캔·제목변형·C/D/E) → 하이브리드(규칙 교차검증) → E 형태별물리·수리 상세
 
 ## 남은 작업
 - **E 횡적연속성** 서식 추출 (등급·비율·면적, 다중 표)

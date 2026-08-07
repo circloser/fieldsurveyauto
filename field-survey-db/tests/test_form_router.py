@@ -26,6 +26,27 @@ def test_route_form_d():
     assert route_page(pg).form_type == FORM_D
 
 
+def test_route_form_b_and_vision_schema():
+    from core.extraction.form_detector import FORM_B
+    from core.extraction.schema.vision_schemas import vision_schema
+    pg = _page(["대표지점", "조사대상 어도", "형태별 물리", "유폭"])
+    assert route_page(pg).form_type == FORM_B
+    schema, hint = vision_schema(FORM_B)          # Vision 전용 등록 확인
+    assert schema is not None and "유폭" in schema["properties"]
+
+
+def test_vision_schemas_bde_registered():
+    """B·D·E 가 Vision 전용 레지스트리에 정확히 생성되는지."""
+    from core.extraction.form_detector import FORM_B, FORM_D, FORM_E
+    from core.extraction.schema.vision_schemas import vision_schema
+    for form, key in [(FORM_B, "유폭"), (FORM_D, "어종목록"), (FORM_E, "횡단면_길이_보통")]:
+        schema, hint = vision_schema(form)
+        assert schema is not None, form
+        assert key in schema["properties"], (form, key)
+        # strict json 출력 안정성: 모든 필드 required
+        assert set(schema["required"]) == set(schema["properties"]), form
+
+
 def test_route_unknown_when_no_signals():
     pg = _page(["안녕하세요", "무관한 문서", "표 아님"])
     assert route_page(pg).form_type == FORM_UNKNOWN

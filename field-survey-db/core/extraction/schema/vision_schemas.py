@@ -5,8 +5,16 @@
 """
 from __future__ import annotations
 
+from core.extraction.form_detector import FORM_B, FORM_D, FORM_E
 from core.extraction.schema import SCHEMAS
+from core.extraction.schema.b_representative import SCHEMA_B
+from core.extraction.schema.d_fish import SCHEMA_D
+from core.extraction.schema.e_lateral_continuity import SCHEMA_E
 from core.extraction.schema.spec import FieldSpec
+
+# Vision 전용 확장 레지스트리 = 규칙기반 SCHEMAS + Vision만 지원하는 서식(B·D·E).
+# 규칙기반 파이프라인(mapper)은 SCHEMAS만 쓰므로 여기 추가해도 기존 동작 불변.
+VISION_SCHEMAS = {**SCHEMAS, FORM_B: SCHEMA_B, FORM_D: SCHEMA_D, FORM_E: SCHEMA_E}
 
 
 def json_schema_from_specs(specs: list[FieldSpec]) -> dict:
@@ -36,7 +44,7 @@ def hint_from_specs(specs: list[FieldSpec]) -> str:
 
 def vision_schema(form_type: str) -> tuple[dict | None, str]:
     """(json_schema, hint). 등록되지 않은 서식은 (None, '')."""
-    specs = SCHEMAS.get(form_type)
+    specs = VISION_SCHEMAS.get(form_type)
     if not specs:
         return None, ""
     return json_schema_from_specs(specs), hint_from_specs(specs)
