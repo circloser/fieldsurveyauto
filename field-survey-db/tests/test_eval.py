@@ -23,6 +23,12 @@ def test_both_empty_is_match():
     assert field_match("", "")
 
 
+def test_coordinate_prime_vs_ascii_quotes_match():
+    # 유니코드 prime(′″)과 ASCII 따옴표('")는 좌표에서 동일 값으로 취급
+    assert field_match("37° 20′ 09.3″", "37° 20' 09.3\"")
+    assert field_match("127° 06′ 45.9″", "127° 06' 45.9\"")
+
+
 def test_score_record_counts_and_mismatches():
     gold = {"시도": "전남", "하천명": "해남천", "보길이": "30"}
     pred = {"시도": "전남", "하천명": "남해천", "보길이": "30.0"}

@@ -16,6 +16,13 @@ from core.normalize import normalize_key
 
 _NUM_CHARS = set("0123456789.-")
 
+# 좌표 분/초 등: 유니코드 prime(′″)과 ASCII 따옴표('")·굽은 따옴표를 동일하게 취급
+_PUNCT_MAP = str.maketrans({"′": "'", "‘": "'", "’": "'", "″": '"', "“": '"', "”": '"'})
+
+
+def _canon(s: str) -> str:
+    return normalize_key(s).translate(_PUNCT_MAP)
+
 
 def _as_float(s: str) -> float | None:
     t = (s or "").strip()
@@ -32,7 +39,7 @@ def field_match(gold: str, pred: str, numeric_tol: float = 0.0) -> bool:
     gf, pf = _as_float(g), _as_float(p)
     if gf is not None and pf is not None:
         return abs(gf - pf) <= numeric_tol
-    return normalize_key(g) == normalize_key(p)
+    return _canon(g) == _canon(p)
 
 
 @dataclass
