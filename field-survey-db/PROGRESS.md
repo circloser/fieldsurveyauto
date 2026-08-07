@@ -48,7 +48,7 @@ hwpx·PDF를 **모두 PDF로 통일**해 위치 기반으로 처리. 화면은 *
   - `core/vision_extract.py` + `core/extraction/schema/vision_schemas.py` — Vision 추출 + FieldSpec→JSON스키마 자동생성
   - 테스트 `tests/test_layout.py`·`tests/test_layout_fingerprint.py` (합성데이터로 강건성 증명), 실행기 `scripts/try_vision.py`
 - **서식 라우터**(`core/form_router.py`·`core/bundle.py`): 페이지마다 서식 자동 판별(무료 시그니처, 제목 무관 → 애매하면 Vision 폴백) 후 알맞은 스키마로 추출. 다중서식 번들(A+B+C+사진) 한 파일 자동 처리 검증(test_3line 8p, 라우팅 8/8 정확). `detect_form_words` 추가, C 조사자 2명 분리(조사자1/2).
-- **정확도 평가**(`eval/`): 검증 골드 4건(A, 2명·3명·보철거 변형) = **99% (99/100)**. 채점 코어 `core/eval_score.py`, 실행기 `eval/run_eval.py`.
+- **정확도 평가**(`eval/`): 검증 골드 8건(A 6 + C 2, 2명·3명·보철거·다중서식 번들) = **100% (190/190)**. 채점 코어 `core/eval_score.py`(좌표 기호 정규화 포함), 실행기 `eval/run_eval.py`. ※ Vision 미세 흔들림(예: 남외리/남와리) 드물게 발생 → 검수로 보완.
 - 계획 상세: `COMPETITION_PLAN.md`
 - 다음: 골드셋 확장(C·스캔·제목변형) → 하이브리드(신뢰도·규칙 교차검증) → B·D·E 스키마
 

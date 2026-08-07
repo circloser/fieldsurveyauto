@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 자동 추출 — 현장 조사표 DB화</title>
+<style>
+  :root { --ink:#191F28; --line:#e5e8eb; --muted:#8b95a1; --accent:#3182f6;
+          --warn:#fff4d6; --warnb:#f2c94c; --err:#ffe3e3; --errb:#ff6b6b; --ok:#e7f5ec; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif; color:var(--ink); background:#f7f8fa; }
+  header { background:var(--ink); color:#fff; padding:14px 22px; display:flex; align-items:center; gap:14px; }
+  header h1 { font-size:18px; margin:0; }
+  header a { color:#9db8ff; text-decoration:none; font-size:13px; margin-left:auto; }
+  .wrap { max-width:1100px; margin:22px auto; padding:0 18px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .muted { color:var(--muted); font-size:13px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:10px 18px;
+           font-size:14px; cursor:pointer; font-weight:600; }
+  button:disabled { background:#c9d2de; cursor:not-allowed; }
+  button.ghost { background:#fff; color:var(--accent); border:1px solid var(--accent); }
+  input[type=file] { font-size:14px; }
+  #status { font-size:13px; padding:8px 12px; border-radius:8px; display:inline-block; }
+  .s-ok { background:var(--ok); color:#0b7a3b; }
+  .s-no { background:var(--err); color:#c92a2a; }
+  .stats { display:flex; gap:18px; flex-wrap:wrap; margin:6px 0 0; }
+  .stat { background:#f1f3f5; border-radius:8px; padding:10px 14px; min-width:92px; text-align:center; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { font-size:12px; color:var(--muted); }
+  .pagecard { border:1px solid var(--line); border-radius:10px; margin-bottom:12px; overflow:hidden; }
+  .pagehead { background:#f1f3f5; padding:9px 14px; display:flex; align-items:center; gap:10px; font-size:13px; }
+  .badge { background:var(--ink); color:#fff; border-radius:6px; padding:2px 8px; font-size:12px; }
+  .badge.skip { background:#adb5bd; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:8px; padding:12px 14px; }
+  .field label { display:block; font-size:11px; color:var(--muted); margin-bottom:2px; }
+  .field input { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
+  .field.flag-빈값 input { background:var(--warn); border-color:var(--warnb); }
+  .field.flag-형식오류 input { background:var(--err); border-color:var(--errb); }
+  .flagtag { font-size:10px; color:#b0870b; margin-left:4px; }
+  .flag-형식오류 .flagtag { color:#c92a2a; }
+  .hide { display:none; }
+  #spin { font-size:14px; color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 AI 자동 추출</h1>
+  <span class="muted" style="color:#c9d2de">양식을 몰라도 — 파일 넣으면 페이지별 서식 자동판별 후 추출</span>
+  <a href="/">← 템플릿 디자이너</a>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div id="status" class="muted">AI 상태 확인 중…</div>
+    <div style="margin-top:14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <input type="file" id="files" multiple accept=".hwpx,.hwp,.pdf">
+      <button id="run" disabled>AI로 추출</button>
+      <span id="spin" class="hide">⏳ 추출 중… (페이지 수에 따라 수십 초)</span>
+    </div>
+    <p class="muted" style="margin:12px 0 0">
+      hwpx는 한글(HWP)이 있어야 PDF로 변환됩니다. PDF는 바로 됩니다.
+      실데이터는 프록시(서버)만 거치며 저장되지 않습니다.
+    </p>
+  </div>
+
+  <div id="result" class="card hide">
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div class="stats" id="stats"></div>
+      <button id="dl" class="ghost" style="margin-left:auto">엑셀 다운로드</button>
+    </div>
+    <p class="muted" style="margin:10px 0 0">
+      <b>검수</b>: 노란칸=빈값, 빨간칸=형식의심. 값을 고치면 자동 저장·엑셀 반영됩니다.
+    </p>
+    <div id="pages" style="margin-top:14px"></div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+
+async function checkStatus() {
+  const r = await fetch('/api/vision/status'); const d = await r.json();
+  const el = $('#status');
+  if (d.available) {
+    el.className = 's-ok'; el.textContent = '✅ AI 사용 가능 (프록시 연결됨)';
+    $('#run').disabled = false;
+  } else {
+    el.className = 's-no'; el.textContent = '⚠️ ' + (d.message || 'AI 사용 불가');
+    $('#run').disabled = true;
+  }
+}
+
+function fieldHtml(rowId, key, val, flag) {
+  const cls = flag ? ('flag-' + flag) : '';
+  const tag = flag ? `<span class="flagtag">${flag}</span>` : '';
+  const v = (val || '').replace(/"/g, '&quot;');
+  return `<div class="field ${cls}" data-key="${key}">
+    <label>${key}${tag}</label>
+    <input value="${v}" data-row="${rowId}" data-field="${key}">
+  </div>`;
+}
+
+function render(data) {
+  $('#result').classList.remove('hide');
+  const s = data.stats;
+  $('#stats').innerHTML = [
+    ['파일', s.files_ok], ['페이지', s.pages],
+    ['추출', s.extracted], ['검수필요', s.flagged],
+  ].map(([k,v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+
+  $('#pages').innerHTML = data.rows.map(r => {
+    const has = Object.keys(r.values).length > 0;
+    if (!has) return `<div class="pagecard"><div class="pagehead">
+      <span class="badge skip">건너뜀</span> ${r._파일명} · ${r.label} <span class="muted">(추출 대상 아님)</span>
+    </div></div>`;
+    const fields = Object.entries(r.values)
+      .map(([k,v]) => fieldHtml(r._id, k, v, r.flags[k])).join('');
+    const nflag = Object.keys(r.flags).length;
+    return `<div class="pagecard"><div class="pagehead">
+      <span class="badge">${r.label}</span> ${r._파일명}
+      <span class="muted">신뢰도 ${(r.confidence*100).toFixed(0)}% · ${r.route_source}</span>
+      ${nflag ? `<span class="muted" style="margin-left:auto">검수 ${nflag}건</span>` : ''}
+    </div><div class="grid">${fields}</div></div>`;
+  }).join('');
+
+  $('#pages').querySelectorAll('input[data-field]').forEach(inp => {
+    inp.addEventListener('change', onCorrect);
+  });
+}
+
+async function onCorrect(e) {
+  const inp = e.target;
+  const r = await fetch('/api/vision/correct', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: +inp.dataset.row, field: inp.dataset.field, value: inp.value })
+  });
+  const d = await r.json();
+  if (d.ok) {
+    const wrap = inp.closest('.field');
+    wrap.className = 'field' + (inp.value.trim() ? '' : ' flag-빈값');
+  }
+}
+
+$('#run').addEventListener('click', async () => {
+  const files = $('#files').files;
+  if (!files.length) { alert('파일을 선택하세요.'); return; }
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  $('#run').disabled = true; $('#spin').classList.remove('hide');
+  try {
+    const r = await fetch('/api/vision/extract', { method:'POST', body: fd });
+    const d = await r.json();
+    if (d.error) { alert('오류: ' + d.error); return; }
+    render(d);
+    if (d.failed && d.failed.length)
+      alert('일부 실패:\n' + d.failed.map(f => `${f.name}: ${f.error}`).join('\n'));
+  } finally {
+    $('#run').disabled = false; $('#spin').classList.add('hide');
+  }
+});
+
+$('#dl').addEventListener('click', () => { location.href = '/api/vision/download'; });
+
+checkStatus();
+</script>
+</body>
+</html>

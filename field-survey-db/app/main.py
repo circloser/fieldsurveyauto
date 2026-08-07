@@ -13,8 +13,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import config
+from core.bundle import extract_bundle
 from core.excel.writer import write_excel
 from core.extraction.form_detector import FORM_LABELS_KO
+from core.extraction.schema.vision_schemas import vision_schema
 from core.parsers.hwpx_parser import parse_hwpx
 from core.pipeline import ExtractionResult, run
 from core.review.store import CorrectionStore
@@ -31,7 +33,7 @@ from core.pdf_reader import read_pdf, render_page_png
 from core.template.apply import apply_template, field_order
 from core.template.designer import grid_dto, suggest_boxes
 from core.template.store import TemplateStore
-from core.template.writer import write_template_excel
+from core.template.writer import write_bundle_excel, write_template_excel
 
 config.ensure_dirs()
 
@@ -59,6 +61,8 @@ _DESIGNER: dict[str, object] = {"excel_path": None}
 _PDF_DOCS: dict[str, object] = {}   # doc_id -> {pdf_path, doc(PdfDoc)}
 _PDF_APPLY: dict[str, object] = {"excel_path": None}
 _REPORT_DOCS: dict[str, str] = {}   # report_id -> 원본 양식 xlsx 경로
+# AI 번들 자동추출 결과(다운로드·검수용)
+_VISION: dict[str, object] = {"excel_path": None, "rows": []}
 
 
 def _regenerate_excel() -> str:
@@ -441,6 +445,124 @@ def pdf_ai_understand(doc_id: str) -> JSONResponse:
             status_code=422,
         )
     return JSONResponse({"boxes": boxes})
+
+
+# ─────────────── AI 번들 자동 추출 (템플릿 불필요) ───────────────
+
+@app.get("/ai")
+def ai_page() -> FileResponse:
+    return FileResponse(config.STATIC_DIR / "ai.html")
+
+
+@app.get("/api/vision/status")
+def vision_status() -> JSONResponse:
+    from core.vision_extract import available
+    ok, msg = available()
+    return JSONResponse({"available": ok, "message": msg})
+
+
+def _vision_groups(rows: list[dict]) -> list[dict]:
+    """서식별로 (라벨, 필드순서, 행들) 묶음 — 엑셀 시트 분리용. 스키마 있는 서식만."""
+    groups: list[dict] = []
+    for form in dict.fromkeys(r["form"] for r in rows):  # 등장 순서 유지
+        schema, _ = vision_schema(form)
+        if schema is None:
+            continue
+        fields = list(schema["properties"].keys())
+        frows = [{"_파일명": r["_파일명"], **r["values"]} for r in rows if r["form"] == form]
+        groups.append({"label": FORM_LABELS_KO.get(form, form), "fields": fields, "rows": frows})
+    return groups
+
+
+def _vision_regenerate_excel() -> str:
+    rows: list[dict] = _VISION["rows"]  # type: ignore[assignment]
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    excel_path = config.OUTPUT_DIR / f"AI추출_{stamp}.xlsx"
+    write_bundle_excel(_vision_groups(rows), str(excel_path))
+    _VISION["excel_path"] = str(excel_path)
+    return str(excel_path)
+
+
+@app.post("/api/vision/extract")
+async def vision_extract_files(files: list[UploadFile]) -> JSONResponse:
+    """업로드 파일들을 페이지별 서식 자동판별 → Vision 추출 → 서식별 엑셀 + 검수용 결과."""
+    from core.vision_extract import available
+    ok, msg = available()
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=400)
+    if not files:
+        return JSONResponse({"error": "파일이 없습니다."}, status_code=400)
+
+    req_dir = config.UPLOAD_DIR / ("ai_" + uuid.uuid4().hex[:8])
+    req_dir.mkdir(parents=True, exist_ok=True)
+    rows: list[dict] = []
+    failed: list[dict] = []
+    rid = 0
+    for uf in files:
+        dest = req_dir / (uf.filename or "unnamed")
+        with dest.open("wb") as f:
+            shutil.copyfileobj(uf.file, f)
+        try:
+            pdf_path = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
+            page_rows = extract_bundle(pdf_path)
+        except Exception as e:  # noqa: BLE001
+            failed.append({"name": uf.filename, "error": str(e)})
+            continue
+        for pr in page_rows:
+            label_file = f"{uf.filename} p{pr['page'] + 1}"
+            rows.append({
+                "_id": rid, "_파일명": label_file,
+                "page": pr["page"], "form": pr["form"], "label": pr["label"],
+                "confidence": pr["confidence"], "route_source": pr.get("route_source", ""),
+                "values": pr.get("values", {}), "flags": pr.get("flags", {}),
+            })
+            rid += 1
+
+    _VISION["rows"] = rows
+    _vision_regenerate_excel()
+    extracted = [r for r in rows if r["values"]]
+    return JSONResponse({
+        "rows": rows,
+        "stats": {
+            "files_ok": len({r["_파일명"].rsplit(" p", 1)[0] for r in rows}),
+            "files_failed": len(failed),
+            "pages": len(rows),
+            "extracted": len(extracted),
+            "flagged": sum(1 for r in extracted if r["flags"]),
+        },
+        "failed": failed,
+    })
+
+
+@app.post("/api/vision/correct")
+def vision_correct(payload: dict = Body(...)) -> JSONResponse:
+    """검수 수정 — 저장된 AI 추출 결과의 한 값을 고치고 엑셀 재생성."""
+    rid = payload.get("id")
+    field = payload.get("field")
+    value = payload.get("value", "")
+    rows: list[dict] = _VISION["rows"]  # type: ignore[assignment]
+    row = next((r for r in rows if r["_id"] == rid), None)
+    if row is None or not field:
+        return JSONResponse({"error": "대상을 찾을 수 없습니다."}, status_code=400)
+    row["values"][field] = value
+    row["flags"].pop(field, None)  # 사람이 확인 → 플래그 해제
+    if not value.strip():
+        row["flags"][field] = "빈값"
+    _vision_regenerate_excel()
+    return JSONResponse({"ok": True, "row": row})
+
+
+@app.get("/api/vision/download")
+def vision_download() -> FileResponse:
+    path = _VISION.get("excel_path")
+    if not path:
+        return JSONResponse({"error": "먼저 AI 추출을 실행하세요."}, status_code=404)  # type: ignore[return-value]
+    fname = str(path).replace("\\", "/").split("/")[-1]
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=fname,
+    )
 
 
 def _editable_pdf(entry: dict, doc_id: str) -> str:
