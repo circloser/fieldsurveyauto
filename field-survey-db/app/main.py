@@ -483,6 +483,19 @@ def _vision_regenerate_excel() -> str:
     return str(excel_path)
 
 
+def _friendly_vision_error(e: Exception) -> str:
+    """Vision 호출 예외를 사용자 안내 문구로. 특히 이미지 403은 계정 한도 안내."""
+    msg = str(e)
+    low = msg.lower()
+    if "403" in msg or "forbidden" in low or "request not allowed" in low:
+        return ("이미지(Vision) 요청이 거부됐습니다(403). 텍스트는 되는데 이미지만 막히면 보통 "
+                "Anthropic 계정의 '이미지 사용 한도' 초과입니다. 콘솔에서 사용량/지출 한도를 "
+                "확인하거나 잠시 후 다시 시도하세요. (원문: " + msg + ")")
+    if "429" in msg or "rate" in low:
+        return "요청이 많아 잠시 제한됐습니다(429). 잠시 후 다시 시도하세요. (원문: " + msg + ")"
+    return msg
+
+
 @app.post("/api/vision/extract")
 async def vision_extract_files(files: list[UploadFile]) -> JSONResponse:
     """업로드 파일들을 페이지별 서식 자동판별 → Vision 추출 → 서식별 엑셀 + 검수용 결과."""
@@ -506,7 +519,7 @@ async def vision_extract_files(files: list[UploadFile]) -> JSONResponse:
             pdf_path = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
             page_rows = extract_bundle(pdf_path)
         except Exception as e:  # noqa: BLE001
-            failed.append({"name": uf.filename, "error": str(e)})
+            failed.append({"name": uf.filename, "error": _friendly_vision_error(e)})
             continue
         for pr in page_rows:
             label_file = f"{uf.filename} p{pr['page'] + 1}"
