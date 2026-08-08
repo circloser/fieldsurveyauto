@@ -52,7 +52,7 @@ hwpx·PDF를 **모두 PDF로 통일**해 위치 기반으로 처리. 화면은 *
 - **웹앱 연결**(`/ai`, `/api/vision/*`, `static/ai.html`): 파일 업로드→서식 자동판별→Vision 추출→서식별 엑셀. 검수(빈값·형식오류 플래그, 인라인 수정). 프론트 브라우저 검증 완료.
 - **전 서식 커버리지**: A/B/C/D/E 모두 Vision 스키마 보유(사진만 skip). B/D/E는 `VISION_SCHEMAS`(Vision 전용, 규칙기반 SCHEMAS 불변)에 등록. sample.pdf 9p 중 8p 스키마 매칭.
 - 계획 상세: `COMPETITION_PLAN.md`
-- ⚠️ 라이브 Vision 이미지 호출이 계정 이미지 한도로 403(텍스트는 정상) — 결제/티어·일일리셋 필요. 한도 풀리면 코드 수정 없이 동작(B/D/E는 리셋 후 라이브 검증 예정).
+- ⚠️ 라이브 Vision 간헐적 403(forbidden): **프록시 앞단(Cloudflare/Anthropic)의 레이트/남용 방지 차단** — 계정/키/이미지크기/UA 무관, 짧은 시간 다량 요청 시 발동, 시간 지나면 해제(대량 테스트로 재현). 실제 사용(가끔 업로드)에선 거의 안 걸림. 대응: `vision_extract._create_with_retry`(지수 백오프) + `extract_bundle(pace_seconds)`. 실제 200 추출 다수 확인됨(파이프라인 정상). B/D/E·범용 라이브 최종검증은 가드 식은 뒤 1회 패스로.
 - 다음: 골드셋 확장(스캔·제목변형·C/D/E) → 하이브리드(규칙 교차검증) → E 형태별물리·수리 상세
 
 ## 남은 작업
