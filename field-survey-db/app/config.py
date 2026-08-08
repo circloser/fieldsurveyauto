@@ -37,9 +37,37 @@ APP_VERSION = "0.5.0 (MVP: 업로드→추출→엑셀)"
 #   FIELD_SURVEY_PROXY_URL   : 프록시 주소(예: https://...workers.dev)  → anthropic base_url
 #   FIELD_SURVEY_APP_TOKEN   : 프록시 인증용 앱 토큰(진짜 키 아님)
 #   FIELD_SURVEY_VISION_MODEL: 사용할 모델(기본 최상위)
-PROXY_BASE_URL = os.environ.get("FIELD_SURVEY_PROXY_URL", "").strip()
-PROXY_APP_TOKEN = os.environ.get("FIELD_SURVEY_APP_TOKEN", "").strip()
-VISION_MODEL = os.environ.get("FIELD_SURVEY_VISION_MODEL", "claude-opus-4-8").strip()
+#
+# 로드 우선순위: 환경변수 → exe(또는 프로젝트) 옆 'ai_config.txt'(KEY=VALUE).
+# 직원 배포 시 dist 폴더에 ai_config.txt 를 함께 넣으면 각자 설정 없이 바로 AI 사용.
+# (앱 토큰은 유출돼도 폐기·교체 가능한 통행증이라 배포 파일에 넣어도 되는 설계)
+
+def _load_ai_config() -> dict:
+    cfg: dict[str, str] = {}
+    path = BASE_DIR / "ai_config.txt"
+    if path.exists():
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+        except OSError:
+            pass
+    return cfg
+
+
+_AI_CFG = _load_ai_config()
+
+
+def _ai_get(key: str, default: str = "") -> str:
+    return (os.environ.get(key) or _AI_CFG.get(key) or default).strip()
+
+
+PROXY_BASE_URL = _ai_get("FIELD_SURVEY_PROXY_URL")
+PROXY_APP_TOKEN = _ai_get("FIELD_SURVEY_APP_TOKEN")
+VISION_MODEL = _ai_get("FIELD_SURVEY_VISION_MODEL", "claude-opus-4-8")
 
 
 def ensure_dirs() -> None:

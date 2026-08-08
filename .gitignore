@@ -47,3 +47,7 @@ field-survey-db/build_*.txt
 # ===== eval 골드/리포트(값에 실데이터 PII 포함 — 로컬만) =====
 field-survey-db/eval/gold/
 field-survey-db/eval/REPORT.md
+
+# ===== AI 프록시 설정(앱 토큰 포함 — 커밋 금지, 예시 파일만 커밋) =====
+ai_config.txt
+**/ai_config.txt

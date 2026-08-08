@@ -1,0 +1,12 @@
+# AI(Vision) 자동추출 설정 — 이 파일을 복사해 'ai_config.txt' 로 저장하고 값을 채우세요.
+# 배포 시: exe(FieldSurveyDB.exe) 와 같은 폴더에 'ai_config.txt' 를 함께 두면
+#          직원들이 아무 설정 없이 바로 AI 자동추출을 쓸 수 있습니다.
+#
+# 보안: 여기 들어가는 건 '진짜 Claude 키'가 아니라 프록시 통행증(APP_TOKEN)입니다.
+#       진짜 키는 서버(Cloudflare Worker)에만 있고, 통행증은 유출 시 폐기·교체 가능합니다.
+
+FIELD_SURVEY_PROXY_URL=https://field-survey-claude-proxy.○○○.workers.dev
+FIELD_SURVEY_APP_TOKEN=여기에-앱토큰-붙여넣기
+
+# 선택: 사용할 모델(기본 claude-opus-4-8)
+# FIELD_SURVEY_VISION_MODEL=claude-opus-4-8
