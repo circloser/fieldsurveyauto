@@ -11,9 +11,31 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 
 from app import config
 from core.pdf_reader import render_page_png
+
+# 프록시 앞단(Cloudflare)이 빠른 연속 요청을 간헐적으로 403(forbidden)·429로 막는다.
+# SDK 기본 재시도는 403을 포함하지 않으므로, 아래 신호에 한해 백오프 재시도한다.
+_TRANSIENT = ("403", "forbidden", "request not allowed", "429",
+              "overloaded", "rate limit", "502", "503", "529", "timeout")
+
+
+def _create_with_retry(client, *, tries: int = 5, **kwargs):
+    """messages.create 를 간헐적 차단(403 등)에 한해 백오프 재시도."""
+    last = None
+    for attempt in range(tries):
+        try:
+            return client.messages.create(**kwargs)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            msg = str(e).lower()
+            if attempt < tries - 1 and any(t in msg for t in _TRANSIENT):
+                time.sleep(min(2 ** attempt * 2, 24))  # 2, 4, 8, 16 (다음 시도까지 대기)
+                continue
+            raise
+    raise last  # pragma: no cover
 
 _SYSTEM = (
     "당신은 한국 공공기관 현장 조사표(하천·습지·보 제원 등)를 디지털화하는 전문가입니다. "
@@ -117,7 +139,8 @@ def extract_page_generic(pdf_path: str, page_no: int, dpi: int = 170) -> dict:
     if not ok:
         raise RuntimeError(msg)
     png = render_page_png(pdf_path, page_no, dpi=dpi)
-    resp = _client().messages.create(
+    resp = _create_with_retry(
+        _client(),
         model=config.VISION_MODEL,
         max_tokens=4000,
         system=_GENERIC_SYSTEM,
@@ -139,7 +162,8 @@ def extract_page(pdf_path: str, page_no: int, json_schema: dict,
     if not ok:
         raise RuntimeError(msg)
     png = render_page_png(pdf_path, page_no, dpi=dpi)
-    resp = _client().messages.create(
+    resp = _create_with_retry(
+        _client(),
         model=config.VISION_MODEL,
         max_tokens=4000,
         system=_SYSTEM,

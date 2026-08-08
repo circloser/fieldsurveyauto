@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import time
+
 from core import vision_extract
 from core.extraction.form_detector import FORM_LABELS_KO, FORM_UNKNOWN
 from core.extraction.schema import SCHEMAS
@@ -40,7 +42,8 @@ def _flags_for(form: str, values: dict) -> dict:
 
 
 def extract_bundle(pdf_path: str, use_vision_fallback: bool = True,
-                   use_generic: bool = True, dpi: int = 170) -> list[dict]:
+                   use_generic: bool = True, dpi: int = 170,
+                   pace_seconds: float = 1.0) -> list[dict]:
     """번들 PDF를 페이지별로 자동 추출.
 
     - 알려진 서식(A~E): 해당 스키마로 추출.
@@ -50,6 +53,14 @@ def extract_bundle(pdf_path: str, use_vision_fallback: bool = True,
     """
     doc = read_pdf(pdf_path)
     rows: list[dict] = []
+    made_call = False
+
+    def _pace():
+        nonlocal made_call
+        if made_call and pace_seconds:
+            time.sleep(pace_seconds)   # 앞단 레이트 가드 발동 완화
+        made_call = True
+
     for p in doc.pages:
         det = route_page(p)
         form = det.form_type
@@ -72,10 +83,12 @@ def extract_bundle(pdf_path: str, use_vision_fallback: bool = True,
             "flags": {},
         }
         if schema is not None:
+            _pace()
             row["values"] = vision_extract.extract_page(pdf_path, p.page_no, schema, hint, dpi=dpi)
             row["flags"] = _flags_for(form, row["values"])
         elif form == FORM_UNKNOWN and use_generic:
             # 범용 모드: 정의 안 된 새 조사표도 자유형으로 추출
+            _pace()
             row["values"] = vision_extract.extract_page_generic(pdf_path, p.page_no, dpi=dpi)
             row["generic"] = True
             row["label"] = "범용(미상 서식)"
