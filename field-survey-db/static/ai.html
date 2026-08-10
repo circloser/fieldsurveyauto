@@ -36,8 +36,11 @@
   .field input { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
   .field.flag-빈값 input { background:var(--warn); border-color:var(--warnb); }
   .field.flag-형식오류 input { background:var(--err); border-color:var(--errb); }
+  .field.flag-이상치 input { background:#fff0e0; border-color:#ff922b; }
   .flagtag { font-size:10px; color:#b0870b; margin-left:4px; }
   .flag-형식오류 .flagtag { color:#c92a2a; }
+  .flag-이상치 .flagtag { color:#e8590c; }
+  .warnbadge { background:#ff922b; color:#fff; border-radius:6px; padding:2px 8px; font-size:12px; margin-left:auto; }
   .hide { display:none; }
   #spin { font-size:14px; color:var(--accent); }
 </style>
@@ -69,7 +72,7 @@
       <button id="dl" class="ghost" style="margin-left:auto">엑셀 다운로드</button>
     </div>
     <p class="muted" style="margin:10px 0 0">
-      <b>검수</b>: 노란칸=빈값, 빨간칸=형식의심. 값을 고치면 자동 저장·엑셀 반영됩니다.
+      <b>검수</b>: 노란=빈값, 빨간=형식의심, 주황=이상치(값 튐, 오추출 의심). 값을 고치면 자동 저장·엑셀 반영.
     </p>
     <div id="pages" style="margin-top:14px"></div>
   </div>
@@ -116,14 +119,18 @@ function render(data) {
     const fields = Object.entries(r.values)
       .map(([k,v]) => fieldHtml(r._id, k, v, r.flags[k])).join('');
     const nflag = Object.keys(r.flags).length;
+    const outliers = Object.values(r.flags).filter(v => v === '이상치').length;
     const isGeneric = r.route_source === 'generic';
     const note = isGeneric
       ? '🔎 범용 자동추출(정의된 서식 아님 — 검수 권장)'
       : `신뢰도 ${(r.confidence*100).toFixed(0)}% · ${r.route_source}`;
+    const rightTag = outliers
+      ? `<span class="warnbadge">⚠️ 이상치 ${outliers}건 — 확인</span>`
+      : (nflag ? `<span class="muted" style="margin-left:auto">검수 ${nflag}건</span>` : '');
     return `<div class="pagecard"><div class="pagehead">
       <span class="badge">${r.label}</span> ${r._파일명}
       <span class="muted">${note}</span>
-      ${nflag ? `<span class="muted" style="margin-left:auto">검수 ${nflag}건</span>` : ''}
+      ${rightTag}
     </div><div class="grid">${fields}</div></div>`;
   }).join('');
 

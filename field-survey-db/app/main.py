@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import config
+from core.analysis import merge_outlier_flags
 from core.bundle import extract_bundle
 from core.excel.writer import write_excel
 from core.extraction.form_detector import FORM_LABELS_KO
@@ -543,6 +544,12 @@ async def vision_extract_files(files: list[UploadFile]) -> JSONResponse:
                 "values": pr.get("values", {}), "flags": pr.get("flags", {}),
             })
             rid += 1
+
+    # 이상치(오추출 의심) 교차검사 — 같은 서식 레코드끼리 비교해 튀는 값에 경고
+    for form in {r["form"] for r in rows}:
+        grp = [r for r in rows if r["form"] == form and r["values"]]
+        if len(grp) >= 2:
+            merge_outlier_flags([r["values"] for r in grp], [r["flags"] for r in grp])
 
     _VISION["rows"] = rows
     _vision_regenerate_excel()
