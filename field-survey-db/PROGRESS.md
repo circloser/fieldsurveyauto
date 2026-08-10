@@ -51,6 +51,11 @@ hwpx·PDF를 **모두 PDF로 통일**해 위치 기반으로 처리. 화면은 *
 - **정확도 평가**(`eval/`): 검증 골드 8건(A 6 + C 2, 2명·3명·보철거·다중서식 번들) = **100% (190/190)**. 채점 코어 `core/eval_score.py`(좌표 기호 정규화 포함), 실행기 `eval/run_eval.py`. ※ Vision 미세 흔들림(예: 남외리/남와리) 드물게 발생 → 검수로 보완.
 - **웹앱 연결**(`/ai`, `/api/vision/*`, `static/ai.html`): 파일 업로드→서식 자동판별→Vision 추출→서식별 엑셀. 검수(빈값·형식오류 플래그, 인라인 수정). 프론트 브라우저 검증 완료.
 - **전 서식 커버리지**: A/B/C/D/E 모두 Vision 스키마 보유(사진만 skip). B/D/E는 `VISION_SCHEMAS`(Vision 전용, 규칙기반 SCHEMAS 불변)에 등록. sample.pdf 9p 중 8p 스키마 매칭.
+- **AI 고도화(#2·#3·#4)**:
+  - #2 양식 이해(라벨/데이터 구분 값칸 박스 자동생성, 디자이너 템플릿 제작용) — `llm_understand`를 프록시로 연결해 배포 exe에서 무설정 사용(`/api/pdf/ai_understand`).
+  - #3 데이터 종합·추세 분석 — `analysis.analyze_records`+`/api/vision/analyze`, AI화면 '📊 데이터 분석' 버튼.
+  - #4 이상치(오추출) 경고 — `analysis.find_outliers`(숫자 IQR·좌표범위, 규칙기반·AI무관) → 조사표에 '⚠️ 이상치' 배지+주황 하이라이트.
+- **배포 패키지**: `dist/FieldSurveyDB_포터블_AI.zip`. exe 옆 `ai_config.txt`(프록시 주소·앱토큰)로 직원 무설정 AI. 사용안내 `README_AI_자동추출.md`. exe 실행·`/ai`·설정로드·AI가용성 검증 완료.
 - 계획 상세: `COMPETITION_PLAN.md`
 - ⚠️ 라이브 Vision 간헐적 403(forbidden): **프록시 앞단(Cloudflare/Anthropic)의 레이트/남용 방지 차단** — 계정/키/이미지크기/UA 무관, 짧은 시간 다량 요청 시 발동, 시간 지나면 해제(대량 테스트로 재현). 실제 사용(가끔 업로드)에선 거의 안 걸림. 대응: `vision_extract._create_with_retry`(지수 백오프) + `extract_bundle(pace_seconds)`. 실제 200 추출 다수 확인됨(파이프라인 정상). B/D/E·범용 라이브 최종검증은 가드 식은 뒤 1회 패스로.
 - 다음: 골드셋 확장(스캔·제목변형·C/D/E) → 하이브리드(규칙 교차검증) → E 형태별물리·수리 상세
