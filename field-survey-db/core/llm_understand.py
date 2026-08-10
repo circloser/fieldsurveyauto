@@ -12,10 +12,13 @@ from __future__ import annotations
 import json
 import os
 
+from app import config
+from core import vision_extract
 from core.pdf_reader import detect_cells
 
-# 항상 최신·최상위 모델을 기본값으로. 비용을 낮추려면 환경변수로 교체 가능.
-_MODEL = os.environ.get("FIELD_SURVEY_LLM_MODEL", "claude-opus-4-8")
+# 프록시(vision_extract) 경유 — 배포 exe 는 ai_config.txt 만으로 동작(진짜 키 불필요).
+# 모델은 vision 설정과 통일(환경변수로 개별 교체 가능).
+_MODEL = os.environ.get("FIELD_SURVEY_LLM_MODEL") or config.VISION_MODEL
 # 칸이 너무 많으면(비정상) 비용 방어
 _MAX_CELLS = 1600
 
@@ -56,17 +59,8 @@ _SCHEMA = {
 
 
 def available() -> tuple[bool, str]:
-    """(사용가능, 안내메시지). 패키지·API 키가 모두 있어야 True."""
-    try:
-        import anthropic  # noqa: F401
-    except ImportError:
-        return False, "AI 기능을 쓰려면 anthropic 패키지가 필요합니다. (pip install -r requirements-ai.txt)"
-    if not (os.environ.get("ANTHROPIC_API_KEY") or "").strip():
-        return False, (
-            "AI 기능을 쓰려면 Claude API 키가 필요합니다. 환경변수 ANTHROPIC_API_KEY 를 설정한 뒤 "
-            "프로그램을 다시 시작하세요. (외부 API 호출 — 샘플 양식의 칸 글자만 전송됩니다.)"
-        )
-    return True, ""
+    """(사용가능, 안내메시지). anthropic 패키지 + 프록시 설정(ai_config.txt/env) 필요."""
+    return vision_extract.available()
 
 
 def _collect_cells(pdf_path: str, pages: list) -> tuple[list, list[dict]]:
@@ -95,8 +89,6 @@ def understand_form(pdf_path: str, pages: list) -> list[dict]:
 
     표 칸이 없는(스캔) 양식은 대상 칸이 없어 빈 리스트를 반환한다.
     """
-    import anthropic
-
     flat_cells, payload = _collect_cells(pdf_path, pages)
     if not flat_cells:
         return []
@@ -104,13 +96,13 @@ def understand_form(pdf_path: str, pages: list) -> list[dict]:
         # 비정상적으로 칸이 많으면 앞부분만(비용 방어)
         payload = _truncate_payload(payload, _MAX_CELLS)
 
-    client = anthropic.Anthropic()
     user = (
         "다음은 감지된 표 칸들입니다(페이지별, i=칸번호, t=글자, box=[x0,y0,x1,y1] PDF좌표). "
         "추출할 값 칸만 골라 이름을 지어 주세요.\n\n"
         + json.dumps(payload, ensure_ascii=False)
     )
-    resp = client.messages.create(
+    resp = vision_extract._create_with_retry(
+        vision_extract._client(),
         model=_MODEL,
         max_tokens=8000,
         thinking={"type": "adaptive"},
