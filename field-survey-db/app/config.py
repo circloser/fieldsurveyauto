@@ -58,20 +58,55 @@ def _load_ai_config() -> dict:
     return cfg
 
 
-_AI_CFG = _load_ai_config()
+_AI_CFG: dict = {}   # reload_ai_settings()가 채움
 
 
 def _ai_get(key: str, default: str = "") -> str:
     return (os.environ.get(key) or _AI_CFG.get(key) or default).strip()
 
 
-# 두 가지 모드(우선순위: 직접 > 프록시)
-#  1) 직접 모드: 본인 Anthropic 키(ANTHROPIC_API_KEY) → 각자 키·사용량으로 Claude 직접 호출.
-#  2) 프록시 모드: 회사 공용 프록시(FIELD_SURVEY_PROXY_URL + APP_TOKEN) → 키를 서버에 보관.
-ANTHROPIC_API_KEY = _ai_get("ANTHROPIC_API_KEY")
-PROXY_BASE_URL = _ai_get("FIELD_SURVEY_PROXY_URL")
-PROXY_APP_TOKEN = _ai_get("FIELD_SURVEY_APP_TOKEN")
-VISION_MODEL = _ai_get("FIELD_SURVEY_VISION_MODEL", "claude-opus-4-8")
+# 멀티 제공자 + 암호화 설정.
+# 키 출처 우선순위: 환경변수 > 암호화 설정창(ai_settings.enc, DPAPI) > ai_config.txt(평문 폴백).
+from core import settings_store  # noqa: E402  (stdlib+win32만 의존, 순환 없음)
+
+SETTINGS_PATH = BASE_DIR / "ai_settings.enc"
+_SETTINGS: dict = {}
+AI_PROVIDER = "claude"
+CLAUDE_API_KEY = OPENAI_API_KEY = GEMINI_API_KEY = ANTHROPIC_API_KEY = ""
+PROXY_BASE_URL = PROXY_APP_TOKEN = ""
+
+
+def reload_ai_settings() -> None:
+    """ai_config.txt + 암호화 설정(ai_settings.enc)을 다시 읽어 전역값 갱신.
+
+    설정창 저장 후 이 함수를 부르면 실행 중에도(재시작 없이) 새 값이 반영된다
+    (모듈들이 호출 시점에 config.X 를 읽으므로).
+    """
+    global _AI_CFG, _SETTINGS, AI_PROVIDER, VISION_MODEL
+    global CLAUDE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
+    global PROXY_BASE_URL, PROXY_APP_TOKEN
+    _AI_CFG = _load_ai_config()
+    _SETTINGS = settings_store.load(SETTINGS_PATH)
+    AI_PROVIDER = (os.environ.get("FIELD_SURVEY_AI_PROVIDER")
+                   or _SETTINGS.get("provider")
+                   or _AI_CFG.get("AI_PROVIDER") or "claude").strip()
+    CLAUDE_API_KEY = (_SETTINGS["keys"].get("claude") or _ai_get("ANTHROPIC_API_KEY")).strip()
+    OPENAI_API_KEY = (_SETTINGS["keys"].get("openai") or _ai_get("OPENAI_API_KEY")).strip()
+    GEMINI_API_KEY = (_SETTINGS["keys"].get("gemini") or _ai_get("GEMINI_API_KEY")).strip()
+    ANTHROPIC_API_KEY = CLAUDE_API_KEY  # 뒤 호환(기존 Claude 경로)
+    PROXY_BASE_URL = _ai_get("FIELD_SURVEY_PROXY_URL")
+    PROXY_APP_TOKEN = _ai_get("FIELD_SURVEY_APP_TOKEN")
+    _m = _SETTINGS.get("models") or {}
+    VISION_MODEL = (os.environ.get("FIELD_SURVEY_VISION_MODEL")
+                    or _m.get(AI_PROVIDER)
+                    or _AI_CFG.get("FIELD_SURVEY_VISION_MODEL")
+                    or _DEFAULT_MODELS.get(AI_PROVIDER, "claude-opus-4-8")).strip()
+
+# 제공자별 기본 모델 (설정으로 덮어쓰기 가능)
+_DEFAULT_MODELS = {"claude": "claude-opus-4-8", "openai": "gpt-4o", "gemini": "gemini-1.5-pro"}
+VISION_MODEL = "claude-opus-4-8"   # reload_ai_settings()가 실제값으로 채움
+
+reload_ai_settings()   # 최초 로드
 
 
 def ensure_dirs() -> None:

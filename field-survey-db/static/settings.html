@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 환경설정 — 현장 조사표 DB화</title>
+<style>
+  :root { --ink:#191F28; --line:#e5e8eb; --muted:#8b95a1; --accent:#3182f6; --ok:#e7f5ec; --err:#ffe3e3; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif; color:var(--ink); background:#f7f8fa; }
+  header { background:var(--ink); color:#fff; padding:14px 22px; display:flex; align-items:center; gap:14px; }
+  header h1 { font-size:18px; margin:0; }
+  header a { color:#9db8ff; text-decoration:none; font-size:13px; }
+  header a.right { margin-left:auto; }
+  .wrap { max-width:760px; margin:22px auto; padding:0 18px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .muted { color:var(--muted); font-size:13px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  .prow { display:grid; grid-template-columns:150px 1fr auto; gap:12px; align-items:center; padding:12px 0; border-top:1px solid var(--line); }
+  .prow:first-of-type { border-top:0; }
+  .pname { font-weight:600; display:flex; align-items:center; gap:8px; }
+  .pill { font-size:11px; padding:2px 8px; border-radius:10px; background:#f1f3f5; color:var(--muted); }
+  .pill.set { background:var(--ok); color:#0b7a3b; }
+  input[type=password], input[type=text] { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:13px; }
+  .clearbox { font-size:12px; color:var(--muted); white-space:nowrap; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:11px 22px; font-size:14px; font-weight:600; cursor:pointer; }
+  button:disabled { background:#c9d2de; }
+  #msg { margin-top:14px; font-size:13px; padding:10px 12px; border-radius:8px; display:none; }
+  #msg.ok { display:block; background:var(--ok); color:#0b7a3b; }
+  #msg.no { display:block; background:var(--err); color:#c92a2a; }
+  .note { background:#fff8e6; border:1px solid #ffe08a; border-radius:8px; padding:12px 14px; font-size:12.5px; line-height:1.6; }
+  label.radio { display:inline-flex; align-items:center; gap:6px; margin-right:18px; font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚙️ AI 환경설정</h1>
+  <span class="muted" style="color:#c9d2de">제공자 선택 + 본인 API 키 (암호화 저장)</span>
+  <a class="right" href="/ai">AI 추출 →</a>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>1. 사용할 AI 제공자</h2>
+    <div id="providers">
+      <label class="radio"><input type="radio" name="provider" value="claude"> Claude (Anthropic)</label>
+      <label class="radio"><input type="radio" name="provider" value="openai"> ChatGPT (OpenAI)</label>
+      <label class="radio"><input type="radio" name="provider" value="gemini"> Gemini (Google)</label>
+    </div>
+    <p class="muted" style="margin:10px 0 0">현재 상태: <span id="active"></span></p>
+  </div>
+
+  <div class="card">
+    <h2>2. API 키 (본인 키를 넣으면 본인 사용량으로 동작)</h2>
+    <div class="prow">
+      <div class="pname">Claude <span class="pill" id="pill_claude">미설정</span></div>
+      <input type="password" id="key_claude" placeholder="sk-ant-... (변경 시에만 입력)" autocomplete="off">
+      <label class="clearbox"><input type="checkbox" id="clr_claude"> 지우기</label>
+    </div>
+    <div class="prow">
+      <div class="pname">OpenAI <span class="pill" id="pill_openai">미설정</span></div>
+      <input type="password" id="key_openai" placeholder="sk-... (변경 시에만 입력)" autocomplete="off">
+      <label class="clearbox"><input type="checkbox" id="clr_openai"> 지우기</label>
+    </div>
+    <div class="prow">
+      <div class="pname">Gemini <span class="pill" id="pill_gemini">미설정</span></div>
+      <input type="password" id="key_gemini" placeholder="AIza... (변경 시에만 입력)" autocomplete="off">
+      <label class="clearbox"><input type="checkbox" id="clr_gemini"> 지우기</label>
+    </div>
+    <div style="margin-top:16px; display:flex; align-items:center; gap:14px;">
+      <button id="save">저장</button>
+      <span id="enc" class="muted"></span>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="note">
+    🔒 <b>키 보관 방식</b>: 입력한 키는 <b>Windows 계정에 귀속되어 암호화(DPAPI)</b>되어 저장됩니다.
+    파일을 다른 사용자·다른 PC로 복사해도 열 수 없고, 디스크에 평문으로 남지 않습니다.<br>
+    ⚠️ 다만 <b>같은 PC·같은 사용자로 실행되는 프로그램</b>은 결국 키를 사용할 수 있습니다(로컬 앱의 한계).
+    완전한 비밀 보관이 필요하면 회사 공용 프록시 방식을 쓰세요.
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const PROVS = ["claude", "openai", "gemini"];
+
+function applyStatus(st) {
+  const p = st.provider || "claude";
+  const r = document.querySelector(`input[name=provider][value="${p}"]`);
+  if (r) r.checked = true;
+  for (const k of PROVS) {
+    const pill = $("#pill_" + k), on = st.configured && st.configured[k];
+    pill.textContent = on ? "설정됨" : "미설정";
+    pill.className = "pill" + (on ? " set" : "");
+  }
+  $("#enc").textContent = st.encrypted === false ? "⚠️ 평문 저장(이 환경은 암호화 미지원)"
+                        : (st.encrypted ? "🔒 암호화 저장됨" : "");
+  const av = $("#active");
+  if (st.active_available) { av.textContent = "✅ 사용 가능 (" + p + ")"; av.style.color = "#0b7a3b"; }
+  else { av.textContent = "⚠️ " + (st.active_message || "키 미설정"); av.style.color = "#c92a2a"; }
+}
+
+async function load() {
+  applyStatus(await (await fetch("/api/settings")).json());
+}
+
+$("#save").addEventListener("click", async () => {
+  const provider = (document.querySelector("input[name=provider]:checked") || {}).value || "claude";
+  const keys = {}, clear = {};
+  for (const k of PROVS) { keys[k] = $("#key_" + k).value; clear[k] = $("#clr_" + k).checked; }
+  $("#save").disabled = true;
+  try {
+    const r = await fetch("/api/settings", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, keys, clear }),
+    });
+    const d = await r.json();
+    const msg = $("#msg");
+    if (d.ok) {
+      msg.className = "ok";
+      msg.textContent = "저장됨. " + (d.encrypted ? "🔒 암호화 저장." : "⚠️ 평문 저장.")
+        + (d.active_available ? " AI 사용 가능." : " (" + (d.active_message || "") + ")");
+      for (const k of PROVS) { $("#key_" + k).value = ""; $("#clr_" + k).checked = false; }
+      applyStatus(d.status);
+      // active 표시 갱신
+      applyStatus(Object.assign(d.status, { active_available: d.active_available, active_message: d.active_message }));
+    } else {
+      msg.className = "no"; msg.textContent = "저장 실패: " + (d.error || "");
+    }
+  } finally { $("#save").disabled = false; }
+});
+
+load();
+</script>
+</body>
+</html>

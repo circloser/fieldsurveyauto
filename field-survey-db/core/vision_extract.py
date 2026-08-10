@@ -14,6 +14,7 @@ import json
 import time
 
 from app import config
+from core import ai_providers
 from core.pdf_reader import render_page_png
 
 # 프록시 앞단(Cloudflare)이 빠른 연속 요청을 간헐적으로 403(forbidden)·429로 막는다.
@@ -50,17 +51,19 @@ _SYSTEM = (
 
 
 def available() -> tuple[bool, str]:
-    """(사용가능, 안내메시지). anthropic 패키지 + (본인 키 또는 프록시 설정)이 있어야 True."""
+    """(사용가능, 안내메시지). 선택된 제공자(config.AI_PROVIDER) 기준."""
+    if config.AI_PROVIDER in ("openai", "gemini"):
+        p = ai_providers.get(config.AI_PROVIDER)
+        return p.available() if p else (False, f"알 수 없는 AI 제공자: {config.AI_PROVIDER}")
+    # claude
     try:
         import anthropic  # noqa: F401
     except ImportError:
         return False, "AI 기능엔 anthropic 패키지가 필요합니다. (pip install -r requirements-ai.txt)"
-    if config.ANTHROPIC_API_KEY:
-        return True, ""   # 직접 모드(본인 키)
-    if config.PROXY_BASE_URL and config.PROXY_APP_TOKEN:
-        return True, ""   # 프록시 모드
-    return False, ("AI 기능을 쓰려면 exe 옆 ai_config.txt(또는 환경변수)에 본인 Anthropic API 키를 "
-                   "넣으세요:  ANTHROPIC_API_KEY=sk-ant-...  (발급: https://console.anthropic.com)")
+    if config.ANTHROPIC_API_KEY or (config.PROXY_BASE_URL and config.PROXY_APP_TOKEN):
+        return True, ""
+    return False, ("AI 기능을 쓰려면 설정창(또는 ai_config.txt)에 본인 Anthropic API 키를 "
+                   "넣으세요.  (발급: https://console.anthropic.com)")
 
 
 def _client():
@@ -141,6 +144,10 @@ def extract_page_generic(pdf_path: str, page_no: int, dpi: int = 170) -> dict:
     if not ok:
         raise RuntimeError(msg)
     png = render_page_png(pdf_path, page_no, dpi=dpi)
+    if config.AI_PROVIDER in ("openai", "gemini"):
+        data = ai_providers.get(config.AI_PROVIDER).vision_json(
+            png, _GENERIC_SCHEMA, _GENERIC_HINT, _GENERIC_SYSTEM)
+        return items_to_dict((data or {}).get("items"))
     resp = _create_with_retry(
         _client(),
         model=config.VISION_MODEL,
@@ -162,6 +169,8 @@ def analyze_text(prompt: str, max_tokens: int = 1500) -> str:
     ok, msg = available()
     if not ok:
         raise RuntimeError(msg)
+    if config.AI_PROVIDER in ("openai", "gemini"):
+        return ai_providers.get(config.AI_PROVIDER).text(prompt, max_tokens)
     resp = _create_with_retry(
         _client(),
         model=config.VISION_MODEL,
@@ -178,6 +187,8 @@ def extract_page(pdf_path: str, page_no: int, json_schema: dict,
     if not ok:
         raise RuntimeError(msg)
     png = render_page_png(pdf_path, page_no, dpi=dpi)
+    if config.AI_PROVIDER in ("openai", "gemini"):
+        return ai_providers.get(config.AI_PROVIDER).vision_json(png, json_schema, schema_hint, _SYSTEM)
     resp = _create_with_retry(
         _client(),
         model=config.VISION_MODEL,

@@ -455,6 +455,50 @@ def ai_page() -> FileResponse:
     return FileResponse(config.STATIC_DIR / "ai.html")
 
 
+# ─────────────── AI 환경설정 (제공자·키, 암호화 저장) ───────────────
+
+@app.get("/settings")
+def settings_page() -> FileResponse:
+    return FileResponse(config.STATIC_DIR / "settings.html")
+
+
+@app.get("/api/settings")
+def settings_get() -> JSONResponse:
+    from core import settings_store
+    from core.vision_extract import available
+    st = settings_store.status(config.SETTINGS_PATH)
+    ok, msg = available()
+    st.update({"active_available": ok, "active_message": msg})
+    return JSONResponse(st)
+
+
+@app.post("/api/settings")
+def settings_save(payload: dict = Body(...)) -> JSONResponse:
+    """제공자·키 저장(키는 DPAPI 암호화). 빈 값은 기존 키 유지. 저장 후 즉시 반영."""
+    from core import settings_store
+    provider = (payload.get("provider") or "claude").strip()
+    incoming = payload.get("keys") or {}
+    clear = payload.get("clear") or {}
+    cur = settings_store.load(config.SETTINGS_PATH)
+    keys = dict(cur["keys"])
+    for k in settings_store.PROVIDERS:
+        if clear.get(k):
+            keys[k] = ""
+        else:
+            v = (incoming.get(k) or "").strip()
+            if v:                       # 빈 값이면 기존 키 유지(실수로 지워지지 않게)
+                keys[k] = v
+    encrypted = settings_store.save(config.SETTINGS_PATH, provider, keys, cur.get("models"))
+    config.reload_ai_settings()         # 재시작 없이 반영
+    from core.vision_extract import available
+    ok, msg = available()
+    return JSONResponse({
+        "ok": True, "encrypted": encrypted,
+        "status": settings_store.status(config.SETTINGS_PATH),
+        "active_available": ok, "active_message": msg,
+    })
+
+
 @app.get("/api/vision/status")
 def vision_status() -> JSONResponse:
     from core.vision_extract import available
