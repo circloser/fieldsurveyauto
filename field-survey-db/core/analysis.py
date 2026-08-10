@@ -93,6 +93,37 @@ def find_outliers(records: list[dict], min_n: int = 4) -> list[dict]:
     return out
 
 
+def build_analysis_prompt(groups: list[dict], max_rows: int = 40) -> str:
+    """추출 결과(서식별 그룹)를 AI 종합/추세 분석용 프롬프트로. (순수 함수·테스트 가능)
+
+    groups: [{'label', 'fields', 'rows':[{'_파일명':.., field:val}]}]
+    """
+    lines = [
+        "다음은 현장 조사표에서 자동 추출한 데이터입니다.",
+        "아래를 한국어 불릿으로 간결히 정리해 주세요(표는 다시 그리지 말 것):",
+        "1) 전반 요약(건수·서식 구성)  2) 주요 수치의 분포·평균·범위  "
+        "3) 눈에 띄는 추세/패턴  4) 데이터 품질(빈값·이상치·오추출 의심).",
+        "",
+    ]
+    for g in groups:
+        rows = g.get("rows", [])
+        lines.append(f"## 서식: {g['label']} ({len(rows)}건)")
+        lines.append("파일 | " + " | ".join(g["fields"]))
+        for r in rows[:max_rows]:
+            vals = [str(r.get(f, "")) for f in g["fields"]]
+            lines.append(str(r.get("_파일명", "")) + " | " + " | ".join(vals))
+        if len(rows) > max_rows:
+            lines.append(f"...(외 {len(rows) - max_rows}건 생략)")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def analyze_records(groups: list[dict]) -> str:
+    """추출 데이터 종합/추세 분석(AI 텍스트 호출). 프록시 경유(IP·설정 필요)."""
+    from core import vision_extract
+    return vision_extract.analyze_text(build_analysis_prompt(groups))
+
+
 def merge_outlier_flags(records: list[dict], flags: list[dict]) -> int:
     """find_outliers 결과를 기존 flags(행별 {field:사유})에 병합. 반환: 추가된 경고 수.
 

@@ -155,6 +155,20 @@ def extract_page_generic(pdf_path: str, page_no: int, dpi: int = 170) -> dict:
     return items_to_dict(data.get("items"))
 
 
+def analyze_text(prompt: str, max_tokens: int = 1500) -> str:
+    """텍스트 전용 호출 — 추출된 데이터의 종합/추세 분석 등(이미지 없음). 프록시 경유."""
+    ok, msg = available()
+    if not ok:
+        raise RuntimeError(msg)
+    resp = _create_with_retry(
+        _client(),
+        model=config.VISION_MODEL,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return next((b.text for b in resp.content if b.type == "text"), "")
+
+
 def extract_page(pdf_path: str, page_no: int, json_schema: dict,
                  schema_hint: str = "", dpi: int = 170) -> dict:
     """한 페이지를 Vision 으로 추출 → {필드명: 값}. 프록시 미설정 시 RuntimeError."""

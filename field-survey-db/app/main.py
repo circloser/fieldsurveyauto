@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import config
-from core.analysis import merge_outlier_flags
+from core.analysis import analyze_records, merge_outlier_flags
 from core.bundle import extract_bundle
 from core.excel.writer import write_excel
 from core.extraction.form_detector import FORM_LABELS_KO
@@ -583,6 +583,24 @@ def vision_correct(payload: dict = Body(...)) -> JSONResponse:
         row["flags"][field] = "빈값"
     _vision_regenerate_excel()
     return JSONResponse({"ok": True, "row": row})
+
+
+@app.post("/api/vision/analyze")
+def vision_analyze() -> JSONResponse:
+    """추출된 데이터 전체를 AI가 종합·추세 분석(텍스트) → 마크다운 반환."""
+    from core.vision_extract import available
+    ok, msg = available()
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=400)
+    rows: list[dict] = _VISION.get("rows") or []  # type: ignore[assignment]
+    groups = _vision_groups(rows)
+    if not groups:
+        return JSONResponse({"error": "먼저 AI 추출을 실행하세요."}, status_code=400)
+    try:
+        text = analyze_records(groups)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": _friendly_vision_error(e)}, status_code=502)
+    return JSONResponse({"analysis": text})
 
 
 @app.get("/api/vision/download")

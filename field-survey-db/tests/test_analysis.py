@@ -1,5 +1,14 @@
-"""analysis.find_outliers / merge_outlier_flags — 이상치 탐지(규칙, 네트워크 불필요)."""
-from core.analysis import find_outliers, merge_outlier_flags
+"""analysis.find_outliers / merge_outlier_flags / build_analysis_prompt (규칙, 네트워크 불필요)."""
+from core.analysis import build_analysis_prompt, find_outliers, merge_outlier_flags
+
+
+def test_build_analysis_prompt_includes_data():
+    groups = [{"label": "인공구조물", "fields": ["하천명", "보길이"],
+               "rows": [{"_파일명": "a.pdf p1", "하천명": "탄천", "보길이": "20"},
+                        {"_파일명": "b.pdf p1", "하천명": "해남천", "보길이": "30"}]}]
+    p = build_analysis_prompt(groups)
+    assert "인공구조물" in p and "2건" in p
+    assert "탄천" in p and "해남천" in p and "보길이" in p
 
 
 def test_numeric_iqr_outlier():
