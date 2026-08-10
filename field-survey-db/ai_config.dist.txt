@@ -1,0 +1,13 @@
+# ===== AI 자동추출 설정 =====
+# 이 파일은 FieldSurveyDB.exe 와 같은 폴더에 있어야 합니다.
+# AI 기능을 쓰려면 아래에 '본인의' Claude(Anthropic) API 키를 넣고 저장하세요.
+# 발급: https://console.anthropic.com  →  API Keys  (각자 본인 키·본인 사용량으로 동작)
+
+ANTHROPIC_API_KEY=
+
+# 선택: 사용할 모델 (기본 claude-opus-4-8). 비용 절감하려면 하이쿠 등으로 교체 가능.
+# FIELD_SURVEY_VISION_MODEL=claude-opus-4-8
+
+# ── (선택·고급) 회사 공용 프록시를 쓰는 경우엔 위 키 대신 아래 2개만 채우세요 ──
+# FIELD_SURVEY_PROXY_URL=https://...workers.dev
+# FIELD_SURVEY_APP_TOKEN=앱토큰

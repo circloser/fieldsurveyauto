@@ -1,12 +1,14 @@
-# AI(Vision) 자동추출 설정 — 이 파일을 복사해 'ai_config.txt' 로 저장하고 값을 채우세요.
-# 배포 시: exe(FieldSurveyDB.exe) 와 같은 폴더에 'ai_config.txt' 를 함께 두면
-#          직원들이 아무 설정 없이 바로 AI 자동추출을 쓸 수 있습니다.
-#
-# 보안: 여기 들어가는 건 '진짜 Claude 키'가 아니라 프록시 통행증(APP_TOKEN)입니다.
-#       진짜 키는 서버(Cloudflare Worker)에만 있고, 통행증은 유출 시 폐기·교체 가능합니다.
+# AI 자동추출 설정 — 이 파일을 exe(FieldSurveyDB.exe)와 같은 폴더에 'ai_config.txt' 로 둡니다.
+# 각 사용자가 '본인의 Claude(Anthropic) API 키'를 넣으면, 본인 사용량으로 AI 기능이 켜집니다.
 
-FIELD_SURVEY_PROXY_URL=https://field-survey-claude-proxy.○○○.workers.dev
-FIELD_SURVEY_APP_TOKEN=여기에-앱토큰-붙여넣기
+# ▶ 본인 Anthropic API 키 (발급: https://console.anthropic.com → API Keys)
+ANTHROPIC_API_KEY=sk-ant-여기에-본인-키-붙여넣기
 
-# 선택: 사용할 모델(기본 claude-opus-4-8)
+# 선택: 사용할 모델(기본 claude-opus-4-8). 비용을 낮추려면 하이쿠 등으로 교체.
 # FIELD_SURVEY_VISION_MODEL=claude-opus-4-8
+
+# ─────────────────────────────────────────────────────────────
+# (선택·고급) 회사 공용 프록시를 쓰는 경우엔, 위 ANTHROPIC_API_KEY 대신 아래 2개만 채우세요.
+# 이러면 진짜 키는 서버에만 있고 각 PC엔 통행증(APP_TOKEN)만 둡니다.
+# FIELD_SURVEY_PROXY_URL=https://field-survey-claude-proxy.○○○.workers.dev
+# FIELD_SURVEY_APP_TOKEN=앱토큰

@@ -50,23 +50,25 @@ _SYSTEM = (
 
 
 def available() -> tuple[bool, str]:
-    """(사용가능, 안내메시지). anthropic 패키지 + 프록시 설정이 모두 있어야 True."""
+    """(사용가능, 안내메시지). anthropic 패키지 + (본인 키 또는 프록시 설정)이 있어야 True."""
     try:
         import anthropic  # noqa: F401
     except ImportError:
-        return False, "Vision 기능엔 anthropic 패키지가 필요합니다. (pip install -r requirements-ai.txt)"
-    if not config.PROXY_BASE_URL:
-        return False, ("Vision 기능을 쓰려면 프록시 주소가 필요합니다. "
-                       "환경변수 FIELD_SURVEY_PROXY_URL 를 설정하세요.")
-    if not config.PROXY_APP_TOKEN:
-        return False, ("Vision 기능을 쓰려면 앱 토큰이 필요합니다. "
-                       "환경변수 FIELD_SURVEY_APP_TOKEN 를 설정하세요.")
-    return True, ""
+        return False, "AI 기능엔 anthropic 패키지가 필요합니다. (pip install -r requirements-ai.txt)"
+    if config.ANTHROPIC_API_KEY:
+        return True, ""   # 직접 모드(본인 키)
+    if config.PROXY_BASE_URL and config.PROXY_APP_TOKEN:
+        return True, ""   # 프록시 모드
+    return False, ("AI 기능을 쓰려면 exe 옆 ai_config.txt(또는 환경변수)에 본인 Anthropic API 키를 "
+                   "넣으세요:  ANTHROPIC_API_KEY=sk-ant-...  (발급: https://console.anthropic.com)")
 
 
 def _client():
     import anthropic
-    # base_url 을 프록시로 → 진짜 키는 서버에만. api_key 자리에는 앱 토큰이 들어간다.
+    if config.ANTHROPIC_API_KEY:
+        # 직접 모드: 각자 본인 키로 Claude 직접 호출(본인 사용량·본인 IP).
+        return anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    # 프록시 모드: 진짜 키는 서버(Worker)에만, api_key 자리엔 앱 토큰.
     return anthropic.Anthropic(base_url=config.PROXY_BASE_URL, api_key=config.PROXY_APP_TOKEN)
 
 

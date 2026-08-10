@@ -65,6 +65,10 @@ def _ai_get(key: str, default: str = "") -> str:
     return (os.environ.get(key) or _AI_CFG.get(key) or default).strip()
 
 
+# 두 가지 모드(우선순위: 직접 > 프록시)
+#  1) 직접 모드: 본인 Anthropic 키(ANTHROPIC_API_KEY) → 각자 키·사용량으로 Claude 직접 호출.
+#  2) 프록시 모드: 회사 공용 프록시(FIELD_SURVEY_PROXY_URL + APP_TOKEN) → 키를 서버에 보관.
+ANTHROPIC_API_KEY = _ai_get("ANTHROPIC_API_KEY")
 PROXY_BASE_URL = _ai_get("FIELD_SURVEY_PROXY_URL")
 PROXY_APP_TOKEN = _ai_get("FIELD_SURVEY_APP_TOKEN")
 VISION_MODEL = _ai_get("FIELD_SURVEY_VISION_MODEL", "claude-opus-4-8")
