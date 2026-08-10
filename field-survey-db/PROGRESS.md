@@ -55,7 +55,8 @@ hwpx·PDF를 **모두 PDF로 통일**해 위치 기반으로 처리. 화면은 *
   - #2 양식 이해(라벨/데이터 구분 값칸 박스 자동생성, 디자이너 템플릿 제작용) — `llm_understand`를 프록시로 연결해 배포 exe에서 무설정 사용(`/api/pdf/ai_understand`).
   - #3 데이터 종합·추세 분석 — `analysis.analyze_records`+`/api/vision/analyze`, AI화면 '📊 데이터 분석' 버튼.
   - #4 이상치(오추출) 경고 — `analysis.find_outliers`(숫자 IQR·좌표범위, 규칙기반·AI무관) → 조사표에 '⚠️ 이상치' 배지+주황 하이라이트.
-- **배포 패키지**: `dist/FieldSurveyDB_포터블_AI.zip`. exe 옆 `ai_config.txt`(프록시 주소·앱토큰)로 직원 무설정 AI. 사용안내 `README_AI_자동추출.md`. exe 실행·`/ai`·설정로드·AI가용성 검증 완료.
+- **멀티 제공자 + 암호화 설정창**: `/settings`에서 Claude/OpenAI/Gemini 선택 + 본인 키 입력. 키는 `core/settings_store`가 **Windows DPAPI로 암호화 저장**(`ai_settings.enc`, 평문 txt 위험 제거). `core/ai_providers`(OpenAI·Gemini는 httpx REST, Claude는 기존 SDK). `config.reload_ai_settings()`로 저장 즉시 반영. 우선순위 env>암호화설정>ai_config.txt. ※ OpenAI/Gemini는 라이브 미검증(키 필요).
+- **배포 패키지**: `dist/FieldSurveyDB_포터블_AI.zip`. 각자 `/settings`(또는 ai_config.txt)에 본인 키 입력 → 본인 사용량으로 AI. 사용안내 `README_AI_자동추출.md`. exe 실행·`/ai`·`/settings`·설정로드·가용성 검증 완료.
 - 계획 상세: `COMPETITION_PLAN.md`
 - ⚠️ 라이브 Vision 간헐적 403(forbidden): **프록시 앞단(Cloudflare/Anthropic)의 레이트/남용 방지 차단** — 계정/키/이미지크기/UA 무관, 짧은 시간 다량 요청 시 발동, 시간 지나면 해제(대량 테스트로 재현). 실제 사용(가끔 업로드)에선 거의 안 걸림. 대응: `vision_extract._create_with_retry`(지수 백오프) + `extract_bundle(pace_seconds)`. 실제 200 추출 다수 확인됨(파이프라인 정상). B/D/E·범용 라이브 최종검증은 가드 식은 뒤 1회 패스로.
 - 다음: 골드셋 확장(스캔·제목변형·C/D/E) → 하이브리드(규칙 교차검증) → E 형태별물리·수리 상세
