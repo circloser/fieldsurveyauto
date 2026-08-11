@@ -101,11 +101,12 @@ def understand_form(pdf_path: str, pages: list) -> list[dict]:
         "추출할 값 칸만 골라 이름을 지어 주세요.\n\n"
         + json.dumps(payload, ensure_ascii=False)
     )
+    # thinking(확장 사고)은 쓰지 않는다: 칸이 많으면 사고가 토큰 예산(프록시 상한 8000)을
+    # 다 써버려 정작 JSON 출력이 비어버린다(빈 결과 버그). 이 작업은 사고 없이도 충분.
     resp = vision_extract._create_with_retry(
         vision_extract._client(),
         model=_MODEL,
         max_tokens=8000,
-        thinking={"type": "adaptive"},
         system=_SYSTEM,
         messages=[{"role": "user", "content": user}],
         output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
