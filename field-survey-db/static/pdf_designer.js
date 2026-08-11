@@ -452,7 +452,7 @@ async function loadTemplate(name) {
     // 템플릿과 함께 저장된 양식 PDF가 있으면 캔버스에 그대로 보여준다
     DOC_ID = d.doc_id; PAGES = d.pages;
     exitTplMode();
-    activePage = pageWithMostBoxes();
+    activePage = PAGES.length ? PAGES[0].page_no : 0;  // 항상 1페이지부터
   } else if (!DOC_ID) {  // PDF 없는(옛) 템플릿을 양식 없이 불러오면 템플릿 모드로
     TPL_MODE = true; PAGES = []; activePage = 0;
     $("tplBannerName").textContent = `'${name}'`;
