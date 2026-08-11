@@ -472,6 +472,21 @@ def settings_get() -> JSONResponse:
     return JSONResponse(st)
 
 
+@app.post("/api/settings/test")
+def settings_test() -> JSONResponse:
+    """현재 저장된 설정으로 선택 제공자에 실제 1회 호출 → 연결 성공/실패 확인."""
+    from core.vision_extract import analyze_text, available
+    ok, msg = available()
+    if not ok:
+        return JSONResponse({"ok": False, "error": msg}, status_code=400)
+    try:
+        reply = analyze_text("연결 확인용입니다. 'OK' 라고만 짧게 답하세요.", max_tokens=20)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": _friendly_vision_error(e)})
+    return JSONResponse({"ok": True, "provider": config.AI_PROVIDER,
+                         "model": config.VISION_MODEL, "reply": (reply or "").strip()[:80]})
+
+
 @app.post("/api/settings")
 def settings_save(payload: dict = Body(...)) -> JSONResponse:
     """제공자·키 저장(키는 DPAPI 암호화). 빈 값은 기존 키 유지. 저장 후 즉시 반영."""

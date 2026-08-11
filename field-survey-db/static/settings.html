@@ -67,8 +67,9 @@
       <input type="password" id="key_gemini" placeholder="AIza... (변경 시에만 입력)" autocomplete="off">
       <label class="clearbox"><input type="checkbox" id="clr_gemini"> 지우기</label>
     </div>
-    <div style="margin-top:16px; display:flex; align-items:center; gap:14px;">
+    <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
       <button id="save">저장</button>
+      <button id="test" style="background:#fff;color:var(--accent);border:1px solid var(--accent)">🔌 연결 테스트</button>
       <span id="enc" class="muted"></span>
     </div>
     <div id="msg"></div>
@@ -130,6 +131,18 @@ $("#save").addEventListener("click", async () => {
       msg.className = "no"; msg.textContent = "저장 실패: " + (d.error || "");
     }
   } finally { $("#save").disabled = false; }
+});
+
+$("#test").addEventListener("click", async () => {
+  const msg = $("#msg");
+  msg.className = "ok"; msg.textContent = "🔌 연결 확인 중… (선택한 제공자로 1회 호출)";
+  $("#test").disabled = true;
+  try {
+    const d = await (await fetch("/api/settings/test", { method: "POST" })).json();
+    if (d.ok) { msg.className = "ok"; msg.textContent = `✅ 연결 성공 — ${d.provider} (${d.model}) 응답: "${d.reply}"`; }
+    else { msg.className = "no"; msg.textContent = "❌ 연결 실패: " + (d.error || ""); }
+  } catch (e) { msg.className = "no"; msg.textContent = "❌ 오류: " + e; }
+  finally { $("#test").disabled = false; }
 });
 
 load();
