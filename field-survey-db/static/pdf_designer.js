@@ -34,7 +34,7 @@ async function loadForm(file) {
     DOC_ID = data.doc_id; PAGES = data.pages;
     BOXES = keepBoxes || data.boxes.map((b, i) => ({ ...b, order: b.order ?? i + 1 }));
     exitTplMode();
-    activePage = pageWithMostBoxes(); selected = null;
+    activePage = PAGES.length ? PAGES[0].page_no : 0; selected = null;  // 항상 1페이지부터
     $("main").hidden = false;
     renderPageNav(); renderPage(); renderBoxes(); loadTemplates();
     fitZoom();  // 너비에 맞춰 시작
@@ -47,12 +47,6 @@ function exitTplMode() {
   $("tplBanner").hidden = true;
   document.querySelector(".grid-pane").style.display = "";
 }
-function pageWithMostBoxes() {
-  const c = {}; BOXES.forEach((b) => (c[b.page] = (c[b.page] || 0) + 1));
-  let best = 0, mx = -1; PAGES.forEach((p) => { const n = c[p.page_no] || 0; if (n > mx) { mx = n; best = p.page_no; } });
-  return best;
-}
-
 let EDIT_VER = 0;   // 페이지 편집(삭제/추가) 시 증가 — 페이지 이미지 캐시 무효화
 
 function renderPageNav() {
