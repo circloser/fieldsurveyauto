@@ -580,8 +580,18 @@ function renderApply(d) {
   html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
   html += ` <button class="btn" id="pdfAnalyzeBtn" style="background:#fff;color:#3182f6;border:1px solid #3182f6">📊 데이터 분석(AI)</button>`;
   html += `<div id="pdfAnalysis" style="margin-top:12px;padding:14px;background:#f1f3f5;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.6;display:none"></div>`;
+  const OL = d.outliers || [];
+  if (d.outlier_count) html += `<p style="color:#e8590c;font-weight:600;margin:8px 0 4px">⚠️ 이상치 ${d.outlier_count}건 — 주황 칸을 확인하세요 (다른 파일과 비교해 튀는 값 = 오추출 의심)</p>`;
   html += `<div style="overflow:auto"><table class="apply-table"><thead><tr><th>파일</th>` + d.fields.map((f) => `<th>${f}</th>`).join("") + `</tr></thead><tbody>`;
-  for (const row of d.rows) html += `<tr><td>${row["_파일명"] || ""}</td>` + d.fields.map((f) => `<td>${(row[f] || "").slice(0, 18)}</td>`).join("") + `</tr>`;
+  d.rows.forEach((row, i) => {
+    const ol = OL[i] || {};
+    html += `<tr><td>${row["_파일명"] || ""}</td>` + d.fields.map((f) => {
+      const v = (row[f] || "").slice(0, 18);
+      return ol[f]
+        ? `<td style="background:#fff0e0;border:1px solid #ff922b" title="${ol[f]}">⚠️ ${v}</td>`
+        : `<td>${v}</td>`;
+    }).join("") + `</tr>`;
+  });
   html += `</tbody></table></div>`; $("applyResult").innerHTML = html;
   const ab = $("pdfAnalyzeBtn"); if (ab) ab.addEventListener("click", pdfAnalyze);
 }

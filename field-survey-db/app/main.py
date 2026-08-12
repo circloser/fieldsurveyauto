@@ -844,12 +844,18 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
         write_template_excel(rows, fields, str(excel_path),
                              sheet_name_field=sheet_name_field or None)
+    # 이상치(오추출 의심) 리포팅 — 여러 파일(행) 교차비교로 튀는 값 탐지
+    from core.analysis import find_outliers
+    outliers = find_outliers([{f: r.get(f, "") for f in fields} for r in rows])
+
     _PDF_APPLY["excel_path"] = str(excel_path)
     _PDF_APPLY["rows"] = rows            # AI 분석용 보관
     _PDF_APPLY["fields"] = fields
     return JSONResponse({"rows": rows, "fields": fields, "ok_count": len(rows),
                          "failed": failed, "match_info": match_info,
-                         "report_used": report_used})
+                         "report_used": report_used,
+                         "outliers": outliers,
+                         "outlier_count": sum(len(o) for o in outliers)})
 
 
 @app.post("/api/pdf/analyze")
