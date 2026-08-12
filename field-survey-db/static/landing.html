@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>현장 조사표 DB화</title>
+<style>
+  :root { --ink:#191F28; --line:#e5e8eb; --muted:#8b95a1; --accent:#3182f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif; color:var(--ink);
+         background:linear-gradient(180deg,#f7f8fa,#eef1f5); min-height:100vh; }
+  header { background:var(--ink); color:#fff; padding:16px 24px; }
+  header .logo { font-size:12.5px; color:#9db8ff; display:flex; align-items:center; gap:7px; }
+  header .dot { width:8px; height:8px; border-radius:50%; background:#3182f6; display:inline-block; }
+  header h1 { font-size:20px; margin:6px 0 0; }
+  .wrap { max-width:960px; margin:0 auto; padding:40px 20px; }
+  .lead { text-align:center; color:var(--muted); font-size:15px; margin:0 0 30px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
+  a.card { text-decoration:none; color:inherit; background:#fff; border:1px solid var(--line);
+           border-radius:16px; padding:26px 22px; display:flex; flex-direction:column; gap:10px;
+           transition:transform .12s, box-shadow .12s, border-color .12s; }
+  a.card:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(25,31,40,.10); border-color:var(--accent); }
+  .ic { font-size:34px; }
+  .ct { font-size:18px; font-weight:700; }
+  .cd { font-size:13.5px; color:var(--muted); line-height:1.6; }
+  .go { margin-top:auto; color:var(--accent); font-weight:600; font-size:14px; }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:10px 0 30px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="dot"></span> 국립생태원 · 습지복원팀</div>
+  <h1>현장 조사표 DB화</h1>
+</header>
+
+<div class="wrap">
+  <p class="lead">무엇을 하시겠어요? 아래에서 골라 시작하세요.</p>
+  <div class="grid">
+    <a class="card" href="/ai">
+      <div class="ic">🤖</div>
+      <div class="ct">AI 자동추출 및 분석</div>
+      <div class="cd">양식을 몰라도 파일을 넣으면 AI가 페이지별로 읽어 엑셀로. 검수·이상치 경고·데이터 분석까지.</div>
+      <div class="go">시작하기 →</div>
+    </a>
+    <a class="card" href="/pdf-designer">
+      <div class="ic">🧩</div>
+      <div class="ct">템플릿 디자이너 및 대량 추출</div>
+      <div class="cd">양식에 추출 칸(박스)을 지정해 템플릿을 만들고, 같은 양식 파일을 한꺼번에 엑셀로. 결과 AI 분석 포함.</div>
+      <div class="go">시작하기 →</div>
+    </a>
+    <a class="card" href="/settings">
+      <div class="ic">⚙️</div>
+      <div class="ct">환경설정</div>
+      <div class="cd">사용할 AI 제공자(Claude·ChatGPT·Gemini) 선택과 본인 API 키 입력(암호화 저장), 연결 테스트.</div>
+      <div class="go">설정하기 →</div>
+    </a>
+  </div>
+</div>
+
+<footer>로컬에서 동작합니다 · 자료는 이 컴퓨터에서만 처리됩니다</footer>
+</body>
+</html>

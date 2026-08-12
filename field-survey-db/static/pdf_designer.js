@@ -578,9 +578,25 @@ function renderApply(d) {
     }
   }
   html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
+  html += ` <button class="btn" id="pdfAnalyzeBtn" style="background:#fff;color:#3182f6;border:1px solid #3182f6">📊 데이터 분석(AI)</button>`;
+  html += `<div id="pdfAnalysis" style="margin-top:12px;padding:14px;background:#f1f3f5;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.6;display:none"></div>`;
   html += `<div style="overflow:auto"><table class="apply-table"><thead><tr><th>파일</th>` + d.fields.map((f) => `<th>${f}</th>`).join("") + `</tr></thead><tbody>`;
   for (const row of d.rows) html += `<tr><td>${row["_파일명"] || ""}</td>` + d.fields.map((f) => `<td>${(row[f] || "").slice(0, 18)}</td>`).join("") + `</tr>`;
   html += `</tbody></table></div>`; $("applyResult").innerHTML = html;
+  const ab = $("pdfAnalyzeBtn"); if (ab) ab.addEventListener("click", pdfAnalyze);
+}
+
+async function pdfAnalyze() {
+  const btn = $("pdfAnalyzeBtn"), panel = $("pdfAnalysis"), old = btn.textContent;
+  btn.disabled = true; btn.textContent = "분석 중…";
+  panel.style.display = "block"; panel.textContent = "⏳ AI가 추출된 데이터를 분석하는 중…";
+  try {
+    const d = await (await fetch("/api/pdf/analyze", { method: "POST" })).json();
+    if (d.error) { panel.textContent = "오류: " + d.error; return; }
+    const esc = (d.analysis || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    panel.innerHTML = esc.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  } catch (e) { panel.textContent = "분석 실패: " + e; }
+  finally { btn.disabled = false; btn.textContent = old; }
 }
 
 function showOverlay(m) { $("overlayMsg").textContent = m || "처리 중…"; $("overlay").hidden = false; }

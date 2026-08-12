@@ -97,8 +97,8 @@ def health() -> JSONResponse:
 
 @app.get("/")
 def index() -> FileResponse:
-    # 메인 화면 = 템플릿 디자이너
-    return FileResponse(config.STATIC_DIR / "pdf_designer.html")
+    # 랜딩(시작) 화면 — AI 자동추출 / 템플릿 디자이너 / 환경설정 선택
+    return FileResponse(config.STATIC_DIR / "landing.html")
 
 
 @app.post("/api/process")
@@ -845,9 +845,31 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         write_template_excel(rows, fields, str(excel_path),
                              sheet_name_field=sheet_name_field or None)
     _PDF_APPLY["excel_path"] = str(excel_path)
+    _PDF_APPLY["rows"] = rows            # AI 분석용 보관
+    _PDF_APPLY["fields"] = fields
     return JSONResponse({"rows": rows, "fields": fields, "ok_count": len(rows),
                          "failed": failed, "match_info": match_info,
                          "report_used": report_used})
+
+
+@app.post("/api/pdf/analyze")
+def pdf_analyze() -> JSONResponse:
+    """템플릿 대량추출 결과(엑셀 표)를 AI가 종합·추세 분석 → 마크다운."""
+    from core.analysis import analyze_records
+    from core.vision_extract import available
+    ok, msg = available()
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=400)
+    rows = _PDF_APPLY.get("rows") or []
+    fields = _PDF_APPLY.get("fields") or []
+    if not rows:
+        return JSONResponse({"error": "먼저 템플릿 추출을 실행하세요."}, status_code=400)
+    groups = [{"label": "템플릿 추출", "fields": fields, "rows": rows}]
+    try:
+        text = analyze_records(groups)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": _friendly_vision_error(e)}, status_code=502)
+    return JSONResponse({"analysis": text})
 
 
 @app.post("/api/report/load")
