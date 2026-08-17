@@ -34,10 +34,16 @@
 .link-back { color: var(--text-sub); text-decoration: none; font-size: 14px; font-weight: 600; white-space: nowrap; }
 .link-back:hover { color: var(--text); }
 
-.designer-main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 22px; align-items: start; }
-@media (max-width: 1000px) { .designer-main { grid-template-columns: 1fr; } }
+.designer-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 22px; align-items: start; }
+@media (max-width: 1000px) { .designer-grid { grid-template-columns: 1fr; } }
 
-.grid-pane, .box-pane {
+/* 하단 절차(3·4·5) — 전체폭 3칸으로 순서대로 배치 */
+.steps-bottom { display: grid; grid-template-columns: 0.85fr 1.3fr 1.3fr; gap: 22px; align-items: start; margin-top: 22px; }
+@media (max-width: 1000px) { .steps-bottom { grid-template-columns: 1fr; } }
+.step-card { min-width: 0; }
+.step-card h2 { font-size: 16px; margin: 0 0 4px; }
+
+.grid-pane, .box-pane, .step-card {
   background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: var(--shadow);
 }
 /* 넓은 표가 1fr 칸을 부풀리지 않도록(가로 스크롤로 가둠) */
