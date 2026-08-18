@@ -34,8 +34,8 @@
 .link-back { color: var(--text-sub); text-decoration: none; font-size: 14px; font-weight: 600; white-space: nowrap; }
 .link-back:hover { color: var(--text); }
 
-.designer-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 22px; align-items: start; }
-@media (max-width: 1000px) { .designer-grid { grid-template-columns: 1fr; } }
+.designer-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 760px) { .designer-grid { grid-template-columns: 1fr; } }
 
 /* 하단 절차(3·4·5) — 전체폭 3칸으로 순서대로 배치 */
 .steps-bottom { display: grid; grid-template-columns: 0.85fr 1.3fr 1.3fr; gap: 22px; align-items: start; margin-top: 22px; }
