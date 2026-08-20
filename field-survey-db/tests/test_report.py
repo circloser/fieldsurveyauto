@@ -107,3 +107,29 @@ def test_build_report(tmp_path):
     # 요약표
     s = wb["요약(DB)"]
     assert [c.value for c in s[1]] == ["파일명", "하천명", "보 길이"]
+
+
+def test_build_report_indexed_combined(tmp_path):
+    """{항목#N} 이 있으면 종합(단일) 보고서 한 장 — 특정 순번 참조."""
+    tpl = tmp_path / "combined.xlsx"
+    wb = Workbook(); ws = wb.active
+    ws["A1"] = "종합 비교표"
+    ws["A2"] = "1번 하천"; ws["B2"] = "{하천명#1}"
+    ws["A3"] = "2번 하천"; ws["B3"] = "{하천명#2}"
+    ws["A4"] = "2번 보길이"; ws["B4"] = "{보길이#2}"
+    ws["A5"] = "기본(1번)"; ws["B5"] = "{하천명}"
+    wb.save(tpl)
+    recs = [
+        {"_파일명": "a.pdf", "하천명": "탄천", "보길이": "20"},
+        {"_파일명": "b.pdf", "하천명": "해남천", "보길이": "30"},
+    ]
+    out = tmp_path / "combined_out.xlsx"
+    build_report_workbook(str(tpl), recs, ["하천명"], str(out))
+    wb2 = load_workbook(out)
+    assert "종합보고서" in wb2.sheetnames        # 개별 시트 모드 아님
+    assert "a.pdf" not in wb2.sheetnames and "b.pdf" not in wb2.sheetnames
+    s = wb2["종합보고서"]
+    assert s["B2"].value == "탄천"               # #1
+    assert s["B3"].value == "해남천"             # #2
+    assert s["B4"].value == 30                    # #2 보길이(숫자 변환)
+    assert s["B5"].value == "탄천"               # 인덱스 없으면 1번

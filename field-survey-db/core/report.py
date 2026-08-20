@@ -76,7 +76,24 @@ def _coerce(val):
         return s
 
 
-def _fill_ws(ws, values: dict) -> None:
+def _split_token(token: str) -> tuple[str, int | None]:
+    """'항목#2' → ('항목', 2) ; '항목' → ('항목', None). N은 조사표 순번(1부터)."""
+    if "#" in token:
+        name, _, idx = token.rpartition("#")
+        idx = idx.strip()
+        if idx.isdigit():
+            return name.strip(), int(idx)
+    return token.strip(), None
+
+
+def _value_for(token: str, records: list[dict], cur_idx: int):
+    """{항목}=현재(cur_idx) 조사표, {항목#N}=N번째 조사표 값."""
+    name, idx = _split_token(token)
+    i = (idx - 1) if idx is not None else cur_idx
+    return records[i].get(name, "") if 0 <= i < len(records) else ""
+
+
+def _fill_ws(ws, records: list[dict], cur_idx: int) -> None:
     for row in ws.iter_rows():
         for c in row:
             v = c.value
@@ -84,9 +101,20 @@ def _fill_ws(ws, values: dict) -> None:
                 continue
             m = _PH.fullmatch(v.strip())
             if m:  # 셀 전체가 {필드} 하나 → 숫자면 숫자로(수식 대상)
-                c.value = _coerce(values.get(m.group(1).strip(), ""))
+                c.value = _coerce(_value_for(m.group(1).strip(), records, cur_idx))
             else:   # 문장 속 자리표시자 → 문자 치환
-                c.value = _PH.sub(lambda mm: str(values.get(mm.group(1).strip(), "")), v)
+                c.value = _PH.sub(lambda mm: str(_value_for(mm.group(1).strip(), records, cur_idx)), v)
+
+
+def _template_has_indexed(ws) -> bool:
+    """양식에 {항목#N} 형태(특정 순번 참조)가 있으면 True → 종합(단일) 보고서 모드."""
+    for row in ws.iter_rows():
+        for c in row:
+            if isinstance(c.value, str) and not c.value.startswith("="):
+                for tok in _PH.findall(c.value):
+                    if _split_token(tok)[1] is not None:
+                        return True
+    return False
 
 
 def _sheet_name(base: str, existing: set[str]) -> str:
@@ -118,17 +146,22 @@ def build_report_workbook(template_path: str, records: list[dict],
     wb = load_workbook(template_path)
     master = wb.worksheets[0]
 
-    made = 0
-    for rec in records:
-        if made >= max_reports:
-            break
-        ws = wb.copy_worksheet(master)
-        base = record_sheet_base(rec, sheet_name_field)
-        ws.title = _sheet_name(base, set(wb.sheetnames) - {ws.title})
-        _fill_ws(ws, rec)
-        made += 1
-
-    master.title = _sheet_name("＿양식원본", set(wb.sheetnames) - {master.title})
+    if _template_has_indexed(master):
+        # 종합(단일) 보고서: 양식 한 장에 특정 순번을 참조해 채운다.
+        #   {항목}=1번 조사표, {항목#N}=N번째 조사표(요약(DB)/파일 순서와 동일).
+        _fill_ws(master, records, 0)
+        master.title = _sheet_name("종합보고서", set())
+    else:
+        made = 0
+        for idx, rec in enumerate(records):
+            if made >= max_reports:
+                break
+            ws = wb.copy_worksheet(master)
+            base = record_sheet_base(rec, sheet_name_field)
+            ws.title = _sheet_name(base, set(wb.sheetnames) - {ws.title})
+            _fill_ws(ws, records, idx)
+            made += 1
+        master.title = _sheet_name("＿양식원본", set(wb.sheetnames) - {master.title})
 
     # 요약(DB) 시트를 맨 앞에
     summ = wb.create_sheet("요약(DB)", 0)

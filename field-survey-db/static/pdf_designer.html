@@ -124,13 +124,19 @@
 
         <div class="step-card">
           <h2>5. 보고서 출력 양식 <span class="pill">선택</span></h2>
-          <p class="desc">엑셀 양식(.xlsx)을 올리면 <b>미리보기·편집</b>이 뜹니다. 값 넣을 칸에 <b>{추출항목이름}</b>, 수식은 <b>=B3+B4</b>. <b>먼저 올린 뒤 위 4번 일괄 처리를 실행</b>하면 그 양식으로 출력됩니다(조사표마다 시트 1장 · 앞에 요약표).</p>
+          <p class="desc">엑셀 양식(.xlsx)을 올리면 <b>미리보기·편집</b>이 뜹니다. <b>먼저 올린 뒤 위 4번 일괄 처리를 실행</b>하면 그 양식으로 출력됩니다. 수식 <b>=B3+B4</b>는 그대로 보존.</p>
+          <p class="desc" style="background:#f1f3f5;border-radius:8px;padding:8px 10px">
+            • <b>{하천명}</b> — 조사표마다 <b>개별 시트</b> 1장씩 (각 시트에 그 조사표 값)<br>
+            • <b>{하천명#2}</b> — <b>한 시트</b>에서 <b>2번째</b> 조사표를 참조(종합·비교표) → 순번은 요약(DB)/파일 순서
+          </p>
           <input type="file" id="reportInput" accept=".xlsx" />
           <p class="muted" id="reportMsg"></p>
           <div id="reportEditor" hidden>
             <div class="rpt-toolbar">
-              <span class="muted">미리보기 — 셀 클릭해 편집 · 추출항목 삽입:</span>
+              <span class="muted">미리보기 — 셀 클릭 후 삽입:</span>
               <select id="rptFieldSel"><option value="">— 추출 항목 —</option></select>
+              <input type="number" id="rptIdxInput" min="1" placeholder="순번(선택)" style="width:96px"
+                     title="비우면 개별 시트용 {항목}, 숫자를 넣으면 그 순번 조사표를 참조하는 {항목#N} 삽입(종합보고서)" />
               <button class="mini-btn" id="rptInsertBtn">삽입</button>
             </div>
             <div class="rpt-scroll"><table class="rpt-grid" id="rptGrid"></table></div>

@@ -556,7 +556,9 @@ $("rptInsertBtn").addEventListener("click", () => {
   if (!name) { alert("삽입할 추출 항목을 선택하세요."); return; }
   const inp = REPORT.focusCell;
   if (!inp) { alert("먼저 표에서 넣을 칸을 클릭하세요."); return; }
-  inp.value = (inp.value || "") + `{${name}}`;
+  const idx = (($("rptIdxInput") || {}).value || "").trim();
+  const token = (idx && /^\d+$/.test(idx)) ? `{${name}#${idx}}` : `{${name}}`;
+  inp.value = (inp.value || "") + token;
   inp.dispatchEvent(new Event("input"));
   inp.focus();
 });
