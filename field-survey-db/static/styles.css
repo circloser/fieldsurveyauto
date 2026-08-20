@@ -23,6 +23,9 @@ body {
   color: var(--text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  /* 한글은 어절(공백) 단위로만 줄바꿈 — 글자 중간에서 끊기지 않게 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .wrap { max-width: 880px; margin: 0 auto; padding: 48px 24px 80px; }

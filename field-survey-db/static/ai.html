@@ -8,7 +8,8 @@
   :root { --ink:#191F28; --line:#e5e8eb; --muted:#8b95a1; --accent:#3182f6;
           --warn:#fff4d6; --warnb:#f2c94c; --err:#ffe3e3; --errb:#ff6b6b; --ok:#e7f5ec; }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif; color:var(--ink); background:#f7f8fa; }
+  body { margin:0; font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif; color:var(--ink); background:#f7f8fa;
+         word-break:keep-all; overflow-wrap:break-word; }
   header { background:var(--ink); color:#fff; padding:14px 22px; display:flex; align-items:center; gap:14px; }
   header h1 { font-size:18px; margin:0; }
   header a { color:#9db8ff; text-decoration:none; font-size:13px; margin-left:auto; }
