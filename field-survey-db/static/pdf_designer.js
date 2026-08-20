@@ -578,10 +578,15 @@ function renderApply(d) {
     }
   }
   html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
-  html += ` <button class="btn" id="pdfAnalyzeBtn" style="background:#fff;color:#3182f6;border:1px solid #3182f6">📊 데이터 분석(AI)</button>`;
-  html += `<div id="pdfAnalysis" style="margin-top:12px;padding:14px;background:#f1f3f5;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.6;display:none"></div>`;
+  // 빈칸·이상치 요약(#3)
   const OL = d.outliers || [];
-  if (d.outlier_count) html += `<p style="color:#e8590c;font-weight:600;margin:8px 0 4px">⚠️ 이상치 ${d.outlier_count}건 — 주황 칸을 확인하세요 (다른 파일과 비교해 튀는 값 = 오추출 의심)</p>`;
+  const totalCells = d.rows.length * d.fields.length;
+  let blanks = 0;
+  d.rows.forEach((row) => d.fields.forEach((f) => { if (!String(row[f] || "").trim()) blanks++; }));
+  html += `<p style="margin:10px 0 4px;font-size:13px">📊 <b>${d.rows.length}행 × ${d.fields.length}항목 = ${totalCells}칸</b> 중 · `
+    + `빈칸 <b style="color:#b0870b">${blanks}개</b> · 이상치 <b style="color:#e8590c">${d.outlier_count || 0}건</b>`
+    + (d.outlier_count ? ` <span class="muted">(주황 칸 확인)</span>` : ``)
+    + ` <span class="muted">— 자세한 해석은 아래 6번 ‘AI 결과 해석’</span></p>`;
   html += `<div style="overflow:auto"><table class="apply-table"><thead><tr><th>파일</th>` + d.fields.map((f) => `<th>${f}</th>`).join("") + `</tr></thead><tbody>`;
   d.rows.forEach((row, i) => {
     const ol = OL[i] || {};
@@ -593,7 +598,6 @@ function renderApply(d) {
     }).join("") + `</tr>`;
   });
   html += `</tbody></table></div>`; $("applyResult").innerHTML = html;
-  const ab = $("pdfAnalyzeBtn"); if (ab) ab.addEventListener("click", pdfAnalyze);
 }
 
 async function pdfAnalyze() {
@@ -608,6 +612,7 @@ async function pdfAnalyze() {
   } catch (e) { panel.textContent = "분석 실패: " + e; }
   finally { btn.disabled = false; btn.textContent = old; }
 }
+$("pdfAnalyzeBtn").addEventListener("click", pdfAnalyze);   // 6. AI 결과 해석(정적 버튼)
 
 function showOverlay(m) { $("overlayMsg").textContent = m || "처리 중…"; $("overlay").hidden = false; }
 function hideOverlay() { $("overlay").hidden = true; }

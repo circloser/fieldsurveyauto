@@ -108,13 +108,28 @@
         </div>
 
         <div class="step-card">
-          <h2>4. 보고서 양식 <span class="pill">선택</span></h2>
-          <p class="desc">엑셀 보고서 양식(.xlsx)을 올리면 <b>아래에서 표를 보고 편집</b>할 수 있습니다. 값 넣을 칸에 <b>{추출항목이름}</b>, 수식은 <b>=B3+B4</b> 처럼 입력. (안 올리면 요약표만)</p>
+          <h2>4. 일괄 처리</h2>
+          <p class="desc">같은 양식 파일(hwpx·pdf) 여러 개 → 추출 → 엑셀(요약표 + 보고서). 결과에 <b>빈칸·이상치 요약</b>이 함께 표시됩니다.</p>
+          <div class="sheetname-row">
+            <label for="sheetNameSel">대상지별 시트 이름:</label>
+            <select id="sheetNameSel">
+              <option value="">사용 안 함 (요약표만)</option>
+            </select>
+          </div>
+          <p class="muted" style="margin:4px 0 8px">예: ‘하천명’을 고르면 파일마다 <b>그 값(대상지 이름)으로 된 시트</b>가 생깁니다. 아래 <b>5. 보고서 출력 양식</b>을 먼저 올리면 그 양식으로, 없으면 항목·값 표로 만듭니다.</p>
+          <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
+          <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
+          <div id="applyResult"></div>
+        </div>
+
+        <div class="step-card">
+          <h2>5. 보고서 출력 양식 <span class="pill">선택</span></h2>
+          <p class="desc">엑셀 양식(.xlsx)을 올리면 <b>미리보기·편집</b>이 뜹니다. 값 넣을 칸에 <b>{추출항목이름}</b>, 수식은 <b>=B3+B4</b>. <b>먼저 올린 뒤 위 4번 일괄 처리를 실행</b>하면 그 양식으로 출력됩니다(조사표마다 시트 1장 · 앞에 요약표).</p>
           <input type="file" id="reportInput" accept=".xlsx" />
           <p class="muted" id="reportMsg"></p>
           <div id="reportEditor" hidden>
             <div class="rpt-toolbar">
-              <span class="muted">셀을 클릭해 편집 · 추출항목 삽입:</span>
+              <span class="muted">미리보기 — 셀 클릭해 편집 · 추출항목 삽입:</span>
               <select id="rptFieldSel"><option value="">— 추출 항목 —</option></select>
               <button class="mini-btn" id="rptInsertBtn">삽입</button>
             </div>
@@ -123,18 +138,10 @@
         </div>
 
         <div class="step-card">
-          <h2>5. 일괄 처리</h2>
-          <p class="desc">같은 양식 파일(hwpx·pdf) 여러 개 → 추출 → 엑셀(요약표 + 보고서).</p>
-          <div class="sheetname-row">
-            <label for="sheetNameSel">대상지별 시트 이름:</label>
-            <select id="sheetNameSel">
-              <option value="">사용 안 함 (요약표만)</option>
-            </select>
-          </div>
-          <p class="muted" style="margin:4px 0 8px">예: ‘하천명’을 고르면 파일마다 <b>그 값(대상지 이름)으로 된 시트</b>가 생깁니다. 보고서 양식(4번)이 있으면 그 양식으로, 없으면 항목·값 표로 만듭니다.</p>
-          <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
-          <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
-          <div id="applyResult"></div>
+          <h2>6. AI 결과 해석 <span class="pill">선택</span></h2>
+          <p class="desc">일괄 처리(4번) 후, 추출된 데이터 전체를 AI가 <b>요약·분포·추세·품질(빈칸·이상치)</b> 관점으로 해석합니다. (환경설정에 AI 키 필요)</p>
+          <button class="btn" id="pdfAnalyzeBtn" style="background:#fff;color:#3182f6;border:1px solid #3182f6">📊 AI로 결과 해석하기</button>
+          <div id="pdfAnalysis" style="margin-top:12px;padding:14px;background:#f1f3f5;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.6;display:none"></div>
         </div>
       </div><!-- /steps-bottom -->
     </div>
