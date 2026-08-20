@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import copy
 import shutil
 import uuid
 from datetime import datetime
@@ -14,7 +15,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app import config
 from core.analysis import analyze_records, merge_outlier_flags
-from core.bundle import extract_bundle
+from core.accumulate import AccumulateStore
+from core.bundle import _norm_title, extract_bundle, group_rows
 from core.excel.writer import write_excel
 from core.extraction.form_detector import FORM_LABELS_KO
 from core.extraction.schema.vision_schemas import vision_schema
@@ -64,6 +66,8 @@ _PDF_APPLY: dict[str, object] = {"excel_path": None}
 _REPORT_DOCS: dict[str, str] = {}   # report_id -> 원본 양식 xlsx 경로
 # AI 번들 자동추출 결과(다운로드·검수용)
 _VISION: dict[str, object] = {"excel_path": None, "rows": []}
+# 회차 누적 DB(세션을 넘어 양식별로 축적) — 디스크에 영속
+_ACCUM = AccumulateStore(config.OUTPUT_DIR / "누적DB.json")
 
 
 def _regenerate_excel() -> str:
@@ -522,29 +526,8 @@ def vision_status() -> JSONResponse:
 
 
 def _vision_groups(rows: list[dict]) -> list[dict]:
-    """서식별로 (라벨, 필드순서, 행들) 묶음 — 엑셀 시트 분리용.
-
-    스키마 있는 서식은 고정 열, 범용(미상)은 등장한 항목들의 합집합을 열로.
-    값이 하나도 없는 서식(사진 등)은 시트를 만들지 않는다.
-    """
-    groups: list[dict] = []
-    for form in dict.fromkeys(r["form"] for r in rows):  # 등장 순서 유지
-        frows = [r for r in rows if r["form"] == form]
-        schema, _ = vision_schema(form)
-        if schema is not None:
-            fields = list(schema["properties"].keys())
-        else:
-            fields = []
-            for r in frows:
-                for k in r["values"]:
-                    if k not in fields:
-                        fields.append(k)
-            if not fields:
-                continue
-        label = frows[0].get("label") or FORM_LABELS_KO.get(form, form)
-        excel_rows = [{"_파일명": r["_파일명"], **r["values"]} for r in frows]
-        groups.append({"label": label, "fields": fields, "rows": excel_rows})
-    return groups
+    """서식(양식)별 시트 묶음 — 미상 서식은 '양식제목'으로 세분류. core.bundle.group_rows 사용."""
+    return group_rows(rows)
 
 
 def _vision_regenerate_excel() -> str:
@@ -599,14 +582,17 @@ async def vision_extract_files(files: list[UploadFile]) -> JSONResponse:
             rows.append({
                 "_id": rid, "_파일명": label_file,
                 "page": pr["page"], "form": pr["form"], "label": pr["label"],
+                "form_title": pr.get("form_title", ""),
                 "confidence": pr["confidence"], "route_source": pr.get("route_source", ""),
                 "values": pr.get("values", {}), "flags": pr.get("flags", {}),
             })
             rid += 1
 
-    # 이상치(오추출 의심) 교차검사 — 같은 서식 레코드끼리 비교해 튀는 값에 경고
-    for form in {r["form"] for r in rows}:
-        grp = [r for r in rows if r["form"] == form and r["values"]]
+    # 이상치(오추출 의심) 교차검사 — 같은 '양식'(미상은 양식제목까지) 레코드끼리 비교해 튀는 값에 경고
+    def _okey(r: dict) -> tuple:
+        return (r["form"], _norm_title(r.get("form_title")))
+    for key in {_okey(r) for r in rows}:
+        grp = [r for r in rows if _okey(r) == key and r["values"]]
         if len(grp) >= 2:
             merge_outlier_flags([r["values"] for r in grp], [r["flags"] for r in grp])
 
@@ -672,6 +658,56 @@ def vision_download() -> FileResponse:
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=fname,
+    )
+
+
+def _accum_status() -> dict:
+    return {"total": _ACCUM.count(), "by_form": _ACCUM.label_counts()}
+
+
+@app.post("/api/vision/accumulate")
+def vision_accumulate() -> JSONResponse:
+    """이번 회차 추출 결과(값 있는 행)를 누적 DB에 추가(양식별). 같은 파일·페이지는 갱신."""
+    rows: list[dict] = _VISION.get("rows") or []  # type: ignore[assignment]
+    entries = [{
+        "_파일명": r.get("_파일명", ""),
+        "form": r.get("form"),
+        "form_title": r.get("form_title", ""),
+        "label": r.get("label", ""),
+        "values": r.get("values", {}),
+    } for r in rows if r.get("values")]
+    if not entries:
+        return JSONResponse({"error": "누적할 추출 결과가 없습니다. 먼저 AI 추출을 실행하세요."},
+                            status_code=400)
+    added = _ACCUM.add(entries)
+    return JSONResponse({"ok": True, "added": added, "updated": len(entries) - added,
+                         **_accum_status()})
+
+
+@app.get("/api/vision/accumulated/status")
+def vision_accumulated_status() -> JSONResponse:
+    return JSONResponse(_accum_status())
+
+
+@app.post("/api/vision/accumulated/reset")
+def vision_accumulated_reset() -> JSONResponse:
+    _ACCUM.reset()
+    return JSONResponse({"ok": True, **_accum_status()})
+
+
+@app.get("/api/vision/accumulated/download")
+def vision_accumulated_download() -> FileResponse:
+    """누적 DB 전체를 양식별 시트로 묶은 엑셀로 내려받는다."""
+    stored = _ACCUM.all()
+    if not stored:
+        return JSONResponse({"error": "누적된 데이터가 없습니다."}, status_code=404)  # type: ignore[return-value]
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out = config.OUTPUT_DIR / f"누적DB_{stamp}.xlsx"
+    write_bundle_excel(group_rows(stored), str(out))
+    return FileResponse(
+        out,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=out.name,
     )
 
 
@@ -760,32 +796,124 @@ def pdf_page_image(doc_id: str, page_no: int):
     return Response(content=png, media_type="image/png")
 
 
+def _dedup_box_fields(boxes: list[dict]) -> tuple[list[dict], list[str]]:
+    """박스 필드명을 유일화(엑셀 열 충돌 방지)하고 열 순서를 반환. 원본은 건드리지 않는다."""
+    boxes = copy.deepcopy(boxes)
+    seen: dict[str, int] = {}
+    for b in sorted(boxes, key=lambda z: z.get("order", 0)):
+        f = (b.get("field") or "항목").strip()
+        if f in seen:
+            seen[f] += 1
+            b["field"] = f"{f} ({seen[f]})"
+        else:
+            seen[f] = 1
+    return boxes, pdf_field_order(boxes)
+
+
+def _best_template(pages: list, templates: list[dict]) -> tuple[dict | None, float]:
+    """입력 페이지에 가장 잘 맞는 템플릿을 라벨 일치율로 고른다 → (템플릿, 일치율 0~1)."""
+    best, best_score = None, 0.0
+    for t in templates:
+        tpages = {int(b["page"]) for b in t["boxes"]}
+        if not tpages:
+            continue
+        matched = match_pages(t["boxes"], pages)
+        score = len(matched) / len(tpages)
+        if score > best_score:
+            best, best_score = t, score
+    return best, best_score
+
+
+def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str) -> JSONResponse:
+    """여러 양식이 섞인 파일들을 저장된 템플릿에 자동 분류 → 양식별 시트 엑셀."""
+    from core.analysis import find_outliers
+    templates: list[dict] = []
+    for name in _TEMPLATES.list_names():
+        t = _TEMPLATES.get(name)
+        if not t or not t.get("boxes"):
+            continue
+        bx, flds = _dedup_box_fields(t["boxes"])
+        templates.append({"name": t["name"], "boxes": bx, "fields": flds})
+    if not templates:
+        return JSONResponse(
+            {"error": "저장된 템플릿이 없습니다. 먼저 ‘템플릿 저장’으로 양식을 등록하세요."},
+            status_code=400)
+
+    buckets: dict[str, dict] = {}
+    failed, match_info = [], []
+    for uf in files:
+        dest = req_dir / (uf.filename or "unnamed")
+        with dest.open("wb") as f:
+            shutil.copyfileobj(uf.file, f)
+        try:
+            pdf_path = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
+            doc = read_pdf(pdf_path)
+            best, score = _best_template(doc.pages, templates)
+            if not best or score < 0.34:
+                failed.append({"name": uf.filename,
+                               "error": f"맞는 템플릿을 찾지 못했습니다(최고 일치 {score:.0%})."})
+                continue
+            maps = match_bundles(best["boxes"], doc.pages) or [match_pages(best["boxes"], doc.pages)]
+            b = buckets.setdefault(best["name"],
+                                   {"label": best["name"], "fields": best["fields"], "rows": []})
+            for bi, page_map in enumerate(maps, start=1):
+                row = apply_pixel_template(doc.pages, best["boxes"], page_map=page_map,
+                                           pdf_path=pdf_path)
+                fname = uf.filename if len(maps) == 1 else f"{uf.filename} #{bi}"
+                b["rows"].append({"_파일명": fname, **row})
+            match_info.append({"name": uf.filename, "template": best["name"],
+                               "score": round(score, 2), "bundles": len(maps)})
+        except Exception as e:  # noqa: BLE001
+            failed.append({"name": uf.filename, "error": str(e)})
+
+    groups = list(buckets.values())
+    if not groups:
+        return JSONResponse(
+            {"error": "분류된 파일이 없습니다. 저장된 템플릿과 입력 양식이 맞는지 확인하세요.",
+             "failed": failed}, status_code=400)
+    excel_path = config.OUTPUT_DIR / f"현장조사표_양식별_{stamp}.xlsx"
+    write_bundle_excel(groups, str(excel_path))
+
+    by_form, outlier_total = [], 0
+    for g in groups:
+        og = find_outliers([{f: r.get(f, "") for f in g["fields"]} for r in g["rows"]])
+        cnt = sum(len(o) for o in og)
+        outlier_total += cnt
+        by_form.append({"form": g["label"], "count": len(g["rows"]), "outliers": cnt})
+
+    _PDF_APPLY["excel_path"] = str(excel_path)
+    _PDF_APPLY["groups"] = groups
+    _PDF_APPLY["rows"] = [r for g in groups for r in g["rows"]]
+    _PDF_APPLY["fields"] = []
+    return JSONResponse({"auto_classify": True, "forms": len(groups),
+                         "ok_count": sum(len(g["rows"]) for g in groups),
+                         "by_form": by_form, "failed": failed, "match_info": match_info,
+                         "outlier_count": outlier_total, "report_used": False})
+
+
 @app.post("/api/pdf/apply")
 async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
                     report_id: str = Form(""), report_edits: str = Form(""),
-                    sheet_name_field: str = Form(""),
+                    sheet_name_field: str = Form(""), auto_classify: str = Form(""),
                     report_template: UploadFile | None = None) -> JSONResponse:
     import json as _json
+    auto = auto_classify.strip().lower() in ("1", "true", "on", "yes")
     try:
         box_list = _json.loads(boxes) if boxes else []
     except _json.JSONDecodeError:
         return JSONResponse({"error": "박스 형식 오류"}, status_code=400)
-    if not box_list:
+    if not box_list and not auto:
         return JSONResponse({"error": "추출할 박스가 없습니다."}, status_code=400)
 
-    # 중복 이름은 접미사로 유일화(엑셀 열 충돌 방지). 사용자가 이름을 안 바꾼 경우 대비.
-    _seen: dict[str, int] = {}
-    for b in sorted(box_list, key=lambda z: z.get("order", 0)):
-        f = (b.get("field") or "항목").strip()
-        if f in _seen:
-            _seen[f] += 1
-            b["field"] = f"{f} ({_seen[f]})"
-        else:
-            _seen[f] = 1
-
-    fields = pdf_field_order(box_list)
     req_dir = config.UPLOAD_DIR / ("pdfapply_" + uuid.uuid4().hex[:8])
     req_dir.mkdir(parents=True, exist_ok=True)
+    stamp0 = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if auto:
+        return _pdf_apply_auto(files, req_dir, stamp0)
+
+    # 중복 이름은 접미사로 유일화(엑셀 열 충돌 방지). 사용자가 이름을 안 바꾼 경우 대비.
+    box_list, fields = _dedup_box_fields(box_list)
     rows, failed, match_info = [], [], []
     n_tmpl_pages = len({int(b["page"]) for b in box_list})
     for uf in files:
@@ -851,6 +979,7 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
     _PDF_APPLY["excel_path"] = str(excel_path)
     _PDF_APPLY["rows"] = rows            # AI 분석용 보관
     _PDF_APPLY["fields"] = fields
+    _PDF_APPLY["groups"] = [{"label": "템플릿 추출", "fields": fields, "rows": rows}]
     return JSONResponse({"rows": rows, "fields": fields, "ok_count": len(rows),
                          "failed": failed, "match_info": match_info,
                          "report_used": report_used,
@@ -866,11 +995,13 @@ def pdf_analyze() -> JSONResponse:
     ok, msg = available()
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
-    rows = _PDF_APPLY.get("rows") or []
-    fields = _PDF_APPLY.get("fields") or []
-    if not rows:
+    groups = _PDF_APPLY.get("groups") or []
+    if not groups:
+        rows = _PDF_APPLY.get("rows") or []
+        fields = _PDF_APPLY.get("fields") or []
+        groups = [{"label": "템플릿 추출", "fields": fields, "rows": rows}] if rows else []
+    if not groups or not any(g["rows"] for g in groups):
         return JSONResponse({"error": "먼저 템플릿 추출을 실행하세요."}, status_code=400)
-    groups = [{"label": "템플릿 추출", "fields": fields, "rows": rows}]
     try:
         text = analyze_records(groups)
     except Exception as e:  # noqa: BLE001

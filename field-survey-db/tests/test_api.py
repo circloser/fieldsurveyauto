@@ -16,7 +16,7 @@ def test_health():
 def test_index_served():
     r = client.get("/")
     assert r.status_code == 200
-    assert "현장 조사표 DB화" in r.text
+    assert "오토다타" in r.text
 
 
 def test_process_and_download(request):

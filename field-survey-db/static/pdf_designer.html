@@ -117,6 +117,10 @@
             </select>
           </div>
           <p class="muted" style="margin:4px 0 8px">예: ‘하천명’을 고르면 파일마다 <b>그 값(대상지 이름)으로 된 시트</b>가 생깁니다. 아래 <b>5. 보고서 출력 양식</b>을 먼저 올리면 그 양식으로, 없으면 항목·값 표로 만듭니다.</p>
+          <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin:8px 0;padding:8px 10px;background:#f1f3f5;border-radius:8px;cursor:pointer">
+            <input type="checkbox" id="autoClassify" style="margin-top:2px">
+            <span>🗂️ <b>여러 양식 자동 분류</b> — 서로 다른 양식이 섞인 더미를 <b>저장된 템플릿들과 자동 대조</b>해 <b>양식별 시트</b>로 나눠 축적합니다. (켜면 위 박스 대신 저장된 템플릿을 사용)</span>
+          </label>
           <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
           <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
           <div id="applyResult"></div>

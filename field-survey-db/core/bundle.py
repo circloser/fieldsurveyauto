@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import re
 import time
 
 from core import vision_extract
@@ -76,6 +77,7 @@ def extract_bundle(pdf_path: str, use_vision_fallback: bool = True,
             "page": p.page_no,
             "form": form,
             "label": FORM_LABELS_KO.get(form, form),
+            "form_title": "",
             "confidence": det.confidence,
             "route_source": source,
             "generic": False,
@@ -87,12 +89,65 @@ def extract_bundle(pdf_path: str, use_vision_fallback: bool = True,
             row["values"] = vision_extract.extract_page(pdf_path, p.page_no, schema, hint, dpi=dpi)
             row["flags"] = _flags_for(form, row["values"])
         elif form == FORM_UNKNOWN and use_generic:
-            # 범용 모드: 정의 안 된 새 조사표도 자유형으로 추출
+            # 범용 모드: 정의 안 된 새 조사표도 자유형으로 추출 + 양식제목으로 세분류
             _pace()
-            row["values"] = vision_extract.extract_page_generic(pdf_path, p.page_no, dpi=dpi)
+            title, vals = vision_extract.extract_page_generic(pdf_path, p.page_no, dpi=dpi)
+            row["values"] = vals
             row["generic"] = True
-            row["label"] = "범용(미상 서식)"
+            row["form_title"] = title
+            row["label"] = title or "범용(미상 서식)"
             row["route_source"] = "generic"
             row["flags"] = _flags_for(form, row["values"])
         rows.append(row)
     return rows
+
+
+def _norm_title(s: str) -> str:
+    """양식제목 비교용 정규화 — 공백·기호 제거, 소문자화(약간의 표기 차이는 같은 양식으로 묶음)."""
+    return re.sub(r"[\s\W_]+", "", (s or ""), flags=re.UNICODE).lower()
+
+
+def group_rows(rows: list[dict]) -> list[dict]:
+    """AI 추출 행들을 '양식별'로 묶어 엑셀 시트 그룹으로 변환.
+
+    - 정의된 서식(A~E): 스키마 열 순서 고정, 라벨은 한글 서식명.
+    - 미상(범용): '양식제목'으로 세분류해 서로 다른 미상 양식도 각각 다른 시트로.
+      각 그룹의 열은 그 그룹 행들에 등장한 항목의 합집합(등장 순서 유지).
+    - 값이 하나도 없는 그룹(사진 등)은 시트를 만들지 않는다.
+
+    groups: [{"label": 시트이름, "fields": [열...], "rows": [{'_파일명':.., field:val}]}]
+    """
+    order: list = []
+    buckets: dict = {}
+    for r in rows:
+        form = r.get("form")
+        schema, _ = vision_schema(form)
+        if schema is not None:
+            key = ("known", form)
+        else:
+            key = ("generic", _norm_title(r.get("form_title")) or "기타")
+        if key not in buckets:
+            buckets[key] = []
+            order.append(key)
+        buckets[key].append(r)
+
+    groups: list[dict] = []
+    for key in order:
+        kind, ident = key
+        frows = buckets[key]
+        if kind == "known":
+            schema, _ = vision_schema(ident)
+            fields = list(schema["properties"].keys())
+            label = frows[0].get("label") or FORM_LABELS_KO.get(ident, ident)
+        else:
+            fields = []
+            for r in frows:
+                for k in r.get("values", {}):
+                    if k not in fields:
+                        fields.append(k)
+            if not fields:
+                continue
+            label = (frows[0].get("form_title") or "").strip() or "범용(미상 서식)"
+        excel_rows = [{"_파일명": r.get("_파일명", ""), **r.get("values", {})} for r in frows]
+        groups.append({"label": label, "fields": fields, "rows": excel_rows})
+    return groups

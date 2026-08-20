@@ -89,9 +89,12 @@ def build_content(png: bytes, schema_hint: str) -> list:
 # ── 범용(미상 서식) 추출 — 스키마 없이 '항목:값'을 통째로 뽑는다 ───────────────
 
 _GENERIC_SYSTEM = (
-    "당신은 어떤 현장 조사표든 디지털화하는 전문가입니다. 주어진 페이지 이미지를 사람처럼 "
-    "읽고, 사람이 '기재한' 모든 항목을 (항목 이름, 값) 쌍으로 빠짐없이 추출하세요.\n"
+    "당신은 어떤 서식·조사표·신청서든 디지털화하는 전문가입니다. 주어진 페이지 이미지를 사람처럼 "
+    "읽고, 먼저 이 문서의 '양식제목'을 정하고, 사람이 '기재한' 모든 항목을 (항목 이름, 값) 쌍으로 "
+    "빠짐없이 추출하세요.\n"
     "규칙:\n"
+    "- 양식제목=문서 상단의 표제(예: '하천 수질 현장조사표', '대출 신청서'). 표제가 없으면 "
+    "문서 성격을 요약한 짧은 이름(같은 종류 문서는 늘 같은 제목이 되도록 간결·일관되게).\n"
     "- 항목=문서의 라벨/칸 이름, 값=그 옆이나 아래에 적힌 내용.\n"
     "- 체크(√·■)로 선택된 항목은 선택지 텍스트를 값으로. 표의 각 행도 항목:값으로.\n"
     "- 설명문·안내문·사진·그림·빈 칸은 제외. 실제 기재된 데이터만.\n"
@@ -99,13 +102,14 @@ _GENERIC_SYSTEM = (
 )
 
 _GENERIC_HINT = (
-    "이 페이지에 사람이 기재한 모든 '항목'과 '값'을 찾아 나열하세요. "
-    "(예: 항목='하천명' 값='탄천', 항목='보 길이' 값='20')"
+    "이 문서의 양식제목과, 사람이 기재한 모든 '항목'과 '값'을 찾아 나열하세요. "
+    "(예: 양식제목='하천 현장조사표', 항목='하천명' 값='탄천', 항목='보 길이' 값='20')"
 )
 
 _GENERIC_SCHEMA = {
     "type": "object",
     "properties": {
+        "양식제목": {"type": "string"},
         "items": {
             "type": "array",
             "items": {
@@ -114,9 +118,9 @@ _GENERIC_SCHEMA = {
                 "required": ["항목", "값"],
                 "additionalProperties": False,
             },
-        }
+        },
     },
-    "required": ["items"],
+    "required": ["양식제목", "items"],
     "additionalProperties": False,
 }
 
@@ -138,16 +142,19 @@ def items_to_dict(items: list | None) -> dict:
     return out
 
 
-def extract_page_generic(pdf_path: str, page_no: int, dpi: int = 170) -> dict:
-    """미상 서식 페이지를 스키마 없이 Vision으로 추출 → {항목: 값}. 프록시 미설정 시 RuntimeError."""
+def extract_page_generic(pdf_path: str, page_no: int, dpi: int = 170) -> tuple[str, dict]:
+    """미상 서식 페이지를 스키마 없이 Vision으로 추출 → (양식제목, {항목: 값}).
+
+    양식제목은 미상 서식을 종류별로 세분류(양식별 시트)하는 데 쓰인다. 프록시 미설정 시 RuntimeError.
+    """
     ok, msg = available()
     if not ok:
         raise RuntimeError(msg)
     png = render_page_png(pdf_path, page_no, dpi=dpi)
     if config.AI_PROVIDER in ("openai", "gemini"):
         data = ai_providers.get(config.AI_PROVIDER).vision_json(
-            png, _GENERIC_SCHEMA, _GENERIC_HINT, _GENERIC_SYSTEM)
-        return items_to_dict((data or {}).get("items"))
+            png, _GENERIC_SCHEMA, _GENERIC_HINT, _GENERIC_SYSTEM) or {}
+        return (str(data.get("양식제목") or "").strip(), items_to_dict(data.get("items")))
     resp = _create_with_retry(
         _client(),
         model=config.VISION_MODEL,
@@ -160,8 +167,8 @@ def extract_page_generic(pdf_path: str, page_no: int, dpi: int = 170) -> dict:
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        return {}
-    return items_to_dict(data.get("items"))
+        return ("", {})
+    return (str(data.get("양식제목") or "").strip(), items_to_dict(data.get("items")))
 
 
 def analyze_text(prompt: str, max_tokens: int = 1500) -> str:

@@ -82,6 +82,16 @@
          border-radius:10px; white-space:pre-wrap; font-size:13px; line-height:1.6;"></div>
     <div id="pages" style="margin-top:14px"></div>
   </div>
+
+  <div class="card" id="accumCard">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <h2 style="margin:0; font-size:15px">🗄️ 누적 DB <span class="muted" style="font-weight:400">— 여러 회차를 양식별로 계속 축적</span></h2>
+      <button id="accumAdd" class="ghost" style="margin-left:auto" disabled>➕ 이번 결과 누적 추가</button>
+      <button id="accumDl" class="ghost">⬇️ 누적 DB 다운로드</button>
+      <button id="accumReset" class="ghost" style="color:#c92a2a;border-color:#ffc9c9">🗑 초기화</button>
+    </div>
+    <p class="muted" id="accumStatus" style="margin:10px 0 0">누적 상태 확인 중…</p>
+  </div>
 </div>
 
 <script>
@@ -143,6 +153,21 @@ function render(data) {
   $('#pages').querySelectorAll('input[data-field]').forEach(inp => {
     inp.addEventListener('change', onCorrect);
   });
+  $('#accumAdd').disabled = !(data.stats && data.stats.extracted);
+}
+
+function renderAccum(d) {
+  const el = $('#accumStatus');
+  const total = d.total || 0;
+  const parts = Object.entries(d.by_form || {}).map(([k, v]) => `${k} ${v}행`);
+  el.innerHTML = total
+    ? `총 <b>${total}</b>행 누적` + (parts.length ? ' · ' + parts.join(' · ') : '')
+    : '아직 누적된 데이터가 없습니다. 추출 후 <b>이번 결과 누적 추가</b>를 누르세요.';
+}
+
+async function refreshAccum() {
+  try { renderAccum(await (await fetch('/api/vision/accumulated/status')).json()); }
+  catch (e) { /* 무시 */ }
 }
 
 async function onCorrect(e) {
@@ -195,7 +220,25 @@ $('#analyze').addEventListener('click', async () => {
   }
 });
 
+$('#accumAdd').addEventListener('click', async () => {
+  const btn = $('#accumAdd'); btn.disabled = true;
+  try {
+    const d = await (await fetch('/api/vision/accumulate', { method: 'POST' })).json();
+    if (d.error) { alert('오류: ' + d.error); return; }
+    renderAccum(d);
+    alert(`누적 완료 — 새 ${d.added}행 추가` + (d.updated ? `, ${d.updated}행 갱신` : ''));
+  } finally { btn.disabled = false; }
+});
+
+$('#accumDl').addEventListener('click', () => { location.href = '/api/vision/accumulated/download'; });
+
+$('#accumReset').addEventListener('click', async () => {
+  if (!confirm('누적 DB를 모두 비웁니다. 계속할까요?')) return;
+  renderAccum(await (await fetch('/api/vision/accumulated/reset', { method: 'POST' })).json());
+});
+
 checkStatus();
+refreshAccum();
 </script>
 </body>
 </html>

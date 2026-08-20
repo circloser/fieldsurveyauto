@@ -473,11 +473,13 @@ async function deleteTemplate(name) {
 $("applyBtn").addEventListener("click", async () => {
   const files = $("applyInput").files;
   if (!files.length) { alert("처리할 파일을 선택하세요."); return; }
+  const auto = $("autoClassify") && $("autoClassify").checked;
   reindex();
-  showOverlay("추출하는 중… (파일마다 PDF 변환)");
+  showOverlay(auto ? "양식 자동 분류 + 추출하는 중…" : "추출하는 중… (파일마다 PDF 변환)");
   const fd = new FormData(); fd.append("boxes", JSON.stringify(BOXES));
   for (const f of files) fd.append("files", f);
   fd.append("sheet_name_field", $("sheetNameSel").value || "");
+  if (auto) fd.append("auto_classify", "1");
   if (REPORT.report_id) {
     fd.append("report_id", REPORT.report_id);
     fd.append("report_edits", JSON.stringify(REPORT.edits));
@@ -563,7 +565,29 @@ $("rptInsertBtn").addEventListener("click", () => {
   inp.focus();
 });
 
+function renderApplyAuto(d) {
+  let html = `<p class="muted">✅ ${d.ok_count}행 처리 · <b>${d.forms}개 양식</b>으로 분류`
+    + (d.failed && d.failed.length ? ` · ⚠️ ${d.failed.length}개 미분류/실패` : "") + `</p>`;
+  html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드 (양식별 시트)</button>`;
+  html += `<p style="margin:10px 0 4px;font-size:13px">📊 이상치 <b style="color:#e8590c">${d.outlier_count || 0}건</b>`
+    + ` <span class="muted">— 자세한 해석은 아래 6번 ‘AI 결과 해석’</span></p>`;
+  html += `<table class="apply-table"><thead><tr><th>양식(시트)</th><th>행 수</th><th>이상치</th></tr></thead><tbody>`;
+  (d.by_form || []).forEach((g) => {
+    html += `<tr><td>${g.form}</td><td>${g.count}</td><td>${g.outliers ? `<b style="color:#e8590c">${g.outliers}</b>` : 0}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+  if (d.match_info && d.match_info.length) {
+    html += `<p class="muted" style="margin-top:8px">🔎 분류 결과: `
+      + d.match_info.map((m) => `${m.name} → <b>${m.template}</b>(${Math.round((m.score || 0) * 100)}%)`).join(", ") + `</p>`;
+  }
+  if (d.failed && d.failed.length) {
+    html += `<p class="muted">⚠️ 미분류/실패: ` + d.failed.map((f) => `${f.name} (${f.error})`).join(", ") + `</p>`;
+  }
+  $("applyResult").innerHTML = html;
+}
+
 function renderApply(d) {
+  if (d.auto_classify) return renderApplyAuto(d);
   let html = `<p class="muted">✅ ${d.ok_count}개 처리` + (d.failed.length ? ` · ⚠️ ${d.failed.length}개 실패` : "") + `</p>`;
   if (d.report_used) html += `<p class="muted">📋 보고서 양식 반영됨 (요약표 + 파일별 보고서 시트)</p>`;
   if (d.match_info && d.match_info.length) {
