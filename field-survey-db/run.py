@@ -57,7 +57,7 @@ def _env_report() -> None:
 def main() -> None:
     port = find_free_port(DEFAULT_PORT)
     print("=" * 52)
-    print("  현장 조사표 DB화 - 로컬 서버 시작")
+    print("  오토다타 (AutoData) - 로컬 서버 시작")
     print(f"  주소: http://127.0.0.1:{port}")
     print("  종료하려면 이 창에서 Ctrl+C 를 누르세요.")
     _env_report()

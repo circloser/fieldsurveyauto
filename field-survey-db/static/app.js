@@ -1,4 +1,4 @@
-// 현장 조사표 DB화 - 프론트 로직
+// 오토다타 (AutoData) - 프론트 로직
 const $ = (id) => document.getElementById(id);
 let selectedFiles = [];
 
