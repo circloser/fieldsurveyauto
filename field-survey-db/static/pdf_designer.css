@@ -84,6 +84,10 @@
 }
 /* 선택된 박스는 항상 최상단(크기조절 점이 다른 박스에 가려지지 않게) */
 .pbox.sel { border-color: #1b64da; background: rgba(27,100,218,.20); z-index: 100; }
+/* 제목(위계) 박스 — 보라색으로 구분 */
+.pbox.title-mode { border-color: #8b5cf6; background: rgba(139,92,246,.12); }
+.pbox.title-mode .pbox-tag { background: #8b5cf6; }
+.pbox.title-mode.sel { border-color: #6d28d9; background: rgba(109,40,217,.20); }
 .pbox-resize {
   position: absolute; right: -7px; bottom: -7px; width: 13px; height: 13px;
   background: #1b64da; border: 2px solid #fff; border-radius: 2px;

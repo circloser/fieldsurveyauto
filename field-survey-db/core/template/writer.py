@@ -45,10 +45,24 @@ def write_bundle_excel(groups: list[dict], out_path: str) -> str:
     return out_path
 
 
+def _style_header(ws, ncols: int) -> None:
+    for col in range(1, ncols + 1):
+        c = ws.cell(row=1, column=col)
+        c.fill = _HEADER_FILL
+        c.font = _HEADER_FONT
+        c.alignment = _CENTER
+    ws.freeze_panes = "A2"
+
+
 def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
                          sheet_name_field: str | None = None,
+                         group_field: str | None = None,
                          max_sheets: int = 300) -> str:
-    """rows: [{'_파일명':..., field: value, ...}], fields: 박스 순서."""
+    """rows: [{'_파일명':..., field: value, ...}], fields: 박스 순서.
+
+    group_field: 그 필드 값(예: 제목)이 같은 행끼리 묶어 값 이름의 시트로 분류.
+    sheet_name_field: 행(대상지)마다 개별 시트(항목|값). 둘은 배타적으로 쓰인다.
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = "추출결과"
@@ -66,6 +80,21 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
 
     for i, h in enumerate(headers, start=1):
         ws.column_dimensions[get_column_letter(i)].width = max(10, min(30, len(str(h)) * 2 + 4))
+
+    # 제목(양식)별 분류 시트 — 같은 값의 행들을 묶어 그 값 이름의 시트로
+    if group_field:
+        groups: dict[str, list[dict]] = {}
+        for row in rows:
+            key = str(row.get(group_field, "") or "").strip() or "(제목없음)"
+            groups.setdefault(key, []).append(row)
+        for gname, grows in list(groups.items())[:max_sheets]:
+            s = wb.create_sheet(_sheet_name(gname, set(wb.sheetnames)))
+            s.append(headers)
+            _style_header(s, len(headers))
+            for row in grows:
+                s.append([row.get("_파일명", "")] + [row.get(f, "") for f in fields])
+            for i, h in enumerate(headers, start=1):
+                s.column_dimensions[get_column_letter(i)].width = max(10, min(30, len(str(h)) * 2 + 4))
 
     # 대상지별 개별 시트(항목|값 세로표) — 시트 이름 = 선택한 추출값
     if sheet_name_field:

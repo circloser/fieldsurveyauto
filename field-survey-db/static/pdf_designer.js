@@ -129,12 +129,12 @@ function renderPage() {
     if (box.page !== p.page_no) return;
     const idx = BOXES.indexOf(box);
     const d = document.createElement("div");
-    d.className = "pbox" + (idx === selected ? " sel" : "");
+    d.className = "pbox" + (idx === selected ? " sel" : "") + (box.mode === "title" ? " title-mode" : "");
     d.style.left = (box.x0 * sc) + "px";
     d.style.top = (box.y0 * sc) + "px";
     d.style.width = ((box.x1 - box.x0) * sc) + "px";
     d.style.height = ((box.y1 - box.y0) * sc) + "px";
-    const mark = box.mode === "bold" ? "𝐁 " : box.mode === "check" ? "☑ " : "";
+    const mark = box.mode === "bold" ? "𝐁 " : box.mode === "check" ? "☑ " : box.mode === "title" ? "📑 " : "";
     d.innerHTML = `<span class="pbox-tag">${mark}${box.field}<span class="pbox-x">✕</span></span>` +
                   `<span class="pbox-resize" title="크기 조절"></span>`;
     d.querySelector(".pbox-x").addEventListener("click", (e) => { e.stopPropagation(); deleteBox(idx); });
@@ -237,7 +237,7 @@ function sortBoxesByPosition() {
 }
 
 // ---------- 박스 목록 ----------
-const MODES = [["text", "일반"], ["bold", "굵게"], ["check", "체크"]];
+const MODES = [["text", "일반"], ["bold", "굵게"], ["check", "체크"], ["title", "제목"]];
 const REL = { right: "오른쪽", below: "아래", self: "그 칸" };
 function anchorChip(box) {
   if (!box.anchor || !box.anchor.label) return "";
@@ -549,8 +549,11 @@ function fillFieldSelect() {
   // 대상지별 시트 이름 선택(일괄 처리)도 같은 항목으로 채움 — 선택 유지
   const ss = $("sheetNameSel");
   const keep = ss.value;
-  ss.innerHTML = `<option value="">사용 안 함 (요약표만)</option>` + opts;
-  if (names.includes(keep)) ss.value = keep;
+  const hasTitle = BOXES.some((b) => b.mode === "title");
+  ss.innerHTML = `<option value="">사용 안 함 (요약표만)</option>` +
+    (hasTitle ? `<option value="__group_title__">📑 제목별 분류 — 같은 양식끼리 한 시트</option>` : "") +
+    opts;
+  if (keep === "__group_title__" ? hasTitle : names.includes(keep)) ss.value = keep;
 }
 
 $("rptInsertBtn").addEventListener("click", () => {

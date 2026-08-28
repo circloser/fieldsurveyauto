@@ -288,6 +288,52 @@ def suggest_pixel_boxes(page: PdfPage) -> list[dict]:
     return boxes
 
 
+def detect_title(pdf_path: str, page_no: int) -> dict | None:
+    """페이지 상단의 '큰 글씨'(제목)를 찾는다 → {text, x0,y0,x1,y1} 또는 None.
+
+    기준: 글꼴 크기가 본문 중앙값보다 확실히 크고(≥1.25배), 페이지 위쪽 30% 안.
+    같은 줄의 큰 글씨 span 들을 이어붙여 한 줄 제목으로 만든다.
+    """
+    import statistics
+
+    import fitz
+
+    doc = fitz.open(pdf_path)
+    try:
+        page = doc[page_no]
+        h = page.rect.height
+        spans = []
+        for b in page.get_text("dict").get("blocks", []):
+            for l in b.get("lines", []):
+                for s in l.get("spans", []):
+                    t = (s.get("text") or "").strip()
+                    if t:
+                        spans.append((s["bbox"], float(s.get("size", 0)), t))
+    finally:
+        doc.close()
+    if len(spans) < 3:
+        return None
+    med = statistics.median(sz for _, sz, _ in spans)
+    big = [s for s in spans if s[1] >= max(med * 1.25, med + 2) and s[0][1] < h * 0.30]
+    if not big:
+        return None
+    # 줄 단위로 묶어 가장 큰(동률이면 가장 위) 줄을 제목으로
+    lines: dict[int, list] = {}
+    for s in big:
+        lines.setdefault(round(s[0][1] / 6), []).append(s)
+    best = max(lines.values(), key=lambda row: (max(x[1] for x in row), -min(x[0][1] for x in row)))
+    best.sort(key=lambda x: x[0][0])
+    text = normalize(" ".join(x[2] for x in best))
+    if len(text) < 2:
+        return None
+    x0 = min(x[0][0] for x in best) - 2
+    y0 = min(x[0][1] for x in best) - 2
+    x1 = max(x[0][2] for x in best) + 2
+    y1 = max(x[0][3] for x in best) + 2
+    return {"text": text, "x0": round(x0, 1), "y0": round(y0, 1),
+            "x1": round(x1, 1), "y1": round(y1, 1)}
+
+
 # ---------- 픽셀박스 추출 ----------
 
 def _cell_anchor_value(cells: list[Cell], box: dict) -> str | None:

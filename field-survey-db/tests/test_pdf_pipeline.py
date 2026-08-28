@@ -123,6 +123,41 @@ def test_organic_extraction_survives_row_insert(tmp_path):
     assert naive.get("하천명") != "가곡천"
 
 
+def test_detect_title(request):
+    """상단 큰 글씨(제목)를 위계 다른 항목으로 감지."""
+    fx = request.path.parent / "fixtures" / "sample.pdf"
+    if not fx.exists():
+        pytest.skip("PDF 샘플 없음")
+    from core.pdf_pipeline import detect_title
+    t0 = detect_title(str(fx), 0)
+    assert t0 and "조사표" in t0["text"]        # 실제 서식 제목
+    assert t0["y0"] < 200                        # 페이지 상단
+    t2 = detect_title(str(fx), 2)
+    assert t2 and t2["text"] != t0["text"]       # 서식이 다르면 제목도 다름
+
+
+def test_group_by_title_sheets(tmp_path):
+    """제목별 분류 — 같은 제목(양식) 행끼리 그 이름의 시트로 묶인다."""
+    from openpyxl import load_workbook
+    from core.template.writer import write_template_excel
+    rows = [
+        {"_파일명": "a.pdf", "제목": "인공구조물 조사표", "하천명": "해남천"},
+        {"_파일명": "b.pdf", "제목": "어도 조사표", "하천명": "가곡천"},
+        {"_파일명": "c.pdf", "제목": "인공구조물 조사표", "하천명": "삼척천"},
+        {"_파일명": "d.pdf", "제목": "", "하천명": "무제천"},
+    ]
+    out = tmp_path / "grouped.xlsx"
+    write_template_excel(rows, ["제목", "하천명"], str(out), group_field="제목")
+    wb = load_workbook(out)
+    assert wb.sheetnames[0] == "추출결과"                    # 전체 요약 유지
+    assert "인공구조물 조사표" in wb.sheetnames
+    assert "어도 조사표" in wb.sheetnames
+    assert "(제목없음)" in wb.sheetnames                     # 빈 제목 폴백
+    g = wb["인공구조물 조사표"]
+    names = [g.cell(row=r, column=1).value for r in (2, 3)]
+    assert names == ["a.pdf", "c.pdf"]                       # 같은 양식 2행 묶임
+
+
 def test_multi_bundle_one_row_each(request):
     """한 파일에 같은 조사표가 2묶음(9쪽×2=18쪽) → 묶음마다 페이지 매핑 1개씩."""
     import fitz

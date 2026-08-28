@@ -373,8 +373,17 @@ async def pdf_load(file: UploadFile) -> JSONResponse:
 
 
 def _suggest_all(doc, pdf_path: str) -> list[dict]:
+    from core.pdf_pipeline import detect_title
     boxes: list[dict] = []
     for page in doc.pages:
+        # 페이지 상단 큰 글씨 = 제목(위계 다름) → '제목' 모드 박스로 제안
+        t = detect_title(pdf_path, page.page_no)
+        if t:
+            boxes.append({
+                "field": "제목", "page": page.page_no, "mode": "title",
+                "x0": t["x0"], "y0": t["y0"], "x1": t["x1"], "y1": t["y1"],
+                "use_anchor": False, "suggested": True, "anchor": None,
+            })
         # 표 칸 전체에 박스 생성(최대) → 사용자가 삭제. 칸 없으면(스캔) 단어 방식.
         cell_boxes = suggest_cells_maximal(pdf_path, page.page_no)
         boxes.extend(cell_boxes if cell_boxes else suggest_pixel_boxes(page))
@@ -943,6 +952,17 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_used = False
 
+    # '제목별 분류' — 제목(위계) 박스의 값으로 같은 양식끼리 시트를 묶는다
+    group_field = None
+    if sheet_name_field == "__group_title__":
+        title_box = next((b for b in sorted(box_list, key=lambda z: z.get("order", 0))
+                          if b.get("mode") == "title"), None)
+        if title_box is None:
+            return JSONResponse({"error": "제목 모드 박스가 없습니다. 박스 하나를 '제목'으로 지정하세요."},
+                                status_code=400)
+        group_field = title_box["field"]
+        sheet_name_field = group_field  # 보고서 양식 경로에선 제목을 시트 이름으로 사용
+
     # 편집된 양식(report_id) 우선, 없으면 직접 업로드한 양식(backward compat)
     tpl_path = None
     if report_id and report_id in _REPORT_DOCS:
@@ -971,7 +991,8 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
     else:
         excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
         write_template_excel(rows, fields, str(excel_path),
-                             sheet_name_field=sheet_name_field or None)
+                             sheet_name_field=(None if group_field else (sheet_name_field or None)),
+                             group_field=group_field)
     # 이상치(오추출 의심) 리포팅 — 여러 파일(행) 교차비교로 튀는 값 탐지
     from core.analysis import find_outliers
     outliers = find_outliers([{f: r.get(f, "") for f in fields} for r in rows])
