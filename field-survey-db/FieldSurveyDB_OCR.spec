@@ -28,6 +28,8 @@ hiddenimports += collect_submodules("uvicorn")
 hiddenimports += [
     "win32com", "win32com.client", "win32timezone",
     "pythoncom", "pywintypes", "win32api", "win32con",
+    "win32crypt",   # DPAPI 키 암호화(settings_store, 지연 임포트)
+    "httpx",        # 멀티 AI 제공자(ai_providers) REST 호출
 ]
 
 # EasyOCR 한국어 모델 동봉(~/.EasyOCR/model) → 오프라인 OCR
