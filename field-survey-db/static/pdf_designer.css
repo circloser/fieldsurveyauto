@@ -52,6 +52,14 @@
 .tp-add { border-style: dashed; color: var(--accent); background: #f5f9ff; }
 .tp-add:hover { background: #eaf3ff; }
 
+/* 보고서 AI 초안 */
+.rpt-draft-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
+.draft-dl {
+  font-size: 13px; font-weight: 700; color: var(--accent); text-decoration: none;
+  padding: 5px 10px; border: 1px solid #d6e6ff; border-radius: 8px; background: #f0f6ff;
+}
+.draft-dl:hover { background: #e4efff; }
+
 /* 일괄 처리 — 대상지별 시트 이름 선택 */
 .sheetname-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
 .sheetname-row label { font-size: 13px; font-weight: 600; color: var(--text-sub); flex: none; }

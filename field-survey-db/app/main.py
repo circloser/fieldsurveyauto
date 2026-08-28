@@ -1030,6 +1030,71 @@ def pdf_analyze() -> JSONResponse:
     return JSONResponse({"analysis": text})
 
 
+@app.post("/api/report/ai_draft")
+def report_ai_draft(payload: dict = Body(...)) -> JSONResponse:
+    """AI 보고서 양식 초안 — 추출 항목·샘플값·제목 위계로 초안 xlsx 생성.
+
+    생성 즉시 편집기(report_id)로 장착되고, 다운로드해 엑셀에서 편집 후
+    다시 업로드하는 왕복 흐름을 지원한다.
+    """
+    entry = _PDF_DOCS.get((payload.get("doc_id") or "").strip())
+    box_list = payload.get("boxes") or []
+    if not box_list:
+        return JSONResponse({"error": "추출 항목(박스)이 없습니다."}, status_code=400)
+    from core.llm_understand import available as _ai_ok
+    ok, msg = _ai_ok()
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=400)
+
+    # 필드 정리(중복 유일화, 순서 유지) + 제목 위계
+    _seen: dict[str, int] = {}
+    for b in sorted(box_list, key=lambda z: z.get("order", 0)):
+        f = (b.get("field") or "항목").strip()
+        if f in _seen:
+            _seen[f] += 1
+            b["field"] = f"{f} ({_seen[f]})"
+        else:
+            _seen[f] = 1
+    fields = pdf_field_order(box_list)
+    title_fields = [b["field"] for b in sorted(box_list, key=lambda z: z.get("order", 0))
+                    if b.get("mode") == "title"]
+    # 샘플값: 현재 불러온 기준 양식에서 1건 추출(없으면 빈 샘플)
+    sample: dict = {}
+    if entry:
+        try:
+            sample = apply_pixel_template(entry["doc"].pages, box_list,
+                                          pdf_path=entry["pdf_path"])
+        except Exception:  # noqa: BLE001
+            sample = {}
+
+    rid = uuid.uuid4().hex[:10]
+    path = config.REPORT_CACHE_DIR / f"{rid}.xlsx"
+    try:
+        from core.report_draft import make_draft
+        make_draft(fields, sample, title_fields, str(path))
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"초안 생성 실패: {e}"}, status_code=502)
+    _REPORT_DOCS[rid] = str(path)
+    from core.report import list_placeholders, read_grid
+    grid = read_grid(str(path))
+    grid["report_id"] = rid
+    grid["placeholders"] = list_placeholders(str(path))
+    grid["filename"] = "AI초안_보고서양식.xlsx"
+    grid["download_url"] = f"/api/report/draft_download/{rid}"
+    return JSONResponse(grid)
+
+
+@app.get("/api/report/draft_download/{rid}")
+def report_draft_download(rid: str):
+    path = _REPORT_DOCS.get(rid)
+    if not path:
+        return JSONResponse({"error": "초안을 찾을 수 없습니다."}, status_code=404)
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="AI초안_보고서양식.xlsx")
+
+
 @app.post("/api/report/load")
 async def report_load(file: UploadFile) -> JSONResponse:
     """보고서 엑셀 양식 업로드 → 격자 데이터 반환(화면 편집용). 원본은 서버 보관."""

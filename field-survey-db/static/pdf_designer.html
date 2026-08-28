@@ -133,6 +133,10 @@
             • <b>{하천명}</b> — 조사표마다 <b>개별 시트</b> 1장씩 (각 시트에 그 조사표 값)<br>
             • <b>{하천명#2}</b> — <b>한 시트</b>에서 <b>2번째</b> 조사표를 참조(종합·비교표) → 순번은 요약(DB)/파일 순서
           </p>
+          <div class="rpt-draft-row">
+            <button class="mini-btn" id="aiDraftBtn" title="추출 항목을 보고 AI가 보고서 양식 초안(xlsx)을 만들어 줍니다. 다운로드해 엑셀에서 편집한 뒤 다시 올릴 수 있습니다.">🤖 AI 초안 만들기</button>
+            <a id="aiDraftDl" class="draft-dl" hidden>📥 초안 다운로드</a>
+          </div>
           <input type="file" id="reportInput" accept=".xlsx" />
           <p class="muted" id="reportMsg"></p>
           <div id="reportEditor" hidden>

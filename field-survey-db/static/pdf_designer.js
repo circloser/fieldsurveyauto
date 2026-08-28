@@ -494,6 +494,15 @@ $("applyBtn").addEventListener("click", async () => {
 // ---------- 보고서 양식 편집기 ----------
 let REPORT = { report_id: null, cells: [], nrows: 0, ncols: 0, edits: {}, focusCell: null };
 
+function mountReport(d) {
+  REPORT = { report_id: d.report_id, cells: d.cells, nrows: d.nrows, ncols: d.ncols, edits: {}, focusCell: null };
+  $("reportMsg").textContent = `📋 '${d.filename}' — ${d.nrows}행 × ${d.ncols}열` +
+    (d.placeholders && d.placeholders.length ? ` · 자리표시자: ${d.placeholders.slice(0, 12).join(", ")}${d.placeholders.length > 12 ? " …" : ""}` : "");
+  $("reportEditor").hidden = false;
+  fillFieldSelect();
+  renderReportGrid();
+}
+
 $("reportInput").addEventListener("change", async () => {
   const f = $("reportInput").files[0];
   if (!f) return;
@@ -502,13 +511,29 @@ $("reportInput").addEventListener("change", async () => {
   try {
     const d = await (await fetch("/api/report/load", { method: "POST", body: fd })).json();
     if (d.error) throw new Error(d.error);
-    REPORT = { report_id: d.report_id, cells: d.cells, nrows: d.nrows, ncols: d.ncols, edits: {}, focusCell: null };
-    $("reportMsg").textContent = `📋 '${d.filename}' — ${d.nrows}행 × ${d.ncols}열` +
-      (d.placeholders && d.placeholders.length ? ` · 자리표시자: ${d.placeholders.join(", ")}` : "");
-    $("reportEditor").hidden = false;
-    fillFieldSelect();
-    renderReportGrid();
+    $("aiDraftDl").hidden = true;   // 직접 올린 양식으로 교체됨
+    mountReport(d);
   } catch (e) { alert("양식 불러오기 실패: " + e.message); }
+  finally { hideOverlay(); }
+});
+
+// AI 보고서 양식 초안: 만들기 → 편집기 장착 + 다운로드 링크 → (엑셀 편집 후 재업로드)
+$("aiDraftBtn").addEventListener("click", async () => {
+  if (!BOXES.length) { alert("추출 항목이 없습니다. 양식이나 템플릿을 먼저 불러오세요."); return; }
+  showOverlay("🤖 AI가 보고서 양식 초안을 설계하는 중…");
+  try {
+    const r = await fetch("/api/report/ai_draft", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc_id: DOC_ID, boxes: BOXES }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    mountReport(d);
+    const dl = $("aiDraftDl");
+    dl.href = d.download_url; dl.hidden = false;
+    $("reportMsg").textContent = `🤖 AI 초안 장착됨 — 아래 표에서 바로 고치거나, ` +
+      `초안을 다운로드해 엑셀에서 편집한 뒤 다시 올리세요. (${d.nrows}행 × ${d.ncols}열)`;
+  } catch (e) { alert("AI 초안 생성 실패:\n" + e.message); }
   finally { hideOverlay(); }
 });
 
