@@ -23,7 +23,9 @@ dz.addEventListener("drop", (e) => { e.preventDefault(); dz.classList.remove("dr
 fi.addEventListener("change", () => { if (fi.files[0]) loadForm(fi.files[0]); });
 
 async function loadForm(file) {
-  showOverlay("양식을 PDF로 변환·분석하는 중… (첫 파일은 다소 걸립니다)");
+  showOverlay(/\.hwpx?$/i.test(file.name || "")
+    ? "한글 양식을 PDF로 변환·분석하는 중… (첫 파일은 다소 걸립니다)"
+    : "양식을 분석하는 중…");
   const fd = new FormData(); fd.append("file", file);
   // 템플릿 모드에서 양식을 올리면: 자동제안 대신 불러온 템플릿 박스를 유지(편집 이어가기)
   const keepBoxes = (TPL_MODE && BOXES.length) ? BOXES : null;
@@ -95,7 +97,9 @@ async function deletePage(pno) {
 }
 
 async function addPagesFile(file) {
-  showOverlay("페이지 추가 중… (hwpx는 PDF 변환에 시간이 걸립니다)");
+  showOverlay(/\.hwpx?$/i.test(file.name || "")
+    ? "페이지 추가 중… (한글 파일은 PDF 변환에 시간이 걸립니다)"
+    : "페이지 추가 중…");
   const fd = new FormData(); fd.append("file", file); fd.append("doc_id", DOC_ID);
   try {
     const d = await (await fetch("/api/pdf/pages/add", { method: "POST", body: fd })).json();
@@ -474,7 +478,13 @@ async function runApply(files, opts) {
   if (!files || !files.length) { alert("처리할 파일을 선택하세요."); return; }
   const auto = $("autoClassify") && $("autoClassify").checked;
   reindex();
-  showOverlay(auto ? "양식 자동 분류 + 추출하는 중…" : "추출하는 중… (파일마다 PDF 변환)");
+  // 실제 하는 일만 정확히 안내: PDF는 변환 없이 바로 읽고, 한글 파일만 변환을 거친다
+  const hasHwp = [...files].some((f) => /\.hwpx?$/i.test(f.name || ""));
+  showOverlay(auto
+    ? "양식 자동 분류 + 추출하는 중…"
+    : hasHwp
+      ? "추출하는 중… (한글 파일은 PDF로 변환 후 처리 — 시간이 걸릴 수 있어요)"
+      : "추출하는 중…");
   const fd = new FormData(); fd.append("boxes", JSON.stringify(BOXES));
   for (const f of files) fd.append("files", f);
   fd.append("sheet_name_field", $("sheetNameSel").value || "");
