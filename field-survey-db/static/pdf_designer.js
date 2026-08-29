@@ -470,9 +470,8 @@ async function deleteTemplate(name) {
   renderTplList(d.templates || []);
 }
 
-$("applyBtn").addEventListener("click", async () => {
-  const files = $("applyInput").files;
-  if (!files.length) { alert("처리할 파일을 선택하세요."); return; }
+async function runApply(files, opts) {
+  if (!files || !files.length) { alert("처리할 파일을 선택하세요."); return; }
   const auto = $("autoClassify") && $("autoClassify").checked;
   reindex();
   showOverlay(auto ? "양식 자동 분류 + 추출하는 중…" : "추출하는 중… (파일마다 PDF 변환)");
@@ -488,8 +487,27 @@ $("applyBtn").addEventListener("click", async () => {
     const d = await (await fetch("/api/pdf/apply", { method: "POST", body: fd })).json();
     if (d.error) throw new Error(d.error);
     renderApply(d);
+    // 5번(보고서)에서 실행했을 때도 결과가 바로 보이도록 스크롤
+    if (opts && opts.scrollToResult) {
+      const el = $("applyResult");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   } catch (e) { alert("추출 실패: " + e.message); }
   finally { hideOverlay(); }
+}
+
+$("applyBtn").addEventListener("click", () => runApply($("applyInput").files));
+
+// 5번(보고서 양식)에서 바로 일괄 처리 — 4번에 파일이 있으면 그대로, 없으면 즉시 선택창
+$("applyBtn2").addEventListener("click", () => {
+  const picked = $("applyInput").files;
+  if (picked && picked.length) { runApply(picked, { scrollToResult: true }); return; }
+  $("applyInput2").click();
+});
+$("applyInput2").addEventListener("change", () => {
+  const fs = $("applyInput2").files;
+  if (fs && fs.length) runApply(fs, { scrollToResult: true });
+  $("applyInput2").value = "";
 });
 // ---------- 보고서 양식 편집기 ----------
 let REPORT = { report_id: null, cells: [], nrows: 0, ncols: 0, edits: {}, focusCell: null };
@@ -499,6 +517,7 @@ function mountReport(d) {
   $("reportMsg").textContent = `📋 '${d.filename}' — ${d.nrows}행 × ${d.ncols}열` +
     (d.placeholders && d.placeholders.length ? ` · 자리표시자: ${d.placeholders.slice(0, 12).join(", ")}${d.placeholders.length > 12 ? " …" : ""}` : "");
   $("reportEditor").hidden = false;
+  $("rptRunRow").hidden = false;   // 양식 장착 즉시, 5번에서 바로 일괄 처리 가능
   fillFieldSelect();
   renderReportGrid();
 }
