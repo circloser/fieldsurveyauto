@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; font-family:'Noto Sans KR','Malgun Gothic',sans-serif; color:#191F28;
+           -webkit-font-smoothing:antialiased; word-break:keep-all; }
+    a { color:#3182f6; } a:hover { color:#1b64da; }
+    .slide { width:1280px; height:720px; background:#ffffff; position:relative;
+             box-sizing:border-box; padding:52px 64px 44px; display:flex; flex-direction:column; overflow:hidden; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .sec { font-size:14px; font-weight:700; color:#8b95a1; letter-spacing:2px; }
+    .chips { display:flex; gap:8px; }
+    .chip { font-size:13px; font-weight:700; padding:5px 12px; border-radius:999px; }
+    h1 { font-size:42px; font-weight:900; letter-spacing:-1.2px; line-height:1.25; margin:0 0 14px; }
+    h1 .em { color:#3182f6; }
+    .lead { font-size:19px; color:#4e5968; line-height:1.65; margin:0 0 10px; }
+    .foot { margin-top:auto; padding-top:16px; border-top:1px solid #e5e8eb;
+            display:flex; justify-content:space-between; font-size:12.5px; color:#8b95a1; font-weight:500; }
+    .grow { flex:1; min-height:0; }
+    .card { background:#ffffff; border:1px solid #e5e8eb; border-radius:14px; padding:20px 22px; box-sizing:border-box; }
+    .tint { background:#f7f8fa; border:1px solid #eef1f4; }
+    .ct { font-size:17px; font-weight:700; margin:10px 0 6px; }
+    .cd { font-size:14px; color:#6b7684; line-height:1.6; }
+    .big { font-size:44px; font-weight:900; letter-spacing:-1px; }
+    .ic { width:40px; height:40px; border-radius:10px; background:#eaf3ff; display:flex; align-items:center; justify-content:center; }
+    .arrow { color:#c4cad2; font-size:26px; font-weight:900; align-self:center; }
+    .ph { background:#fff9e8; border:1.5px dashed #e2b93b; color:#8a6d1d; border-radius:8px;
+          padding:2px 10px; font-weight:700; }
+    .win { border:1px solid #dfe3e8; border-radius:12px; overflow:hidden; background:#fff;
+           box-shadow:0 8px 24px rgba(25,31,40,.08); }
+    .winbar { height:26px; background:#f2f4f6; display:flex; align-items:center; gap:6px; padding:0 12px; border-bottom:1px solid #e5e8eb; }
+    .dot { width:8px; height:8px; border-radius:50%; }
+    .note { font-size:13px; color:#8b95a1; line-height:1.55; }
+  </style>
+</helmet>
+<div class="slide">
+<div class="top"><span class="sec">국민 서비스 개선</span><div class="chips"><span class="chip" style="background:#fdecee;color:#d6303f">국민 서비스 개선 · 가점</span></div></div>
+
+<h1>조사 데이터가 <span class="em">더 빨리 국민에게</span> 갑니다</h1>
+<p class="lead">현장 데이터의 병목은 '입력'이었습니다. 입력이 자동화되면 <b>공공데이터 개방과 정보 공개의 주기</b>가 짧아집니다.</p>
+<div class="grow" style="display:flex;flex-direction:column;gap:16px;justify-content:center;margin-top:6px">
+  <div class="card" style="border-color:#f5c6cb">
+    <div style="font-weight:800;color:#d6303f;margin-bottom:10px">기존</div>
+    <div style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600">
+      <span class="card tint" style="padding:8px 14px">현장 조사</span><span class="arrow">→</span>
+      <span class="card" style="padding:8px 14px;border-color:#f5c6cb;background:#fdecee;color:#d6303f">수기 입력 (수주~수개월)</span><span class="arrow">→</span>
+      <span class="card tint" style="padding:8px 14px">검증</span><span class="arrow">→</span>
+      <span class="card tint" style="padding:8px 14px">공개·개방</span>
+    </div>
+  </div>
+  <div class="card" style="border-color:#bcd7ff;background:#f0f6ff">
+    <div style="font-weight:800;color:#1b64da;margin-bottom:10px">오토다타 도입 후</div>
+    <div style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600">
+      <span class="card" style="padding:8px 14px;background:#fff">현장 조사</span><span class="arrow">→</span>
+      <span class="card" style="padding:8px 14px;border-color:#bcd7ff;background:#fff;color:#1b64da">즉시 DB화 + 자동 검증</span><span class="arrow">→</span>
+      <span class="card" style="padding:8px 14px;border-color:#b6ebd2;background:#f4fcf8;color:#04915a">신속 공개·개방</span>
+    </div>
+  </div>
+</div>
+<div class="note" style="margin-top:12px">국민·연구자·지자체가 <b>더 최신의 데이터</b>로 환경영향 검토, 정책 수립, 연구에 활용 — 데이터 개방 품질과 속도가 함께 올라갑니다.</div>
+
+<div class="foot"><span>오토다타 AutoData</span><span>16 / 20</span></div>
+</div>
+</x-dc>
+</body>
+</html>

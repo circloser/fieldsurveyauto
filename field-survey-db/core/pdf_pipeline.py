@@ -336,7 +336,8 @@ def detect_title(pdf_path: str, page_no: int) -> dict | None:
 
 # ---------- 픽셀박스 추출 ----------
 
-def _cell_anchor_value(cells: list[Cell], box: dict) -> str | None:
+def _cell_anchor_value(cells: list[Cell], box: dict,
+                       return_cell: bool = False):
     """유기적 추출 — 입력 페이지의 표 칸에서 라벨 칸을 찾아 인접 값 칸을 읽는다.
 
     조사표에 줄이 추가되거나 위치가 밀려도 라벨을 따라가므로 값이 어긋나지 않는다.
@@ -363,7 +364,8 @@ def _cell_anchor_value(cells: list[Cell], box: dict) -> str | None:
         nxt.sort(key=lambda c: c.x0)
     if not nxt:
         return None
-    return normalize(nxt[0].text)
+    val = normalize(nxt[0].text)
+    return (val, nxt[0]) if return_cell else val
 
 
 def _box_value(page: PdfPage, box: dict) -> str:
@@ -457,9 +459,12 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
     pdf_path 를 주면 유기적 추출: 입력 페이지의 표 칸을 감지해 라벨 칸 기준으로 값을
     읽는다(줄 추가·위치 밀림에 강함). 라벨을 못 찾은 박스만 좌표 방식으로 폴백.
     """
+    import statistics
+
     ordered = sorted(boxes, key=lambda b: b.get("order", 0))
     by_page = {p.page_no: p for p in pages}
     cells_cache: dict[int, list[Cell]] = {}
+    title_cache: dict[int, dict | None] = {}
 
     def cells_for(pno: int) -> list[Cell]:
         if pno not in cells_cache:
@@ -469,25 +474,75 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
                 cells_cache[pno] = []
         return cells_cache[pno]
 
-    out: dict[str, str] = {}
-    for b in ordered:
+    def title_for(pno: int) -> dict | None:
+        if pno not in title_cache:
+            try:
+                title_cache[pno] = detect_title(pdf_path, pno)
+            except Exception:  # noqa: BLE001
+                title_cache[pno] = None
+        return title_cache[pno]
+
+    # 1차: 라벨(칸-앵커)로 읽고, 성공한 박스의 '이동량'을 페이지별로 수집
+    results: dict[int, str] = {}
+    resolved: dict[int, PdfPage | None] = {}
+    deltas: dict[int, list[tuple[float, float]]] = {}
+    for i, b in enumerate(ordered):
         tpage = int(b.get("page", 0))
         if page_map is not None:
             ipage = page_map.get(tpage)
             page = by_page.get(ipage) if ipage is not None else None
         else:
             page = by_page.get(tpage)
+        resolved[i] = page
         if page is None:
-            out[b["field"]] = ""
+            results[i] = ""
             continue
-        val = None
-        # 유기적(칸-앵커) 우선 — 일반 텍스트 박스에만(굵게/체크는 기존 방식 유지)
         if pdf_path and b.get("mode", "text") == "text" and (b.get("anchor") or {}).get("label"):
             cells = cells_for(page.page_no)
             if cells:
-                val = _cell_anchor_value(cells, b)
-        out[b["field"]] = val if val is not None else _box_value(page, b)
-    return out
+                r = _cell_anchor_value(cells, b, return_cell=True)
+                if r is not None:
+                    val, vcell = r
+                    results[i] = val
+                    deltas.setdefault(page.page_no, []).append(
+                        (vcell.x0 - float(b["x0"]), vcell.y0 - float(b["y0"])))
+                    continue
+        # 미해결 → 2차에서 처리
+
+    # 페이지별 오프셋(중앙값) — 라벨 성공 3개 이상일 때만 신뢰
+    offset: dict[int, tuple[float, float]] = {}
+    for pno, ds in deltas.items():
+        if len(ds) >= 3:
+            dx = statistics.median(d[0] for d in ds)
+            dy = statistics.median(d[1] for d in ds)
+            if abs(dx) > 2 or abs(dy) > 2:
+                offset[pno] = (dx, dy)
+
+    # 2차: 라벨이 없거나 못 찾은 박스 — 제목은 페이지의 큰 글씨로, 나머지는
+    # 오프셋 보정된 좌표로 읽는다(양식이 통째로 밀린 경우 같이 따라감).
+    for i, b in enumerate(ordered):
+        if i in results:
+            continue
+        page = resolved[i]
+        if page is None:
+            results[i] = ""
+            continue
+        if b.get("mode") == "title" and pdf_path is not None:
+            t = title_for(page.page_no)
+            if t and t.get("text"):
+                results[i] = t["text"]
+                continue
+        bb = b
+        d = offset.get(page.page_no)
+        if d:
+            bb = dict(b)
+            bb["x0"] = float(b["x0"]) + d[0]
+            bb["x1"] = float(b["x1"]) + d[0]
+            bb["y0"] = float(b["y0"]) + d[1]
+            bb["y1"] = float(b["y1"]) + d[1]
+        results[i] = _box_value(page, bb)
+
+    return {b["field"]: results[i] for i, b in enumerate(ordered)}
 
 
 def field_order(boxes: list[dict]) -> list[str]:

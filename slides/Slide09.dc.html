@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; font-family:'Noto Sans KR','Malgun Gothic',sans-serif; color:#191F28;
+           -webkit-font-smoothing:antialiased; word-break:keep-all; }
+    a { color:#3182f6; } a:hover { color:#1b64da; }
+    .slide { width:1280px; height:720px; background:#ffffff; position:relative;
+             box-sizing:border-box; padding:52px 64px 44px; display:flex; flex-direction:column; overflow:hidden; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .sec { font-size:14px; font-weight:700; color:#8b95a1; letter-spacing:2px; }
+    .chips { display:flex; gap:8px; }
+    .chip { font-size:13px; font-weight:700; padding:5px 12px; border-radius:999px; }
+    h1 { font-size:42px; font-weight:900; letter-spacing:-1.2px; line-height:1.25; margin:0 0 14px; }
+    h1 .em { color:#3182f6; }
+    .lead { font-size:19px; color:#4e5968; line-height:1.65; margin:0 0 10px; }
+    .foot { margin-top:auto; padding-top:16px; border-top:1px solid #e5e8eb;
+            display:flex; justify-content:space-between; font-size:12.5px; color:#8b95a1; font-weight:500; }
+    .grow { flex:1; min-height:0; }
+    .card { background:#ffffff; border:1px solid #e5e8eb; border-radius:14px; padding:20px 22px; box-sizing:border-box; }
+    .tint { background:#f7f8fa; border:1px solid #eef1f4; }
+    .ct { font-size:17px; font-weight:700; margin:10px 0 6px; }
+    .cd { font-size:14px; color:#6b7684; line-height:1.6; }
+    .big { font-size:44px; font-weight:900; letter-spacing:-1px; }
+    .ic { width:40px; height:40px; border-radius:10px; background:#eaf3ff; display:flex; align-items:center; justify-content:center; }
+    .arrow { color:#c4cad2; font-size:26px; font-weight:900; align-self:center; }
+    .ph { background:#fff9e8; border:1.5px dashed #e2b93b; color:#8a6d1d; border-radius:8px;
+          padding:2px 10px; font-weight:700; }
+    .win { border:1px solid #dfe3e8; border-radius:12px; overflow:hidden; background:#fff;
+           box-shadow:0 8px 24px rgba(25,31,40,.08); }
+    .winbar { height:26px; background:#f2f4f6; display:flex; align-items:center; gap:6px; padding:0 12px; border-bottom:1px solid #e5e8eb; }
+    .dot { width:8px; height:8px; border-radius:50%; }
+    .note { font-size:13px; color:#8b95a1; line-height:1.55; }
+  </style>
+</helmet>
+<div class="slide">
+<div class="top"><span class="sec">핵심 기술 3</span><div class="chips"><span class="chip" style="background:#fff4d6;color:#a06f00">창의성</span></div></div>
+
+<h1>보고서 양식도 <span class="em">AI가 초안부터</span></h1>
+<p class="lead">추출 항목을 보고 AI가 보고서 양식(xlsx) 초안을 설계 — 편집해서 다시 올리면 데이터가 자동으로 채워집니다.</p>
+<div class="grow" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:6px">
+  <div class="card" style="width:200px;text-align:center;border-color:#bcd7ff;background:#f0f6ff"><div class="ct" style="margin-top:0">🤖 AI 초안 설계</div><div class="cd">종합 비교표 + 대상지별 1장<br>합계·평균 수식 포함</div></div>
+  <span class="arrow">→</span>
+  <div class="card tint" style="width:170px;text-align:center"><div class="ct" style="margin-top:0">📥 다운로드</div><div class="cd">초안 xlsx 파일</div></div>
+  <span class="arrow">→</span>
+  <div class="card tint" style="width:170px;text-align:center"><div class="ct" style="margin-top:0">✏️ 엑셀에서 편집</div><div class="cd">우리 부서 양식으로<br>자유롭게 수정</div></div>
+  <span class="arrow">→</span>
+  <div class="card tint" style="width:170px;text-align:center"><div class="ct" style="margin-top:0">📤 재업로드</div><div class="cd">프로그램에 다시 올림</div></div>
+  <span class="arrow">→</span>
+  <div class="card" style="width:200px;text-align:center;border-color:#b6ebd2;background:#f4fcf8"><div class="ct" style="margin-top:0;color:#04915a">📊 데이터 자동 채움</div><div class="cd">{항목명} 자리마다<br>조사 값이 들어간 완성본</div></div>
+</div>
+<div class="card tint" style="margin-top:16px;display:flex;gap:12px;align-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3182f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg><div class="cd" style="color:#4e5968"><b>신뢰성 설계:</b> AI는 '설계도(JSON)'만 제안하고, 실제 엑셀 파일 조립은 프로그램이 결정적으로 수행 — <b>깨진 파일이 나올 수 없는 구조</b>이며, AI가 실수해도 자동 보정됩니다.</div></div>
+
+<div class="foot"><span>오토다타 AutoData</span><span>09 / 20</span></div>
+</div>
+</x-dc>
+</body>
+</html>

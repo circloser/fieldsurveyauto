@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; font-family:'Noto Sans KR','Malgun Gothic',sans-serif; color:#191F28;
+           -webkit-font-smoothing:antialiased; word-break:keep-all; }
+    a { color:#3182f6; } a:hover { color:#1b64da; }
+    .slide { width:1280px; height:720px; background:#ffffff; position:relative;
+             box-sizing:border-box; padding:52px 64px 44px; display:flex; flex-direction:column; overflow:hidden; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .sec { font-size:14px; font-weight:700; color:#8b95a1; letter-spacing:2px; }
+    .chips { display:flex; gap:8px; }
+    .chip { font-size:13px; font-weight:700; padding:5px 12px; border-radius:999px; }
+    h1 { font-size:42px; font-weight:900; letter-spacing:-1.2px; line-height:1.25; margin:0 0 14px; }
+    h1 .em { color:#3182f6; }
+    .lead { font-size:19px; color:#4e5968; line-height:1.65; margin:0 0 10px; }
+    .foot { margin-top:auto; padding-top:16px; border-top:1px solid #e5e8eb;
+            display:flex; justify-content:space-between; font-size:12.5px; color:#8b95a1; font-weight:500; }
+    .grow { flex:1; min-height:0; }
+    .card { background:#ffffff; border:1px solid #e5e8eb; border-radius:14px; padding:20px 22px; box-sizing:border-box; }
+    .tint { background:#f7f8fa; border:1px solid #eef1f4; }
+    .ct { font-size:17px; font-weight:700; margin:10px 0 6px; }
+    .cd { font-size:14px; color:#6b7684; line-height:1.6; }
+    .big { font-size:44px; font-weight:900; letter-spacing:-1px; }
+    .ic { width:40px; height:40px; border-radius:10px; background:#eaf3ff; display:flex; align-items:center; justify-content:center; }
+    .arrow { color:#c4cad2; font-size:26px; font-weight:900; align-self:center; }
+    .ph { background:#fff9e8; border:1.5px dashed #e2b93b; color:#8a6d1d; border-radius:8px;
+          padding:2px 10px; font-weight:700; }
+    .win { border:1px solid #dfe3e8; border-radius:12px; overflow:hidden; background:#fff;
+           box-shadow:0 8px 24px rgba(25,31,40,.08); }
+    .winbar { height:26px; background:#f2f4f6; display:flex; align-items:center; gap:6px; padding:0 12px; border-bottom:1px solid #e5e8eb; }
+    .dot { width:8px; height:8px; border-radius:50%; }
+    .note { font-size:13px; color:#8b95a1; line-height:1.55; }
+  </style>
+</helmet>
+<div class="slide">
+<div class="top"><span class="sec">핵심 기술 4</span><div class="chips"><span class="chip" style="background:#f1ecff;color:#6d28d9">범용성</span></div></div>
+
+<h1>과거의 스캔 자료까지 <span class="em">DB로 살립니다</span></h1>
+<p class="lead">문서 종류마다 가장 잘 읽는 방법을 자동으로 골라 씁니다.</p>
+<div class="grow" style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;margin-top:8px">
+  <div class="card"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3182f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M8 13h8M8 17h8"></path></svg></div><div class="ct">타이핑 문서 (hwp·hwpx·PDF)</div><div class="cd">글자를 그대로 추출 — 변환 오차 없는 <b>무손실</b> 데이터.</div></div>
+  <div class="card"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3182f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"></path><path d="M7 12h10"></path></svg></div><div class="ct">스캔 PDF → 내장 OCR</div><div class="cd">한국어 인식 모델을 프로그램에 내장 — <b>인터넷 없이</b> 이 컴퓨터 안에서 글자를 인식.</div></div>
+  <div class="card"><div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3182f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8 10h.01M16 10h.01"></path><path d="M8 15c1.2 1 2.6 1.5 4 1.5s2.8-.5 4-1.5"></path></svg></div><div class="ct">손글씨·복잡 서식 → AI Vision</div><div class="cd">AI가 이미지를 통째로 읽어 손글씨·비정형 기록까지 표로 변환.</div></div>
+</div>
+<div class="note" style="margin-top:14px">서랍 속에 잠자던 <b>과거 조사 자료(스캔본)</b>도 같은 파이프라인으로 축적 — 데이터 자산이 소급해서 늘어납니다.</div>
+
+<div class="foot"><span>오토다타 AutoData</span><span>10 / 20</span></div>
+</div>
+</x-dc>
+</body>
+</html>

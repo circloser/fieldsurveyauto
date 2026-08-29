@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; font-family:'Noto Sans KR','Malgun Gothic',sans-serif; color:#191F28;
+           -webkit-font-smoothing:antialiased; word-break:keep-all; }
+    a { color:#3182f6; } a:hover { color:#1b64da; }
+    .slide { width:1280px; height:720px; background:#ffffff; position:relative;
+             box-sizing:border-box; padding:52px 64px 44px; display:flex; flex-direction:column; overflow:hidden; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .sec { font-size:14px; font-weight:700; color:#8b95a1; letter-spacing:2px; }
+    .chips { display:flex; gap:8px; }
+    .chip { font-size:13px; font-weight:700; padding:5px 12px; border-radius:999px; }
+    h1 { font-size:42px; font-weight:900; letter-spacing:-1.2px; line-height:1.25; margin:0 0 14px; }
+    h1 .em { color:#3182f6; }
+    .lead { font-size:19px; color:#4e5968; line-height:1.65; margin:0 0 10px; }
+    .foot { margin-top:auto; padding-top:16px; border-top:1px solid #e5e8eb;
+            display:flex; justify-content:space-between; font-size:12.5px; color:#8b95a1; font-weight:500; }
+    .grow { flex:1; min-height:0; }
+    .card { background:#ffffff; border:1px solid #e5e8eb; border-radius:14px; padding:20px 22px; box-sizing:border-box; }
+    .tint { background:#f7f8fa; border:1px solid #eef1f4; }
+    .ct { font-size:17px; font-weight:700; margin:10px 0 6px; }
+    .cd { font-size:14px; color:#6b7684; line-height:1.6; }
+    .big { font-size:44px; font-weight:900; letter-spacing:-1px; }
+    .ic { width:40px; height:40px; border-radius:10px; background:#eaf3ff; display:flex; align-items:center; justify-content:center; }
+    .arrow { color:#c4cad2; font-size:26px; font-weight:900; align-self:center; }
+    .ph { background:#fff9e8; border:1.5px dashed #e2b93b; color:#8a6d1d; border-radius:8px;
+          padding:2px 10px; font-weight:700; }
+    .win { border:1px solid #dfe3e8; border-radius:12px; overflow:hidden; background:#fff;
+           box-shadow:0 8px 24px rgba(25,31,40,.08); }
+    .winbar { height:26px; background:#f2f4f6; display:flex; align-items:center; gap:6px; padding:0 12px; border-bottom:1px solid #e5e8eb; }
+    .dot { width:8px; height:8px; border-radius:50%; }
+    .note { font-size:13px; color:#8b95a1; line-height:1.55; }
+  </style>
+</helmet>
+<div class="slide">
+<div class="top"><span class="sec">확산 계획</span><div class="chips"><span class="chip" style="background:#f1ecff;color:#6d28d9">범용성</span><span class="chip" style="background:#eaf3ff;color:#1b64da">실용성</span></div></div>
+
+<h1>일회성 출품작이 아닌, <span class="em">확산 로드맵</span></h1>
+<div class="grow" style="display:flex;align-items:stretch;gap:14px;margin-top:12px">
+  <div class="card" style="flex:1;border-color:#b6ebd2;background:#f4fcf8">
+    <div style="font-size:13px;font-weight:800;color:#04915a">1단계 · 완료</div>
+    <div class="ct">현업 부서 실적용</div>
+    <div class="cd">실제 조사표로 운영 중 — 템플릿·AI추출·보고서까지 전체 흐름 검증 완료. 자동 테스트 100여 건으로 품질 관리.</div>
+  </div>
+  <span class="arrow">→</span>
+  <div class="card" style="flex:1">
+    <div style="font-size:13px;font-weight:800;color:#8b95a1">2단계 · 확산</div>
+    <div class="ct">유사 서식으로 확대</div>
+    <div class="cd">인접 부서의 조사·점검 서식에 적용, 표준 항목 사전(항목명·단위·형식) 정리로 데이터 일관성 확보.</div>
+  </div>
+  <span class="arrow">→</span>
+  <div class="card" style="flex:1">
+    <div style="font-size:13px;font-weight:800;color:#8b95a1">3단계 · 정착</div>
+    <div class="ct">전 기관 배포·연계</div>
+    <div class="cd">포터블 배포(USB·공유폴더)로 전 부서 보급, 기관 데이터 시스템과 표준 스키마로 연계.</div>
+  </div>
+</div>
+<div class="note" style="margin-top:14px">확산 비용: 프로그램 복사 + <b>사용법 1장 + 30분 시연</b>. 서버 구축·라이선스 구매가 없어 확산의 장벽 자체가 없습니다.</div>
+
+<div class="foot"><span>오토다타 AutoData</span><span>19 / 20</span></div>
+</div>
+</x-dc>
+</body>
+</html>

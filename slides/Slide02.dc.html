@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; font-family:'Noto Sans KR','Malgun Gothic',sans-serif; color:#191F28;
+           -webkit-font-smoothing:antialiased; word-break:keep-all; }
+    a { color:#3182f6; } a:hover { color:#1b64da; }
+    .slide { width:1280px; height:720px; background:#ffffff; position:relative;
+             box-sizing:border-box; padding:52px 64px 44px; display:flex; flex-direction:column; overflow:hidden; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .sec { font-size:14px; font-weight:700; color:#8b95a1; letter-spacing:2px; }
+    .chips { display:flex; gap:8px; }
+    .chip { font-size:13px; font-weight:700; padding:5px 12px; border-radius:999px; }
+    h1 { font-size:42px; font-weight:900; letter-spacing:-1.2px; line-height:1.25; margin:0 0 14px; }
+    h1 .em { color:#3182f6; }
+    .lead { font-size:19px; color:#4e5968; line-height:1.65; margin:0 0 10px; }
+    .foot { margin-top:auto; padding-top:16px; border-top:1px solid #e5e8eb;
+            display:flex; justify-content:space-between; font-size:12.5px; color:#8b95a1; font-weight:500; }
+    .grow { flex:1; min-height:0; }
+    .card { background:#ffffff; border:1px solid #e5e8eb; border-radius:14px; padding:20px 22px; box-sizing:border-box; }
+    .tint { background:#f7f8fa; border:1px solid #eef1f4; }
+    .ct { font-size:17px; font-weight:700; margin:10px 0 6px; }
+    .cd { font-size:14px; color:#6b7684; line-height:1.6; }
+    .big { font-size:44px; font-weight:900; letter-spacing:-1px; }
+    .ic { width:40px; height:40px; border-radius:10px; background:#eaf3ff; display:flex; align-items:center; justify-content:center; }
+    .arrow { color:#c4cad2; font-size:26px; font-weight:900; align-self:center; }
+    .ph { background:#fff9e8; border:1.5px dashed #e2b93b; color:#8a6d1d; border-radius:8px;
+          padding:2px 10px; font-weight:700; }
+    .win { border:1px solid #dfe3e8; border-radius:12px; overflow:hidden; background:#fff;
+           box-shadow:0 8px 24px rgba(25,31,40,.08); }
+    .winbar { height:26px; background:#f2f4f6; display:flex; align-items:center; gap:6px; padding:0 12px; border-bottom:1px solid #e5e8eb; }
+    .dot { width:8px; height:8px; border-radius:50%; }
+    .note { font-size:13px; color:#8b95a1; line-height:1.55; }
+  </style>
+</helmet>
+<div class="slide">
+<div class="top"><span class="sec">문제</span><div class="chips"><span class="chip" style="background:#e7f9f0;color:#04915a">효과성</span></div></div>
+
+<h1>조사보다 <span class="em">입력이 더 오래</span> 걸립니다</h1>
+<p class="lead">현장에서 하루 종일 조사하고 돌아오면, 사무실에서는 조사표를 한 칸씩 엑셀로 옮겨 적는 일이 기다립니다.</p>
+<div class="grow" style="display:flex;gap:28px;align-items:stretch;margin-top:8px">
+  <div style="flex:1.2;display:flex;flex-direction:column;gap:12px">
+    <div class="card tint" style="display:flex;gap:14px;align-items:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#6b7684" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M8 13h8M8 17h8"></path></svg><div><div class="ct" style="margin:0">조사표 1건 = 여러 쪽, 항목 수백 개</div><div class="cd">표 속에 글·숫자·좌표·체크박스가 뒤섞여 있습니다</div></div></div>
+    <div class="card tint" style="display:flex;gap:14px;align-items:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#6b7684" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 3"></path></svg><div><div class="ct" style="margin:0">옮겨 적는 시간 = 조사만큼의 야근</div><div class="cd">건마다 수십 분씩, 연간 수백~수천 건이 수기로 입력됩니다</div></div></div>
+    <div class="card tint" style="display:flex;gap:14px;align-items:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d6303f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4M12 17h.01"></path></svg><div><div class="ct" style="margin:0">옮겨 적다 생기는 오타</div><div class="cd">단순 실수가 그대로 데이터 품질 문제로 이어집니다</div></div></div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:0;position:relative">
+    <div style="position:relative;width:250px;height:270px">
+      <div style="position:absolute;left:26px;top:24px;width:190px;height:240px;background:#eef1f4;border:1px solid #dfe3e8;border-radius:8px;transform:rotate(6deg)"></div>
+      <div style="position:absolute;left:14px;top:12px;width:190px;height:240px;background:#f5f7f9;border:1px solid #dfe3e8;border-radius:8px;transform:rotate(3deg)"></div>
+      <div style="position:absolute;left:0;top:0;width:190px;height:240px;background:#fff;border:1px solid #d5dae0;border-radius:8px;padding:16px;box-sizing:border-box;box-shadow:0 10px 24px rgba(25,31,40,.10)">
+        <div style="font-size:12px;font-weight:800;text-align:center;margin-bottom:10px">현장 조사표</div>
+        <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:1px;background:#d5dae0;border:1px solid #d5dae0">
+          <div style="background:#f2f4f6;height:18px"></div><div style="background:#fff;height:18px"></div>
+          <div style="background:#f2f4f6;height:18px"></div><div style="background:#fff;height:18px"></div>
+          <div style="background:#f2f4f6;height:18px"></div><div style="background:#fff;height:18px"></div>
+          <div style="background:#f2f4f6;height:18px"></div><div style="background:#fff;height:18px"></div>
+          <div style="background:#f2f4f6;height:18px"></div><div style="background:#fff;height:18px"></div>
+          <div style="background:#f2f4f6;height:18px"></div><div style="background:#fff;height:18px"></div>
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:#8b95a1;text-align:center">× 수백 장…</div>
+      </div>
+    </div>
+    <div class="note" style="margin-top:8px">쌓여 가는 조사표 — 전 부서가 겪는 공통 장면</div>
+  </div>
+</div>
+
+<div class="foot"><span>오토다타 AutoData</span><span>02 / 20</span></div>
+</div>
+</x-dc>
+</body>
+</html>

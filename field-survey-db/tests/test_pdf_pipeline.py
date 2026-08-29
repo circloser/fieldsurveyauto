@@ -75,14 +75,19 @@ def test_page_auto_matching(request):
         sub_path.unlink(missing_ok=True)
 
 
-def _draw_form(path, rows, y_top):
-    """간단 조사표 합성 — 라벨|값 2열 표를 y_top부터 그린다(칸 테두리 + 텍스트)."""
+def _draw_form(path, rows, y_top, title=None):
+    """간단 조사표 합성 — 라벨|값 2열 표를 y_top부터 그린다(칸 테두리 + 텍스트).
+
+    title 을 주면 상단에 큰 글씨(18pt) 제목을 넣는다(detect_title 검증용).
+    """
     import fitz
 
     doc = fitz.open()
     page = doc.new_page(width=400, height=500)
     font = fitz.Font("cjk")   # 한글 지원 내장 폰트
     tw = fitz.TextWriter(page.rect)
+    if title:
+        tw.append((60, 34), title, font=font, fontsize=18)
     x0, x1, x2, rh = 40, 160, 360, 28
     for i, (label, value) in enumerate(rows):
         y = y_top + i * rh
@@ -121,6 +126,43 @@ def test_organic_extraction_survives_row_insert(tmp_path):
     # 대조: 좌표만 쓰면(기존 방식) 밀린 만큼 어긋난다 → 유기적 방식의 필요성 입증
     naive = apply_pixel_template(dd.pages, boxes)
     assert naive.get("하천명") != "가곡천"
+
+
+def test_offset_correction_for_unanchored_boxes(tmp_path):
+    """라벨(앵커) 없는 박스도 — 라벨 성공 박스들의 이동량으로 좌표를 보정해 정확."""
+    from core.pdf_pipeline import suggest_from_cells
+
+    rows = [("하천명", "해남천"), ("관리기관", "전남청"), ("조사일", "6월 17일"),
+            ("지점명", "1지점"), ("보길이", "30")]
+    base = tmp_path / "f_base.pdf"
+    _draw_form(base, rows, y_top=60)
+    boxes = suggest_from_cells(str(base), 0)
+    # '보길이' 박스의 앵커를 제거 → 순수 좌표 박스로 만든다(사용자가 직접 그린 박스 상황)
+    for b in boxes:
+        if b["field"] == "보길이":
+            b["anchor"] = None
+    # 전체가 56pt 밀린 변형본(값도 변경)
+    drift = tmp_path / "f_drift.pdf"
+    _draw_form(drift, [("메모", "줄추가"), ("비고", "줄추가2")] + [
+        ("하천명", "가곡천"), ("관리기관", "강원청"), ("조사일", "7월 1일"),
+        ("지점명", "2지점"), ("보길이", "25")], y_top=60)
+    dd = read_pdf(str(drift), ocr_scanned=False)
+    vals = apply_pixel_template(dd.pages, boxes, pdf_path=str(drift))
+    assert vals.get("하천명") == "가곡천"      # 앵커 경로
+    assert vals.get("보길이") == "25"          # 앵커 없음 → 오프셋 보정으로 정확
+
+
+def test_title_mode_uses_page_big_text(tmp_path):
+    """제목 모드 박스는 좌표가 어긋나도 페이지의 큰 글씨(제목)를 읽는다."""
+    f = tmp_path / "titled.pdf"
+    _draw_form(f, [("하천명", "해남천"), ("규모", "30"), ("상태", "양호")],
+               y_top=90, title="구조물 정밀 조사표")
+    dd = read_pdf(str(f), ocr_scanned=False)
+    # 일부러 엉뚱한 좌표의 제목 박스(다른 양식에서 온 템플릿 상황)
+    box = {"order": 1, "field": "제목", "page": 0, "mode": "title",
+           "x0": 300, "y0": 400, "x1": 380, "y1": 420}
+    vals = apply_pixel_template(dd.pages, [box], pdf_path=str(f))
+    assert "정밀" in vals["제목"] and "조사표" in vals["제목"]
 
 
 def test_detect_title(request):

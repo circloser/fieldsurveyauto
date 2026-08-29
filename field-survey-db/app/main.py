@@ -923,6 +923,16 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
 
     # 중복 이름은 접미사로 유일화(엑셀 열 충돌 방지). 사용자가 이름을 안 바꾼 경우 대비.
     box_list, fields = _dedup_box_fields(box_list)
+
+    # '제목별 분류' — 제목(위계) 박스 값으로 같은 양식끼리 시트를 묶는다.
+    # 제목 박스가 없는(예전) 템플릿이면 입력 문서의 큰 글씨 제목을 감지해 폴백.
+    group_field = None
+    if sheet_name_field == "__group_title__":
+        title_box = next((b for b in sorted(box_list, key=lambda z: z.get("order", 0))
+                          if b.get("mode") == "title"), None)
+        group_field = title_box["field"] if title_box else "_제목"
+        sheet_name_field = group_field  # 보고서 양식 경로에선 제목이 시트 이름이 됨
+
     rows, failed, match_info = [], [], []
     n_tmpl_pages = len({int(b["page"]) for b in box_list})
     for uf in files:
@@ -941,6 +951,13 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
                                            pdf_path=pdf_path)  # 유기적(라벨 칸 기준) 추출
                 row["_파일명"] = (uf.filename if len(bundle_maps) == 1
                                   else f"{uf.filename} #{bi}")
+                # 제목별 분류 폴백: 제목 값이 비면 이 묶음 첫 페이지의 큰 글씨를 제목으로
+                if group_field and not (row.get(group_field) or "").strip():
+                    from core.pdf_pipeline import detect_title
+                    first_ip = min(page_map.values()) if page_map else 0
+                    t = detect_title(pdf_path, first_ip)
+                    if t and t.get("text"):
+                        row[group_field] = t["text"]
                 rows.append(row)
             match_info.append({"name": uf.filename,
                                "matched": len(bundle_maps[0]) if bundle_maps[0] else 0,
@@ -951,17 +968,6 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_used = False
-
-    # '제목별 분류' — 제목(위계) 박스의 값으로 같은 양식끼리 시트를 묶는다
-    group_field = None
-    if sheet_name_field == "__group_title__":
-        title_box = next((b for b in sorted(box_list, key=lambda z: z.get("order", 0))
-                          if b.get("mode") == "title"), None)
-        if title_box is None:
-            return JSONResponse({"error": "제목 모드 박스가 없습니다. 박스 하나를 '제목'으로 지정하세요."},
-                                status_code=400)
-        group_field = title_box["field"]
-        sheet_name_field = group_field  # 보고서 양식 경로에선 제목을 시트 이름으로 사용
 
     # 편집된 양식(report_id) 우선, 없으면 직접 업로드한 양식(backward compat)
     tpl_path = None

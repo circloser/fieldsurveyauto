@@ -571,14 +571,25 @@ function fillFieldSelect() {
   const names = [...new Set(BOXES.map((b) => b.field).filter(Boolean))].sort();
   const opts = names.map((n) => `<option value="${n}">${n}</option>`).join("");
   $("rptFieldSel").innerHTML = `<option value="">— 추출 항목 —</option>` + opts;
-  // 대상지별 시트 이름 선택(일괄 처리)도 같은 항목으로 채움 — 선택 유지
+  // 대상지별 시트 이름 선택(일괄 처리) — 이름 후보만 추려서(칸/숫자/긴 이름 제외, 최대 40개)
   const ss = $("sheetNameSel");
   const keep = ss.value;
-  const hasTitle = BOXES.some((b) => b.mode === "title");
-  ss.innerHTML = `<option value="">사용 안 함 (요약표만)</option>` +
-    (hasTitle ? `<option value="__group_title__">📑 제목별 분류 — 같은 양식끼리 한 시트</option>` : "") +
-    opts;
-  if (keep === "__group_title__" ? hasTitle : names.includes(keep)) ss.value = keep;
+  const seen = new Set();
+  const cands = [];
+  [...BOXES].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach((b) => {
+    const n = (b.field || "").trim();
+    if (!n || seen.has(n)) return;
+    if (/^칸/.test(n) || /^\d+$/.test(n) || n.length > 14 || b.mode === "title") return;
+    seen.add(n); cands.push(n);
+  });
+  const shown = cands.slice(0, 40);
+  ss.innerHTML = `<option value="__group_title__">📑 제목(양식)별 분류 — 같은 양식끼리 한 시트 (기본)</option>` +
+    `<option value="">사용 안 함 (요약표만)</option>` +
+    shown.map((n) => `<option value="${n}">${n}</option>`).join("");
+  // 제목별 분류를 기본값으로(최초 1회) — 서버가 제목 박스 없어도 큰 글씨를 감지해 처리.
+  // 이후에는 사용자의 선택('사용 안 함' 포함)을 그대로 유지한다.
+  if (!window.__sheetSelInit) { ss.value = "__group_title__"; window.__sheetSelInit = true; }
+  else ss.value = (keep === "__group_title__" || keep === "" || shown.includes(keep)) ? keep : "__group_title__";
 }
 
 $("rptInsertBtn").addEventListener("click", () => {

@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; font-family:'Noto Sans KR','Malgun Gothic',sans-serif; color:#191F28;
+           -webkit-font-smoothing:antialiased; word-break:keep-all; }
+    a { color:#3182f6; } a:hover { color:#1b64da; }
+    .slide { width:1280px; height:720px; background:#ffffff; position:relative;
+             box-sizing:border-box; padding:52px 64px 44px; display:flex; flex-direction:column; overflow:hidden; }
+    .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .sec { font-size:14px; font-weight:700; color:#8b95a1; letter-spacing:2px; }
+    .chips { display:flex; gap:8px; }
+    .chip { font-size:13px; font-weight:700; padding:5px 12px; border-radius:999px; }
+    h1 { font-size:42px; font-weight:900; letter-spacing:-1.2px; line-height:1.25; margin:0 0 14px; }
+    h1 .em { color:#3182f6; }
+    .lead { font-size:19px; color:#4e5968; line-height:1.65; margin:0 0 10px; }
+    .foot { margin-top:auto; padding-top:16px; border-top:1px solid #e5e8eb;
+            display:flex; justify-content:space-between; font-size:12.5px; color:#8b95a1; font-weight:500; }
+    .grow { flex:1; min-height:0; }
+    .card { background:#ffffff; border:1px solid #e5e8eb; border-radius:14px; padding:20px 22px; box-sizing:border-box; }
+    .tint { background:#f7f8fa; border:1px solid #eef1f4; }
+    .ct { font-size:17px; font-weight:700; margin:10px 0 6px; }
+    .cd { font-size:14px; color:#6b7684; line-height:1.6; }
+    .big { font-size:44px; font-weight:900; letter-spacing:-1px; }
+    .ic { width:40px; height:40px; border-radius:10px; background:#eaf3ff; display:flex; align-items:center; justify-content:center; }
+    .arrow { color:#c4cad2; font-size:26px; font-weight:900; align-self:center; }
+    .ph { background:#fff9e8; border:1.5px dashed #e2b93b; color:#8a6d1d; border-radius:8px;
+          padding:2px 10px; font-weight:700; }
+    .win { border:1px solid #dfe3e8; border-radius:12px; overflow:hidden; background:#fff;
+           box-shadow:0 8px 24px rgba(25,31,40,.08); }
+    .winbar { height:26px; background:#f2f4f6; display:flex; align-items:center; gap:6px; padding:0 12px; border-bottom:1px solid #e5e8eb; }
+    .dot { width:8px; height:8px; border-radius:50%; }
+    .note { font-size:13px; color:#8b95a1; line-height:1.55; }
+  </style>
+</helmet>
+<div class="slide">
+<div class="top"><span class="sec">효과</span><div class="chips"><span class="chip" style="background:#e7f9f0;color:#04915a">효과성</span></div></div>
+
+<h1>시간으로 증명합니다 <span style="font-size:20px;color:#8b95a1;font-weight:700">(발표 전 실측값 기입)</span></h1>
+<div class="grow" style="display:flex;gap:26px;margin-top:8px">
+  <div style="flex:1.3;display:flex;flex-direction:column;gap:14px;justify-content:center">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><b>수기 입력</b><span class="ph">실측 기입: 건당 __분</span></div>
+      <div style="height:26px;background:#fdecee;border-radius:6px;margin-top:10px;position:relative"><div style="position:absolute;inset:0;width:100%;background:#f04452;border-radius:6px;opacity:.85"></div></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="color:#1b64da">오토다타</b><span class="ph">실측 기입: 건당 __초</span></div>
+      <div style="height:26px;background:#eaf3ff;border-radius:6px;margin-top:10px;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:7%;background:#3182f6;border-radius:6px"></div></div>
+    </div>
+    <div class="note">막대 길이는 실측값 비율로 수정 · <b>측정 방법 명시:</b> 동일 조사표 10건 표본, 수기 입력과 자동 처리를 같은 조건에서 실측</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px">
+    <div class="card" style="border-color:#bcd7ff;background:#f0f6ff;text-align:center">
+      <div class="cd" style="margin-bottom:6px">연간 환산 (기관 실적 기준으로 기입)</div>
+      <div style="font-size:19px;font-weight:800;line-height:1.7">연간 <span class="ph">__건</span> × 건당 절감 <span class="ph">__분</span></div>
+      <div style="font-size:15px;color:#8b95a1;margin:6px 0">=</div>
+      <div class="big" style="color:#1b64da">약 <span class="ph" style="font-size:34px">__인시</span> 절감</div>
+    </div>
+    <div class="note" style="text-align:center">부풀린 백분율 대신 <b>검증 가능한 절대값</b>만 제시합니다.</div>
+  </div>
+</div>
+
+<div class="foot"><span>오토다타 AutoData</span><span>11 / 20</span></div>
+</div>
+</x-dc>
+</body>
+</html>
