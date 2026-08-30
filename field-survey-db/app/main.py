@@ -8,6 +8,7 @@ import copy
 import shutil
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import Body, FastAPI, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -1054,7 +1055,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 for fld in ext["fields"]:
                     if fld not in g["fields"]:
                         g["fields"].append(fld)
-                g["rows"].append({"_파일명": fname, **row})
+                g["rows"].append({"_파일명": fname, "_제목": title, **row})
                 tcount[ext["name"]] = tcount.get(ext["name"], 0) + 1
             for tname, cnt in tcount.items():
                 match_info.append({"name": uf.filename, "template": tname,
@@ -1297,6 +1298,63 @@ def report_draft_download(rid: str):
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename="AI초안_보고서양식.xlsx")
+
+
+_REPORT_RESULT: dict[str, str] = {}   # 5번 '보고서 양식으로 정리' 결과 파일
+
+
+@app.post("/api/report/generate")
+def report_generate(payload: dict = Body(...)) -> JSONResponse:
+    """5번: 4번 일괄 처리 '결과'를 보고서 양식에 채워 정리한다(재추출 없음)."""
+    report_id = (payload.get("report_id") or "").strip()
+    edits = payload.get("edits") or {}
+    rows = _PDF_APPLY.get("rows") or []
+    if not rows:
+        return JSONResponse(
+            {"error": "먼저 4번 일괄 처리를 실행하세요 — 그 결과로 보고서를 만듭니다."},
+            status_code=400)
+    src = _REPORT_DOCS.get(report_id)
+    if not src:
+        return JSONResponse(
+            {"error": "보고서 양식을 먼저 올리거나 AI 초안을 만들어 주세요."},
+            status_code=400)
+
+    req_dir = config.UPLOAD_DIR / ("rptgen_" + uuid.uuid4().hex[:8])
+    req_dir.mkdir(parents=True, exist_ok=True)
+    tpl_path = str(req_dir / "_tpl_edited.xlsx")
+    try:
+        from core.report import build_report_workbook, save_with_edits
+        save_with_edits(src, edits, tpl_path)
+        fields = _PDF_APPLY.get("fields") or []
+        if not fields:  # 자동 분류 결과 — 그룹 필드 합집합(순서 보존)
+            for g in _PDF_APPLY.get("groups") or []:
+                for f in g.get("fields", []):
+                    if f not in fields:
+                        fields.append(f)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_path = config.OUTPUT_DIR / f"현장조사표_보고서_{stamp}.xlsx"
+        sheet_field = ("_제목" if any((r.get("_제목") or "").strip() for r in rows)
+                       else None)
+        build_report_workbook(tpl_path, rows, fields, str(excel_path),
+                              sheet_name_field=sheet_field)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"보고서 양식 처리 실패(엑셀 양식이 맞는지 확인): {e}"},
+                            status_code=400)
+    _REPORT_RESULT["path"] = str(excel_path)
+    return JSONResponse({"ok": True, "rows": len(rows),
+                         "download": "/api/report/result"})
+
+
+@app.get("/api/report/result")
+def report_result():
+    path = _REPORT_RESULT.get("path")
+    if not path or not Path(path).exists():
+        return JSONResponse({"error": "정리된 보고서가 없습니다. 먼저 실행하세요."},
+                            status_code=404)
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=Path(path).name)
 
 
 @app.post("/api/report/load")

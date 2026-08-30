@@ -488,10 +488,7 @@ async function runApply(files, opts) {
   fd.append("sheet_name_field", "__group_title__");
   fd.append("auto_classify", "1");
   if (DOC_ID) fd.append("doc_id", DOC_ID);   // 현재 양식의 제목 텍스트(분류 기준)용
-  if (REPORT.report_id) {
-    fd.append("report_id", REPORT.report_id);
-    fd.append("report_edits", JSON.stringify(REPORT.edits));
-  }
+  // 보고서 양식은 4번에서 쓰지 않는다 — 5번 '보고서 양식으로 정리'가 결과를 채운다
   try {
     const d = await (await fetch("/api/pdf/apply", { method: "POST", body: fd })).json();
     if (d.error) throw new Error(d.error);
@@ -507,16 +504,20 @@ async function runApply(files, opts) {
 
 $("applyBtn").addEventListener("click", () => runApply($("applyInput").files));
 
-// 5번(보고서 양식)에서 바로 일괄 처리 — 4번에 파일이 있으면 그대로, 없으면 즉시 선택창
-$("applyBtn2").addEventListener("click", () => {
-  const picked = $("applyInput").files;
-  if (picked && picked.length) { runApply(picked, { scrollToResult: true }); return; }
-  $("applyInput2").click();
-});
-$("applyInput2").addEventListener("change", () => {
-  const fs = $("applyInput2").files;
-  if (fs && fs.length) runApply(fs, { scrollToResult: true });
-  $("applyInput2").value = "";
+// 5번: 4번 일괄 처리 '결과'를 보고서 양식에 채워 정리 → 다운로드 (재추출 없음)
+$("rptGenBtn").addEventListener("click", async () => {
+  if (!REPORT.report_id) { alert("먼저 보고서 양식을 올리거나 AI 초안을 만드세요."); return; }
+  showOverlay("보고서 양식으로 정리하는 중…");
+  try {
+    const d = await (await fetch("/api/report/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report_id: REPORT.report_id, edits: REPORT.edits }),
+    })).json();
+    if (d.error) throw new Error(d.error);
+    $("rptGenMsg").textContent = `✅ ${d.rows}행을 양식에 채웠습니다 — 아래에서 다운로드하세요.`;
+    $("rptGenDl").hidden = false;
+  } catch (e) { alert("보고서 정리 실패: " + e.message); }
+  finally { hideOverlay(); }
 });
 // ---------- 보고서 양식 편집기 ----------
 let REPORT = { report_id: null, cells: [], nrows: 0, ncols: 0, edits: {}, focusCell: null };

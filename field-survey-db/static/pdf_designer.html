@@ -117,7 +117,7 @@
 
         <div class="step-card">
           <h2>5. 보고서 출력 양식 <span class="pill">선택</span></h2>
-          <p class="desc">엑셀 양식(.xlsx)을 올리면 <b>미리보기·편집</b>이 뜹니다. <b>먼저 올린 뒤 위 4번 일괄 처리를 실행</b>하면 그 양식으로 출력됩니다. 수식 <b>=B3+B4</b>는 그대로 보존.</p>
+          <p class="desc">위 <b>4번 일괄 처리를 먼저 실행</b>한 뒤 — 엑셀 양식(.xlsx)을 올리면 <b>미리보기·편집</b>이 뜨고, <b>‘보고서 양식으로 정리’</b>를 누르면 4번 결과가 그 양식에 채워져 다운로드됩니다. 수식 <b>=B3+B4</b>는 그대로 보존.</p>
           <p class="desc" style="background:#f1f3f5;border-radius:8px;padding:8px 10px">
             • <b>{하천명}</b> — 조사표마다 <b>개별 시트</b> 1장씩 (각 시트에 그 조사표 값)<br>
             • <b>{하천명#2}</b> — <b>한 시트</b>에서 <b>2번째</b> 조사표를 참조(종합·비교표) → 순번은 요약(DB)/파일 순서
@@ -139,9 +139,9 @@
             <div class="rpt-scroll"><table class="rpt-grid" id="rptGrid"></table></div>
           </div>
           <div id="rptRunRow" hidden>
-            <input type="file" id="applyInput2" accept=".hwpx,.hwp,.pdf" multiple hidden />
-            <button class="btn btn-download" id="applyBtn2">▶ 이 양식으로 일괄 처리 — 조사표 선택 후 바로 실행</button>
-            <p class="muted" style="margin-top:6px">4번에서 이미 파일을 골라 두었다면 그 파일로, 아니면 지금 조사표 파일들을 선택하면 곧바로 추출·엑셀 생성이 실행됩니다.</p>
+            <button class="btn btn-download" id="rptGenBtn">📊 보고서 양식으로 정리 — 4번 결과를 이 양식에 채우기</button>
+            <a id="rptGenDl" class="draft-dl" href="/api/report/result" hidden>📥 정리된 보고서 다운로드</a>
+            <p class="muted" id="rptGenMsg" style="margin-top:6px"></p>
           </div>
         </div>
 

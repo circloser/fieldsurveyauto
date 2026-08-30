@@ -245,3 +245,45 @@ def test_booklet_template_splits_per_page(tmp_path, monkeypatch):
     vals_w = [c.value for row in wb["습지 조사표 1"].iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals_r and "오십천" in vals_r
     assert "묵논습지" in vals_w and "산들습지" in vals_w
+
+
+def test_report_generate_from_batch_result(tmp_path):
+    """5번 새 로직 — 4번 일괄 처리 결과를 보고서 양식에 채워 정리(재추출 없음)."""
+    import io
+    from openpyxl import Workbook, load_workbook
+
+    # ① 4번 일괄 처리 실행(제목 있는 조사표 2건)
+    base = tmp_path / "base.pdf"
+    _draw_form(base, [("하천명", "한천"), ("보길이", "30")], y_top=60, title="하천 조사표")
+    a = tmp_path / "a.pdf"
+    _draw_form(a, [("하천명", "가곡천"), ("보길이", "25")], y_top=60, title="하천 조사표")
+    b = tmp_path / "b.pdf"
+    _draw_form(b, [("하천명", "오십천"), ("보길이", "18")], y_top=60, title="하천 조사표")
+    r = _apply([("a.pdf", a), ("b.pdf", b)], _boxes_for(base))
+    assert r.status_code == 200 and r.json()["ok_count"] == 2
+
+    # ② 보고서 양식 업로드({하천명} 자리표시자)
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "하천 이름"
+    ws["B1"] = "{하천명}"
+    tpl = tmp_path / "rpt_tpl.xlsx"
+    wb.save(str(tpl))
+    with tpl.open("rb") as f:
+        lr = client.post("/api/report/load", files={"file": ("rpt.xlsx", f,
+                         "application/octet-stream")})
+    rid = lr.json()["report_id"]
+
+    # ③ 정리 실행 → 다운로드 (4번 재실행 없이)
+    g = client.post("/api/report/generate", json={"report_id": rid, "edits": {}})
+    assert g.status_code == 200, g.text
+    assert g.json()["rows"] == 2
+    dl = client.get("/api/report/result")
+    assert dl.status_code == 200
+    out = load_workbook(io.BytesIO(dl.content))
+    assert out.sheetnames[0] == "요약(DB)"
+    # 조사표마다 개별 시트 — 제목 값으로 시트 이름
+    assert any("하천 조사표" in sn for sn in out.sheetnames[1:])
+    filled = [ws2["B1"].value for sn in out.sheetnames[1:]
+              for ws2 in [out[sn]] if ws2["B1"].value not in (None, "{하천명}")]
+    assert "가곡천" in filled and "오십천" in filled
