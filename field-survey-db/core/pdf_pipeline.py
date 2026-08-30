@@ -322,6 +322,32 @@ def detect_title(pdf_path: str, page_no: int) -> dict | None:
     for s in big:
         lines.setdefault(round(s[0][1] / 6), []).append(s)
     best = max(lines.values(), key=lambda row: (max(x[1] for x in row), -min(x[0][1] for x in row)))
+    # 같은 줄의 잘린 조각 흡수 — 제목 끝 숫자('조사표 1')가 별도 span(다른 폰트·
+    # 살짝 작은 크기)으로 렌더되면 큰 글씨 기준에서 빠지므로, 세로로 겹치고
+    # 바로 옆(글자 1.5개 이내)이며 크기가 제목의 60% 이상인 span을 이어붙인다.
+    line_size = max(x[1] for x in best)
+    picked = set(id(x) for x in best)
+    changed = True
+    while changed:
+        changed = False
+        y_top = min(x[0][1] for x in best)
+        y_bot = max(x[0][3] for x in best)
+        x_l = min(x[0][0] for x in best)
+        x_r = max(x[0][2] for x in best)
+        gap = line_size * 1.5
+        for s in spans:
+            if id(s) in picked:
+                continue
+            (sx0, sy0, sx1, sy1), ssz, _ = s
+            if ssz < line_size * 0.6:
+                continue
+            if sy0 >= y_bot or sy1 <= y_top:      # 세로로 같은 줄이 아님
+                continue
+            if sx0 > x_r + gap or sx1 < x_l - gap:  # 가로로 붙어있지 않음
+                continue
+            best.append(s)
+            picked.add(id(s))
+            changed = True
     best.sort(key=lambda x: x[0][0])
     text = normalize(" ".join(x[2] for x in best))
     if len(text) < 2:

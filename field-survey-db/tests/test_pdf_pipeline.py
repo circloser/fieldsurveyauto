@@ -288,3 +288,31 @@ def test_bold_and_field_order(doc):
     vals = apply_pixel_template(doc.pages, boxes)
     assert vals["기상"] == "흐림"  # 굵게만
     assert vals["하천"] == "해남천"
+
+
+def test_detect_title_keeps_trailing_number(tmp_path):
+    """제목 끝 숫자가 별도 span(작은 크기·다른 폰트)이어도 잘리지 않는다.
+
+    한글 서식 PDF에서 '조사표 1'의 '1'이 라틴 폰트의 별도 span으로,
+    본문 대비 1.25배 기준에 못 미치는 크기로 렌더되는 실제 사례를 재현.
+    """
+    import fitz
+    from core.pdf_pipeline import detect_title
+
+    path = tmp_path / "titled_num.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=500)
+    font = fitz.Font("cjk")
+    tw = fitz.TextWriter(page.rect)
+    tw.append((60, 34), "습지 조사표", font=font, fontsize=18)
+    tw.append((162, 34), "2", font=font, fontsize=12)      # 꼬리 숫자 — 별도·작게
+    tw.append((330, 34), "7", font=font, fontsize=12)      # 멀리 떨어진 쪽번호(흡수 금지)
+    for i, txt in enumerate(["하천명 해남천", "관리기관 전남", "보길이 30"]):
+        tw.append((40, 80 + i * 24), txt, font=font, fontsize=10)
+    tw.write_text(page)
+    doc.save(str(path))
+    doc.close()
+
+    t = detect_title(str(path), 0)
+    assert t is not None
+    assert t["text"] == "습지 조사표 2"   # 꼬리 숫자 포함, 먼 쪽번호는 제외
