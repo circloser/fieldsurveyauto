@@ -189,3 +189,59 @@ def test_page_level_classify_title_only(tmp_path, monkeypatch):
     assert set(wb.sheetnames) == {"하천 조사표 5", "습지 조사표 5"}
     vals = [c.value for row in wb["하천 조사표 5"].iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals   # 라벨이 달라도 좌표 폴백으로 값까지 추출
+
+
+def test_booklet_template_splits_per_page(tmp_path, monkeypatch):
+    """묶음집 템플릿(쪽마다 제목이 다른 소양식) — 입력 페이지 하나가 1행이 되고,
+    쪽 제목별 시트로 나뉜다(사용자 실사례: 9쪽 묶음집 × 반복 세트)."""
+    import app.main as app_main
+    import fitz
+    from core.pdf_pipeline import suggest_from_cells
+
+    # 2쪽짜리 묶음집 템플릿: 쪽마다 제목·라벨이 다르다
+    pa = tmp_path / "ta.pdf"
+    _draw_form(pa, [("하천명", ""), ("보길이", "")], y_top=60, title="하천 조사표")
+    pb = tmp_path / "tb.pdf"
+    _draw_form(pb, [("습지명", ""), ("수심", "")], y_top=60, title="습지 조사표")
+    tpl = tmp_path / "tpl_booklet.pdf"
+    m = fitz.open()
+    for p in (pa, pb):
+        src = fitz.open(str(p)); m.insert_pdf(src); src.close()
+    m.save(str(tpl)); m.close()
+    boxes = suggest_from_cells(str(tpl), 0) + suggest_from_cells(str(tpl), 1)
+    assert {int(b.get("page", 0)) for b in boxes} == {0, 1}
+
+    store = _FakeStore({"묶음집": {"name": "묶음집", "boxes": boxes}})
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    # 입력: [하천, 습지] 세트 × 2 (4쪽) — 값은 세트마다 다르게
+    pages = []
+    for i, (river, wet) in enumerate([("가곡천", "묵논습지"), ("오십천", "산들습지")]):
+        r = tmp_path / f"in_r{i}.pdf"
+        _draw_form(r, [("하천명", river), ("보길이", "25")], y_top=60, title="하천 조사표 1")
+        w = tmp_path / f"in_w{i}.pdf"
+        _draw_form(w, [("습지명", wet), ("수심", "3")], y_top=60, title="습지 조사표 1")
+        pages += [r, w]
+    mixed = tmp_path / "mixed_booklet.pdf"
+    m = fitz.open()
+    for p in pages:
+        src = fitz.open(str(p)); m.insert_pdf(src); src.close()
+    m.save(str(mixed)); m.close()
+
+    r = _apply([("mixed.pdf", mixed)], [])
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok_count"] == 4                       # 페이지 1장 = 1행
+    assert d["forms"] == 2
+    assert {g["form"] for g in d["by_form"]} == {"하천 조사표 1", "습지 조사표 1"}
+    assert all(g["count"] == 2 for g in d["by_form"])
+
+    import io
+    from openpyxl import load_workbook
+    dl = client.get("/api/pdf/download")
+    wb = load_workbook(io.BytesIO(dl.content))
+    vals_r = [c.value for row in wb["하천 조사표 1"].iter_rows(min_row=2) for c in row]
+    vals_w = [c.value for row in wb["습지 조사표 1"].iter_rows(min_row=2) for c in row]
+    assert "가곡천" in vals_r and "오십천" in vals_r
+    assert "묵논습지" in vals_w and "산들습지" in vals_w

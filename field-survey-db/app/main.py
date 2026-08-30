@@ -883,27 +883,57 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 out.setdefault(int(b.get("page", 0)), set()).add(k)
         return out
 
+    def _page_title_of(pdf_path, pno: int) -> str:
+        try:
+            t = detect_title(str(pdf_path), pno)
+            return (t.get("text") or "").strip() if t else ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _mk_template(name: str, boxes: list[dict], tpdf) -> dict:
+        bx, flds = _dedup_box_fields(boxes)
+        tpages = sorted({int(b.get("page", 0)) for b in bx})
+        # 템플릿 페이지별 제목 — 여러 쪽에 제목이 있으면 '쪽 = 소양식' 묶음집이다
+        ptitles = {tp: (_page_title_of(tpdf, tp) if tpdf else "") for tp in tpages}
+        return {"name": name, "boxes": bx, "fields": flds,
+                "title": next((v for v in ptitles.values() if v), ""),
+                "labels": _label_sets(bx),
+                "page_titles": ptitles,
+                "multi": sum(1 for v in ptitles.values() if v) >= 2,
+                "npages": max(1, len(tpages))}
+
     templates: list[dict] = []
     if box_list:  # 화면에서 편집 중인 박스를 첫 후보로 — 단일 양식 사용자는 항상 이걸로 추출됨
-        bx, flds = _dedup_box_fields(box_list)
-        templates.append({"name": "현재 양식", "boxes": bx, "fields": flds,
-                          "title": _pdf_title_text(cur_pdf_path) if cur_pdf_path else "",
-                          "labels": _label_sets(bx),
-                          "npages": max(1, len({int(b["page"]) for b in bx}))})
+        templates.append(_mk_template("현재 양식", box_list, cur_pdf_path))
     for name in _TEMPLATES.list_names():
         t = _TEMPLATES.get(name)
         if not t or not t.get("boxes"):
             continue
-        bx, flds = _dedup_box_fields(t["boxes"])
         tpdf = _tpl_pdf_path(name)
-        templates.append({"name": t["name"], "boxes": bx, "fields": flds,
-                          "title": _pdf_title_text(tpdf) if tpdf.exists() else "",
-                          "labels": _label_sets(bx),
-                          "npages": max(1, len({int(b["page"]) for b in bx}))})
+        templates.append(_mk_template(t["name"], t["boxes"],
+                                      tpdf if tpdf.exists() else None))
     if not templates:
         return JSONResponse(
             {"error": "추출할 박스가 없습니다. 양식을 올려 박스를 만들거나 템플릿을 저장하세요."},
             status_code=400)
+
+    # 분류 단위: 묶음집(multi) 템플릿은 '페이지 하나 = 소양식 하나'로 쪼개고,
+    # 일반 템플릿은 통째로 한 단위(묶음 추출 유지)
+    units: list[dict] = []
+    for T in templates:
+        if T["multi"]:
+            for tp, ptitle in T["page_titles"].items():
+                ub = [b for b in T["boxes"] if int(b.get("page", 0)) == tp]
+                if not ub:
+                    continue
+                units.append({"kind": "page", "T": T, "tp": tp,
+                              "title": ptitle,
+                              "labels": T["labels"].get(tp, set()),
+                              "boxes": ub,
+                              "fields": [b["field"] for b in
+                                         sorted(ub, key=lambda z: z.get("order", 0))]})
+        else:
+            units.append({"kind": "whole", "T": T, "title": T["title"]})
 
     groups: dict[str, dict] = {}  # 제목 값 → {"label", "fields", "rows"}
     failed, match_info = [], []
@@ -925,35 +955,52 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                         ptitle[ip] = ""
                 return ptitle[ip]
 
-            # ① 페이지 단위 배정 — 페이지마다 모든 템플릿과 대조해 가장 유사한 쪽으로.
-            #    제목 유사(페이지 큰 글씨 vs 양식 PDF 제목·템플릿 이름)가 갈라주고,
-            #    라벨(표 칸 이름) 일치율이 받쳐준다.
+            # ① 페이지 단위 배정 — 페이지마다 모든 분류 단위(소양식 쪽·전체 템플릿)와
+            #    대조해 가장 유사한 쪽으로. 제목 유사가 갈라주고 라벨 일치율이 받쳐준다.
             page_text = {p.page_no: normalize_key("".join(w.text for w in p.words))
                          for p in doc.pages}
-            by_tpl: dict[str, list[int]] = {}
+
+            def _lbl_hit(labels: set, text: str) -> float:
+                if not labels:
+                    return 0.0
+                return sum(1 for l in labels if l in text) / len(labels)
+
+            page_assign: dict[int, dict] = {}
             unmatched: list[int] = []
             for ip, text in page_text.items():
                 pt = page_title(ip)
-                best_T, best_sc, best_ts, best_ls = None, -1.0, 0.0, 0.0
-                for T in templates:
-                    tsim = max(_title_sim(pt, T["title"]), _title_sim(pt, T["name"]))
-                    lbest = 0.0
-                    for labels in T["labels"].values():
-                        if labels:
-                            lbest = max(lbest, sum(1 for l in labels if l in text)
-                                        / len(labels))
+                best_u, best_sc, best_ts, best_ls = None, -1.0, 0.0, 0.0
+                for u in units:
+                    T = u["T"]
+                    if u["kind"] == "page":
+                        tsim = _title_sim(pt, u["title"])
+                        lbest = _lbl_hit(u["labels"], text)
+                    else:
+                        tsim = max(_title_sim(pt, T["title"]),
+                                   _title_sim(pt, T["name"]))
+                        lbest = max((_lbl_hit(ls, text)
+                                     for ls in T["labels"].values()), default=0.0)
                     sc = 0.6 * tsim + 0.4 * lbest
                     if sc > best_sc:
-                        best_T, best_sc, best_ts, best_ls = T, sc, tsim, lbest
-                if best_T is not None and (best_ts >= 0.55 or best_ls >= 0.35):
-                    by_tpl.setdefault(best_T["name"], []).append(ip)
+                        best_u, best_sc, best_ts, best_ls = u, sc, tsim, lbest
+                if best_u is not None and (best_ts >= 0.55 or best_ls >= 0.35):
+                    page_assign[ip] = best_u
                 else:
                     unmatched.append(ip)
 
-            # ② 템플릿별로 자기 페이지 안에서 묶음(조사표) 구성 → 추출 대상 확정
+            # ② 추출 대상 확정 — 소양식 쪽은 '페이지 1장 = 1행',
+            #    전체 템플릿은 배정된 페이지 안에서 묶음(조사표) 구성
+            accepted = []  # (첫 페이지, {name, boxes, fields, title}, page_map)
+            by_whole: dict[str, list[int]] = {}
+            for ip, u in page_assign.items():
+                if u["kind"] == "page":
+                    accepted.append((ip, {"name": u["T"]["name"], "boxes": u["boxes"],
+                                          "fields": u["fields"], "title": u["title"]},
+                                     {u["tp"]: ip}))
+                else:
+                    by_whole.setdefault(u["T"]["name"], []).append(ip)
             tpl_by_name = {T["name"]: T for T in templates}
-            accepted = []
-            for tname, ips in by_tpl.items():
+            for tname, ips in by_whole.items():
                 T = tpl_by_name[tname]
                 sub_pages = [p for p in doc.pages if p.page_no in ips]
                 try:
@@ -970,13 +1017,19 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                         maps.append(dict(zip(tps, chunk)))
                 for pm in maps:
                     if pm:
-                        accepted.append((min(pm.values()), T, pm))
+                        accepted.append((min(pm.values()),
+                                         {"name": T["name"], "boxes": T["boxes"],
+                                          "fields": T["fields"], "title": T["title"]},
+                                         pm))
             if not accepted and box_list:
                 # 어떤 템플릿과도 못 맞춘 파일 — 현재 양식으로라도 추출(기존 동작 유지)
                 cur = templates[0]
                 maps = (match_bundles(cur["boxes"], doc.pages)
                         or [match_pages(cur["boxes"], doc.pages)])
-                accepted = [(min(pm.values()) if pm else 0, cur, pm) for pm in maps]
+                accepted = [(min(pm.values()) if pm else 0,
+                             {"name": cur["name"], "boxes": cur["boxes"],
+                              "fields": cur["fields"], "title": cur["title"]}, pm)
+                            for pm in maps]
             if not accepted:
                 failed.append({"name": uf.filename,
                                "error": "맞는 템플릿을 찾지 못했습니다(제목·라벨 모두 불일치)."})
@@ -984,25 +1037,25 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
 
             accepted.sort(key=lambda a: a[0])  # 문서 순서대로 행 생성
             tcount: dict[str, int] = {}
-            for bi, (first_ip, T, page_map) in enumerate(accepted, start=1):
-                row = apply_pixel_template(doc.pages, T["boxes"], page_map=page_map,
+            for bi, (first_ip, ext, page_map) in enumerate(accepted, start=1):
+                row = apply_pixel_template(doc.pages, ext["boxes"], page_map=page_map,
                                            pdf_path=pdf_path)
                 fname = uf.filename if len(accepted) == 1 else f"{uf.filename} #{bi}"
-                # 시트 제목: 제목 박스 값 → 그 묶음 첫 페이지 큰 글씨 → 템플릿 제목
-                title_field = next((b["field"] for b in sorted(T["boxes"],
+                # 시트 제목: 제목 박스 값 → 그 묶음 첫 페이지 큰 글씨 → 템플릿(쪽) 제목
+                title_field = next((b["field"] for b in sorted(ext["boxes"],
                                                                key=lambda z: z.get("order", 0))
                                     if b.get("mode") == "title"), None)
                 title = (row.get(title_field) or "").strip() if title_field else ""
                 if not title:
                     title = page_title(first_ip) if page_map else ""
                 if not title:
-                    title = T["title"]
+                    title = ext["title"]
                 g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
-                for fld in T["fields"]:
+                for fld in ext["fields"]:
                     if fld not in g["fields"]:
                         g["fields"].append(fld)
                 g["rows"].append({"_파일명": fname, **row})
-                tcount[T["name"]] = tcount.get(T["name"], 0) + 1
+                tcount[ext["name"]] = tcount.get(ext["name"], 0) + 1
             for tname, cnt in tcount.items():
                 match_info.append({"name": uf.filename, "template": tname,
                                    "bundles": cnt})
