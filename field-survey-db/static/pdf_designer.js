@@ -762,3 +762,33 @@ loadTemplates();
     }
   } catch (e) {}
 })();
+
+// ── 발표 모드(시연용 간소화) — 우하단 버튼 또는 F9로 토글, 새로고침해도 유지 ──
+(function () {
+  const KEY = "autodata_demo_mode";
+  const btn = document.createElement("button");
+  btn.id = "demoToggle";
+  btn.type = "button";
+  document.body.appendChild(btn);
+
+  function setDemo(on) {
+    document.body.classList.toggle("demo-mode", on);
+    btn.textContent = on ? "발표 모드 끄기 (F9)" : "🎬 발표 모드 (F9)";
+    btn.title = on ? "안내 문구를 다시 표시합니다"
+                   : "시연용 화면 — 안내 문구를 숨기고 핵심만 남깁니다";
+    try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (e) {}
+  }
+  function toggle() { setDemo(!document.body.classList.contains("demo-mode")); }
+
+  btn.addEventListener("click", toggle);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F9") { e.preventDefault(); toggle(); }
+  });
+
+  let on = false;
+  try { on = localStorage.getItem(KEY) === "1"; } catch (e) {}
+  const q = new URLSearchParams(location.search).get("demo");
+  if (q === "1") on = true;
+  if (q === "0") on = false;
+  setDemo(on);
+})();
