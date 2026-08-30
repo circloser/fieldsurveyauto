@@ -833,22 +833,59 @@ def _best_template(pages: list, templates: list[dict]) -> tuple[dict | None, flo
     return best, best_score
 
 
+def _title_sim(a: str, b: str) -> float:
+    """제목 유사도 0~1 — 공백 무시. 한쪽이 다른 쪽을 포함하면 0.9(예: '하천 조사표 1'
+    vs '하천 조사표'), 그 외에는 문자열 유사율."""
+    import difflib
+    from core.normalize import normalize_key
+    ka, kb = normalize_key(a), normalize_key(b)
+    if not ka or not kb:
+        return 0.0
+    if ka == kb:
+        return 1.0
+    if ka in kb or kb in ka:
+        return 0.9
+    return difflib.SequenceMatcher(None, ka, kb).ratio()
+
+
+def _pdf_title_text(pdf_path, max_pages: int = 3) -> str:
+    """PDF 앞쪽 페이지에서 처음 발견되는 큰 글씨 제목(양식의 제목 텍스트)."""
+    from core.pdf_pipeline import detect_title
+    for pno in range(max_pages):
+        try:
+            t = detect_title(str(pdf_path), pno)
+        except Exception:  # noqa: BLE001  (페이지 범위 밖 등)
+            return ""
+        if t and t.get("text"):
+            return t["text"]
+    return ""
+
+
 def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
-                    box_list: list[dict] | None = None) -> JSONResponse:
-    """기본 일괄 처리: 파일마다 맞는 양식(현재 박스 + 저장 템플릿)을 자동 대조해 추출하고,
-    제목(큰 글씨) 값이 같은 조사표끼리 한 시트로 묶는다. 제목이 없으면 시트 하나."""
+                    box_list: list[dict] | None = None,
+                    cur_pdf_path: str | None = None) -> JSONResponse:
+    """기본 일괄 처리: 조사표 묶음마다 맞는 양식을 고른다.
+
+    한 파일 안에 서로 다른 양식이 섞여 있어도, 묶음(조사표)마다 후보 템플릿을
+    대조한다 — 입력 문서의 제목(큰 글씨)이 템플릿 양식의 제목과 유사하면 그 양식
+    (제목 우선), 아니면 라벨 일치율로 판단. 시트는 제목 값별로 나뉜다."""
     from core.analysis import find_outliers
     from core.pdf_pipeline import detect_title
     templates: list[dict] = []
     if box_list:  # 화면에서 편집 중인 박스를 첫 후보로 — 단일 양식 사용자는 항상 이걸로 추출됨
         bx, flds = _dedup_box_fields(box_list)
-        templates.append({"name": "현재 양식", "boxes": bx, "fields": flds})
+        templates.append({"name": "현재 양식", "boxes": bx, "fields": flds,
+                          "title": _pdf_title_text(cur_pdf_path) if cur_pdf_path else "",
+                          "npages": max(1, len({int(b["page"]) for b in bx}))})
     for name in _TEMPLATES.list_names():
         t = _TEMPLATES.get(name)
         if not t or not t.get("boxes"):
             continue
         bx, flds = _dedup_box_fields(t["boxes"])
-        templates.append({"name": t["name"], "boxes": bx, "fields": flds})
+        tpdf = _tpl_pdf_path(name)
+        templates.append({"name": t["name"], "boxes": bx, "fields": flds,
+                          "title": _pdf_title_text(tpdf) if tpdf.exists() else "",
+                          "npages": max(1, len({int(b["page"]) for b in bx}))})
     if not templates:
         return JSONResponse(
             {"error": "추출할 박스가 없습니다. 양식을 올려 박스를 만들거나 템플릿을 저장하세요."},
@@ -863,34 +900,79 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
         try:
             pdf_path = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
             doc = read_pdf(pdf_path)
-            best, score = _best_template(doc.pages, templates)
-            if not best or score < 0.34:
-                if box_list:  # 대조 실패여도 현재 양식으로는 추출(기존 단일 양식 동작 유지)
-                    best = templates[0]
-                else:
-                    failed.append({"name": uf.filename,
-                                   "error": f"맞는 템플릿을 찾지 못했습니다(최고 일치 {score:.0%})."})
+
+            ptitle: dict[int, str] = {}
+            def page_title(ip: int) -> str:
+                if ip not in ptitle:
+                    try:
+                        t = detect_title(pdf_path, ip)
+                        ptitle[ip] = (t.get("text") or "").strip() if t else ""
+                    except Exception:  # noqa: BLE001
+                        ptitle[ip] = ""
+                return ptitle[ip]
+
+            # 모든 템플릿의 묶음 후보를 모아 점수순으로 페이지를 배정
+            # (제목 유사 0.6 + 라벨 일치 0.4 — 제목이 갈라주고 라벨이 받쳐준다)
+            cands = []
+            for T in templates:
+                try:
+                    maps = match_bundles(T["boxes"], doc.pages)
+                except Exception:  # noqa: BLE001
+                    maps = []
+                for pm in maps:
+                    if not pm:
+                        continue
+                    first_ip = min(pm.values())
+                    tsim = _title_sim(page_title(first_ip), T["title"])
+                    lscore = len(pm) / T["npages"]
+                    cands.append((0.6 * tsim + 0.4 * lscore, tsim, lscore,
+                                  first_ip, T, pm))
+            cands.sort(key=lambda c: -c[0])
+            taken: set[int] = set()
+            accepted = []
+            for _, tsim, lscore, first_ip, T, pm in cands:
+                used = set(pm.values())
+                if used & taken:
                     continue
-            maps = match_bundles(best["boxes"], doc.pages) or [match_pages(best["boxes"], doc.pages)]
-            title_field = next((b["field"] for b in sorted(best["boxes"],
-                                                           key=lambda z: z.get("order", 0))
-                                if b.get("mode") == "title"), None)
-            for bi, page_map in enumerate(maps, start=1):
-                row = apply_pixel_template(doc.pages, best["boxes"], page_map=page_map,
+                if tsim < 0.55 and lscore < 0.34:  # 제목도 라벨도 근거 없음
+                    continue
+                accepted.append((first_ip, T, pm))
+                taken |= used
+            if not accepted and box_list:
+                # 어떤 템플릿과도 못 맞춘 파일 — 현재 양식으로라도 추출(기존 동작 유지)
+                cur = templates[0]
+                maps = (match_bundles(cur["boxes"], doc.pages)
+                        or [match_pages(cur["boxes"], doc.pages)])
+                accepted = [(min(pm.values()) if pm else 0, cur, pm) for pm in maps]
+            if not accepted:
+                failed.append({"name": uf.filename,
+                               "error": "맞는 템플릿을 찾지 못했습니다(제목·라벨 모두 불일치)."})
+                continue
+
+            accepted.sort(key=lambda a: a[0])  # 문서 순서대로 행 생성
+            tcount: dict[str, int] = {}
+            for bi, (first_ip, T, page_map) in enumerate(accepted, start=1):
+                row = apply_pixel_template(doc.pages, T["boxes"], page_map=page_map,
                                            pdf_path=pdf_path)
-                fname = uf.filename if len(maps) == 1 else f"{uf.filename} #{bi}"
+                fname = uf.filename if len(accepted) == 1 else f"{uf.filename} #{bi}"
+                # 시트 제목: 제목 박스 값 → 그 묶음 첫 페이지 큰 글씨 → 템플릿 제목
+                title_field = next((b["field"] for b in sorted(T["boxes"],
+                                                               key=lambda z: z.get("order", 0))
+                                    if b.get("mode") == "title"), None)
                 title = (row.get(title_field) or "").strip() if title_field else ""
-                if not title:  # 제목 박스가 없거나 비면 문서의 큰 글씨를 감지해 폴백
-                    first_ip = min(page_map.values()) if page_map else 0
-                    t = detect_title(pdf_path, first_ip)
-                    title = (t.get("text") or "").strip() if t else ""
+                if not title:
+                    title = page_title(first_ip) if page_map else ""
+                if not title:
+                    title = T["title"]
                 g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
-                for fld in best["fields"]:
+                for fld in T["fields"]:
                     if fld not in g["fields"]:
                         g["fields"].append(fld)
                 g["rows"].append({"_파일명": fname, **row})
-            match_info.append({"name": uf.filename, "template": best["name"],
-                               "score": round(score, 2), "bundles": len(maps)})
+                tcount[T["name"]] = tcount.get(T["name"], 0) + 1
+            for tname, cnt in tcount.items():
+                match_info.append({"name": uf.filename, "template": tname,
+                                   "bundles": cnt})
         except Exception as e:  # noqa: BLE001
             failed.append({"name": uf.filename, "error": str(e)})
 
@@ -925,6 +1007,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
 async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
                     report_id: str = Form(""), report_edits: str = Form(""),
                     sheet_name_field: str = Form(""), auto_classify: str = Form(""),
+                    doc_id: str = Form(""),
                     report_template: UploadFile | None = None) -> JSONResponse:
     import json as _json
     auto = auto_classify.strip().lower() in ("1", "true", "on", "yes")
@@ -943,7 +1026,9 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
     has_report = bool(report_id) or (report_template is not None
                                      and bool(report_template.filename))
     if auto and not has_report:
-        return _pdf_apply_auto(files, req_dir, stamp0, box_list)
+        entry = _PDF_DOCS.get(doc_id) if doc_id else None
+        cur_pdf = entry["pdf_path"] if entry else None
+        return _pdf_apply_auto(files, req_dir, stamp0, box_list, cur_pdf)
 
     # 중복 이름은 접미사로 유일화(엑셀 열 충돌 방지). 사용자가 이름을 안 바꾼 경우 대비.
     box_list, fields = _dedup_box_fields(box_list)

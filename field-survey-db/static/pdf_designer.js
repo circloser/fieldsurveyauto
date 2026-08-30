@@ -487,6 +487,7 @@ async function runApply(files, opts) {
   // 기본 동작: 양식 자동 대조 + 제목별 시트(제목 없으면 시트 하나). 서버가 보고서 양식(5번) 사용 시 기존 경로로 처리.
   fd.append("sheet_name_field", "__group_title__");
   fd.append("auto_classify", "1");
+  if (DOC_ID) fd.append("doc_id", DOC_ID);   // 현재 양식의 제목 텍스트(분류 기준)용
   if (REPORT.report_id) {
     fd.append("report_id", REPORT.report_id);
     fd.append("report_edits", JSON.stringify(REPORT.edits));
@@ -625,7 +626,7 @@ function renderApplyAuto(d) {
   html += `</tbody></table>`;
   if (d.match_info && d.match_info.length) {
     html += `<p class="muted" style="margin-top:8px">🔎 분류 결과: `
-      + d.match_info.map((m) => `${m.name} → <b>${m.template}</b>(${Math.round((m.score || 0) * 100)}%)`).join(", ") + `</p>`;
+      + d.match_info.map((m) => `${m.name} → <b>${m.template}</b>` + ((m.bundles || 1) > 1 ? `×${m.bundles}` : ``)).join(", ") + `</p>`;
   }
   if (d.failed && d.failed.length) {
     html += `<p class="muted">⚠️ 미분류/실패: ` + d.failed.map((f) => `${f.name} (${f.error})`).join(", ") + `</p>`;
