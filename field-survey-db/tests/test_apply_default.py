@@ -139,3 +139,53 @@ def test_classify_bundles_by_title_similarity(tmp_path, monkeypatch):
     ws = wb["하천 조사표 1"]
     vals = [c.value for row in ws.iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals                   # 값도 맞는 시트에 들어간다
+
+
+def test_page_level_classify_title_only(tmp_path, monkeypatch):
+    """페이지 단위 대조 — 표 라벨이 템플릿과 달라도(라벨 근거 0) 페이지 제목이
+    템플릿 제목과 유사하면 그 양식으로 배정되어 제목별 시트로 정리된다."""
+    import app.main as app_main
+
+    tpl_a = tmp_path / "tpl_하천.pdf"
+    _draw_form(tpl_a, [("하천명", ""), ("보길이", "")], y_top=60, title="하천 조사표")
+    tpl_b = tmp_path / "tpl_습지.pdf"
+    _draw_form(tpl_b, [("습지명", ""), ("수심", "")], y_top=60, title="습지 조사표")
+    tpl_paths = {"하천": tpl_a, "습지": tpl_b}
+    store = _FakeStore({
+        "하천": {"name": "하천", "boxes": _boxes_for(tpl_a)},
+        "습지": {"name": "습지", "boxes": _boxes_for(tpl_b)},
+    })
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl_paths[name])
+
+    # 입력: 라벨이 다른(명칭/길이) 페이지들 — 제목만이 분류 근거
+    import fitz
+    p1 = tmp_path / "p1.pdf"
+    _draw_form(p1, [("명칭", "가곡천"), ("길이", "25")], y_top=60, title="하천 조사표 5")
+    p2 = tmp_path / "p2.pdf"
+    _draw_form(p2, [("명칭", "묵논습지"), ("길이", "12")], y_top=60, title="습지 조사표 5")
+    mixed = tmp_path / "mixed2.pdf"
+    m = fitz.open()
+    for p in (p1, p2):
+        src = fitz.open(str(p))
+        m.insert_pdf(src)
+        src.close()
+    m.save(str(mixed))
+    m.close()
+
+    r = _apply([("mixed2.pdf", mixed)], [])
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok_count"] == 2
+    assert d["forms"] == 2
+    assert {g["form"] for g in d["by_form"]} == {"하천 조사표 5", "습지 조사표 5"}
+    tpl_used = {m2["template"] for m2 in d["match_info"]}
+    assert tpl_used == {"하천", "습지"}
+
+    import io
+    from openpyxl import load_workbook
+    dl = client.get("/api/pdf/download")
+    wb = load_workbook(io.BytesIO(dl.content))
+    assert set(wb.sheetnames) == {"하천 조사표 5", "습지 조사표 5"}
+    vals = [c.value for row in wb["하천 조사표 5"].iter_rows(min_row=2) for c in row]
+    assert "가곡천" in vals   # 라벨이 달라도 좌표 폴백으로 값까지 추출
