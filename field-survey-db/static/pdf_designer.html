@@ -109,18 +109,7 @@
 
         <div class="step-card">
           <h2>4. 일괄 처리</h2>
-          <p class="desc">같은 양식 파일(hwpx·pdf) 여러 개 → 추출 → 엑셀(요약표 + 보고서). 결과에 <b>빈칸·이상치 요약</b>이 함께 표시됩니다.</p>
-          <div class="sheetname-row">
-            <label for="sheetNameSel">대상지별 시트 이름:</label>
-            <select id="sheetNameSel">
-              <option value="">사용 안 함 (요약표만)</option>
-            </select>
-          </div>
-          <p class="muted" style="margin:4px 0 8px">예: ‘하천명’을 고르면 파일마다 <b>그 값(대상지 이름)으로 된 시트</b>가 생깁니다. 아래 <b>5. 보고서 출력 양식</b>을 먼저 올리면 그 양식으로, 없으면 항목·값 표로 만듭니다.</p>
-          <label class="auto-classify-row" style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin:8px 0;padding:8px 10px;background:#f1f3f5;border-radius:8px;cursor:pointer">
-            <input type="checkbox" id="autoClassify" style="margin-top:2px">
-            <span>🗂️ <b>여러 양식 자동 분류</b> — 서로 다른 양식이 섞인 더미를 <b>저장된 템플릿들과 자동 대조</b>해 <b>양식별 시트</b>로 나눠 축적합니다. (켜면 위 박스 대신 저장된 템플릿을 사용)</span>
-          </label>
+          <p class="desc">조사표 파일(hwpx·pdf)들을 선택하고 버튼만 누르세요 — 양식을 자동으로 알아보고, <b>제목이 같은 조사표끼리 한 시트</b>로 정리합니다(제목이 없으면 시트 하나). 결과에 <b>빈칸·이상치 요약</b>이 함께 표시됩니다.</p>
           <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
           <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
           <div id="applyResult"></div>

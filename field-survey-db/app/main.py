@@ -833,10 +833,16 @@ def _best_template(pages: list, templates: list[dict]) -> tuple[dict | None, flo
     return best, best_score
 
 
-def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str) -> JSONResponse:
-    """여러 양식이 섞인 파일들을 저장된 템플릿에 자동 분류 → 양식별 시트 엑셀."""
+def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
+                    box_list: list[dict] | None = None) -> JSONResponse:
+    """기본 일괄 처리: 파일마다 맞는 양식(현재 박스 + 저장 템플릿)을 자동 대조해 추출하고,
+    제목(큰 글씨) 값이 같은 조사표끼리 한 시트로 묶는다. 제목이 없으면 시트 하나."""
     from core.analysis import find_outliers
+    from core.pdf_pipeline import detect_title
     templates: list[dict] = []
+    if box_list:  # 화면에서 편집 중인 박스를 첫 후보로 — 단일 양식 사용자는 항상 이걸로 추출됨
+        bx, flds = _dedup_box_fields(box_list)
+        templates.append({"name": "현재 양식", "boxes": bx, "fields": flds})
     for name in _TEMPLATES.list_names():
         t = _TEMPLATES.get(name)
         if not t or not t.get("boxes"):
@@ -845,10 +851,10 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str) -> JSONRespons
         templates.append({"name": t["name"], "boxes": bx, "fields": flds})
     if not templates:
         return JSONResponse(
-            {"error": "저장된 템플릿이 없습니다. 먼저 ‘템플릿 저장’으로 양식을 등록하세요."},
+            {"error": "추출할 박스가 없습니다. 양식을 올려 박스를 만들거나 템플릿을 저장하세요."},
             status_code=400)
 
-    buckets: dict[str, dict] = {}
+    groups: dict[str, dict] = {}  # 제목 값 → {"label", "fields", "rows"}
     failed, match_info = [], []
     for uf in files:
         dest = req_dir / (uf.filename or "unnamed")
@@ -859,43 +865,58 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str) -> JSONRespons
             doc = read_pdf(pdf_path)
             best, score = _best_template(doc.pages, templates)
             if not best or score < 0.34:
-                failed.append({"name": uf.filename,
-                               "error": f"맞는 템플릿을 찾지 못했습니다(최고 일치 {score:.0%})."})
-                continue
+                if box_list:  # 대조 실패여도 현재 양식으로는 추출(기존 단일 양식 동작 유지)
+                    best = templates[0]
+                else:
+                    failed.append({"name": uf.filename,
+                                   "error": f"맞는 템플릿을 찾지 못했습니다(최고 일치 {score:.0%})."})
+                    continue
             maps = match_bundles(best["boxes"], doc.pages) or [match_pages(best["boxes"], doc.pages)]
-            b = buckets.setdefault(best["name"],
-                                   {"label": best["name"], "fields": best["fields"], "rows": []})
+            title_field = next((b["field"] for b in sorted(best["boxes"],
+                                                           key=lambda z: z.get("order", 0))
+                                if b.get("mode") == "title"), None)
             for bi, page_map in enumerate(maps, start=1):
                 row = apply_pixel_template(doc.pages, best["boxes"], page_map=page_map,
                                            pdf_path=pdf_path)
                 fname = uf.filename if len(maps) == 1 else f"{uf.filename} #{bi}"
-                b["rows"].append({"_파일명": fname, **row})
+                title = (row.get(title_field) or "").strip() if title_field else ""
+                if not title:  # 제목 박스가 없거나 비면 문서의 큰 글씨를 감지해 폴백
+                    first_ip = min(page_map.values()) if page_map else 0
+                    t = detect_title(pdf_path, first_ip)
+                    title = (t.get("text") or "").strip() if t else ""
+                g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
+                for fld in best["fields"]:
+                    if fld not in g["fields"]:
+                        g["fields"].append(fld)
+                g["rows"].append({"_파일명": fname, **row})
             match_info.append({"name": uf.filename, "template": best["name"],
                                "score": round(score, 2), "bundles": len(maps)})
         except Exception as e:  # noqa: BLE001
             failed.append({"name": uf.filename, "error": str(e)})
 
-    groups = list(buckets.values())
     if not groups:
         return JSONResponse(
-            {"error": "분류된 파일이 없습니다. 저장된 템플릿과 입력 양식이 맞는지 확인하세요.",
+            {"error": "처리된 파일이 없습니다. 양식과 입력 파일이 맞는지 확인하세요.",
              "failed": failed}, status_code=400)
-    excel_path = config.OUTPUT_DIR / f"현장조사표_양식별_{stamp}.xlsx"
-    write_bundle_excel(groups, str(excel_path))
+    if "" in groups:  # 제목이 없는 조사표: 전부 무제면 시트 하나, 섞였으면 별도 시트
+        groups[""]["label"] = "추출결과" if len(groups) == 1 else "(제목없음)"
+    group_list = list(groups.values())
+    excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
+    write_bundle_excel(group_list, str(excel_path))
 
     by_form, outlier_total = [], 0
-    for g in groups:
+    for g in group_list:
         og = find_outliers([{f: r.get(f, "") for f in g["fields"]} for r in g["rows"]])
         cnt = sum(len(o) for o in og)
         outlier_total += cnt
         by_form.append({"form": g["label"], "count": len(g["rows"]), "outliers": cnt})
 
     _PDF_APPLY["excel_path"] = str(excel_path)
-    _PDF_APPLY["groups"] = groups
-    _PDF_APPLY["rows"] = [r for g in groups for r in g["rows"]]
+    _PDF_APPLY["groups"] = group_list
+    _PDF_APPLY["rows"] = [r for g in group_list for r in g["rows"]]
     _PDF_APPLY["fields"] = []
-    return JSONResponse({"auto_classify": True, "forms": len(groups),
-                         "ok_count": sum(len(g["rows"]) for g in groups),
+    return JSONResponse({"auto_classify": True, "forms": len(group_list),
+                         "ok_count": sum(len(g["rows"]) for g in group_list),
                          "by_form": by_form, "failed": failed, "match_info": match_info,
                          "outlier_count": outlier_total, "report_used": False})
 
@@ -918,8 +939,11 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
     req_dir.mkdir(parents=True, exist_ok=True)
     stamp0 = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    if auto:
-        return _pdf_apply_auto(files, req_dir, stamp0)
+    # 기본 흐름: 자동 대조 + 제목별 시트. 보고서 양식(5번)을 쓸 때만 기존 경로로.
+    has_report = bool(report_id) or (report_template is not None
+                                     and bool(report_template.filename))
+    if auto and not has_report:
+        return _pdf_apply_auto(files, req_dir, stamp0, box_list)
 
     # 중복 이름은 접미사로 유일화(엑셀 열 충돌 방지). 사용자가 이름을 안 바꾼 경우 대비.
     box_list, fields = _dedup_box_fields(box_list)

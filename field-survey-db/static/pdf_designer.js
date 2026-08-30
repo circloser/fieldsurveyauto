@@ -476,19 +476,17 @@ async function deleteTemplate(name) {
 
 async function runApply(files, opts) {
   if (!files || !files.length) { alert("처리할 파일을 선택하세요."); return; }
-  const auto = $("autoClassify") && $("autoClassify").checked;
   reindex();
   // 실제 하는 일만 정확히 안내: PDF는 변환 없이 바로 읽고, 한글 파일만 변환을 거친다
   const hasHwp = [...files].some((f) => /\.hwpx?$/i.test(f.name || ""));
-  showOverlay(auto
-    ? "양식 자동 분류 + 추출하는 중…"
-    : hasHwp
-      ? "추출하는 중… (한글 파일은 PDF로 변환 후 처리 — 시간이 걸릴 수 있어요)"
-      : "추출하는 중…");
+  showOverlay(hasHwp
+    ? "추출하는 중… (한글 파일은 PDF로 변환 후 처리 — 시간이 걸릴 수 있어요)"
+    : "추출하는 중…");
   const fd = new FormData(); fd.append("boxes", JSON.stringify(BOXES));
   for (const f of files) fd.append("files", f);
-  fd.append("sheet_name_field", $("sheetNameSel").value || "");
-  if (auto) fd.append("auto_classify", "1");
+  // 기본 동작: 양식 자동 대조 + 제목별 시트(제목 없으면 시트 하나). 서버가 보고서 양식(5번) 사용 시 기존 경로로 처리.
+  fd.append("sheet_name_field", "__group_title__");
+  fd.append("auto_classify", "1");
   if (REPORT.report_id) {
     fd.append("report_id", REPORT.report_id);
     fd.append("report_edits", JSON.stringify(REPORT.edits));
@@ -600,25 +598,6 @@ function fillFieldSelect() {
   const names = [...new Set(BOXES.map((b) => b.field).filter(Boolean))].sort();
   const opts = names.map((n) => `<option value="${n}">${n}</option>`).join("");
   $("rptFieldSel").innerHTML = `<option value="">— 추출 항목 —</option>` + opts;
-  // 대상지별 시트 이름 선택(일괄 처리) — 이름 후보만 추려서(칸/숫자/긴 이름 제외, 최대 40개)
-  const ss = $("sheetNameSel");
-  const keep = ss.value;
-  const seen = new Set();
-  const cands = [];
-  [...BOXES].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach((b) => {
-    const n = (b.field || "").trim();
-    if (!n || seen.has(n)) return;
-    if (/^칸/.test(n) || /^\d+$/.test(n) || n.length > 14 || b.mode === "title") return;
-    seen.add(n); cands.push(n);
-  });
-  const shown = cands.slice(0, 40);
-  ss.innerHTML = `<option value="__group_title__">📑 제목(양식)별 분류 — 같은 양식끼리 한 시트 (기본)</option>` +
-    `<option value="">사용 안 함 (요약표만)</option>` +
-    shown.map((n) => `<option value="${n}">${n}</option>`).join("");
-  // 제목별 분류를 기본값으로(최초 1회) — 서버가 제목 박스 없어도 큰 글씨를 감지해 처리.
-  // 이후에는 사용자의 선택('사용 안 함' 포함)을 그대로 유지한다.
-  if (!window.__sheetSelInit) { ss.value = "__group_title__"; window.__sheetSelInit = true; }
-  else ss.value = (keep === "__group_title__" || keep === "" || shown.includes(keep)) ? keep : "__group_title__";
 }
 
 $("rptInsertBtn").addEventListener("click", () => {
@@ -634,12 +613,12 @@ $("rptInsertBtn").addEventListener("click", () => {
 });
 
 function renderApplyAuto(d) {
-  let html = `<p class="muted">✅ ${d.ok_count}행 처리 · <b>${d.forms}개 양식</b>으로 분류`
+  let html = `<p class="muted">✅ ${d.ok_count}행 처리 · <b>시트 ${d.forms}개</b>로 정리`
     + (d.failed && d.failed.length ? ` · ⚠️ ${d.failed.length}개 미분류/실패` : "") + `</p>`;
-  html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드 (양식별 시트)</button>`;
+  html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
   html += `<p style="margin:10px 0 4px;font-size:13px">📊 이상치 <b style="color:#e8590c">${d.outlier_count || 0}건</b>`
     + ` <span class="muted">— 자세한 해석은 아래 6번 ‘AI 결과 해석’</span></p>`;
-  html += `<table class="apply-table"><thead><tr><th>양식(시트)</th><th>행 수</th><th>이상치</th></tr></thead><tbody>`;
+  html += `<table class="apply-table"><thead><tr><th>시트(제목)</th><th>행 수</th><th>이상치</th></tr></thead><tbody>`;
   (d.by_form || []).forEach((g) => {
     html += `<tr><td>${g.form}</td><td>${g.count}</td><td>${g.outliers ? `<b style="color:#e8590c">${g.outliers}</b>` : 0}</td></tr>`;
   });
