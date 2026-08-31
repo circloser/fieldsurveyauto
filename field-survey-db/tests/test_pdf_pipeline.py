@@ -316,3 +316,50 @@ def test_detect_title_keeps_trailing_number(tmp_path):
     t = detect_title(str(path), 0)
     assert t is not None
     assert t["text"] == "습지 조사표 2"   # 꼬리 숫자 포함, 먼 쪽번호는 제외
+
+
+def _plain_box(x0, y0, x1, y1):
+    """앵커 없는 좌표 박스 — 좌표 폴백(칸 스냅) 경로를 직접 검증하기 위한 헬퍼."""
+    return {"field": "값", "page": 0, "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+            "mode": "text", "anchor": None, "use_anchor": False, "order": 1}
+
+
+def test_box_bleed_clipped_to_cell(tmp_path):
+    """박스가 옆 칸까지 삐져나가도 — 칸 경계 스냅으로 남의 글자가 혼입되지 않는다."""
+    import fitz
+
+    # 라벨을 칸의 '오른쪽 끝'에 붙여 그린 폼 — 경계 근처 글자가 혼입되기 쉬운 배치
+    p = tmp_path / "form.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=500)
+    font = fitz.Font("cjk")
+    tw = fitz.TextWriter(page.rect)
+    y, x0, x1, x2 = 60, 40, 160, 360
+    page.draw_rect(fitz.Rect(x0, y, x1, y + 28), color=(0, 0, 0), width=0.8)
+    page.draw_rect(fitz.Rect(x1, y, x2, y + 28), color=(0, 0, 0), width=0.8)
+    tw.append((x1 - 36, y + 18), "하천명", font=font, fontsize=10)  # 경계에 붙은 라벨
+    tw.append((x1 + 6, y + 18), "가곡천", font=font, fontsize=10)
+    tw.write_text(page)
+    doc.save(str(p))
+    doc.close()
+    d = read_pdf(str(p), ocr_scanned=False)
+
+    # 값 칸 박스가 왼쪽 라벨 칸으로 50pt 삐져나간 상황(라벨 글자 중심이 박스 안)
+    box = _plain_box(110, 60, 358, 88)
+    row = apply_pixel_template(d.pages, [box], pdf_path=str(p))
+    assert row["값"] == "가곡천"          # '하천명'이 섞이지 않는다
+
+    # 대조: 칸 정보 없이(좌표 그대로) 읽으면 라벨이 혼입된다 — 스냅의 효과 입증
+    naive = apply_pixel_template(d.pages, [box])
+    assert "하천명" in naive["값"]
+
+
+def test_multicell_box_not_clipped(tmp_path):
+    """여러 칸을 일부러 통째로 덮은 넓은 박스는 자르지 않는다(의도 보존)."""
+    p = tmp_path / "form2.pdf"
+    _draw_form(p, [("하천명", "가곡천")], y_top=60)
+    d = read_pdf(str(p), ocr_scanned=False)
+
+    box = _plain_box(40, 60, 360, 88)     # 라벨+값 두 칸 전부 덮음
+    row = apply_pixel_template(d.pages, [box], pdf_path=str(p))
+    assert "하천명" in row["값"] and "가곡천" in row["값"]

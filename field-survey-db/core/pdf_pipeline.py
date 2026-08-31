@@ -394,6 +394,40 @@ def _cell_anchor_value(cells: list[Cell], box: dict,
     return (val, nxt[0]) if return_cell else val
 
 
+def _clip_to_cell(cells: list[Cell], bb: dict) -> dict:
+    """박스가 표의 한 칸에 대부분(60%↑) 들어 있으면 그 칸 경계로 잘라 준다.
+
+    박스가 칸보다 크게 그려졌거나 살짝 밀려 옆 칸·아랫줄에 걸칠 때,
+    칸 밖의 글자가 값에 혼입되는 것을 막는다. 여러 칸에 걸친(의도적으로
+    넓게 그린) 박스는 그대로 둔다.
+    """
+    bx0, by0 = float(bb["x0"]), float(bb["y0"])
+    bx1, by1 = float(bb["x1"]), float(bb["y1"])
+    barea = (bx1 - bx0) * (by1 - by0)
+    if barea <= 0:
+        return bb
+    best, best_ov, covered = None, 0.0, 0
+    for c in cells:
+        ox = min(bx1, c.x1) - max(bx0, c.x0)
+        oy = min(by1, c.y1) - max(by0, c.y0)
+        if ox <= 0 or oy <= 0:
+            continue
+        ov = (ox * oy) / barea
+        if ov > best_ov:
+            best, best_ov = c, ov
+        carea = (c.x1 - c.x0) * (c.y1 - c.y0)
+        if carea > 0 and (ox * oy) / carea >= 0.8:
+            covered += 1  # 박스가 이 칸을 통째로 덮고 있다
+    if covered >= 2:      # 여러 칸을 일부러 덮은 넓은 박스 — 자르지 않는다
+        return bb
+    if best is None or best_ov < 0.6:
+        return bb
+    nb = dict(bb)
+    nb["x0"], nb["y0"] = max(bx0, best.x0), max(by0, best.y0)
+    nb["x1"], nb["y1"] = min(bx1, best.x1), min(by1, best.y1)
+    return nb
+
+
 def _box_value(page: PdfPage, box: dict) -> str:
     mode = box.get("mode", "text")
     bbox = {"x0": box["x0"], "y0": box["y0"], "x1": box["x1"], "y1": box["y1"]}
@@ -566,6 +600,11 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
             bb["x1"] = float(b["x1"]) + d[0]
             bb["y0"] = float(b["y0"]) + d[1]
             bb["y1"] = float(b["y1"]) + d[1]
+        # 칸 경계 스냅 — 박스가 표 칸 밖으로 살짝 벗어나도 남의 글자가 섞이지 않게
+        if pdf_path is not None:
+            cells = cells_for(page.page_no)
+            if cells:
+                bb = _clip_to_cell(cells, bb)
         results[i] = _box_value(page, bb)
 
     return {b["field"]: results[i] for i, b in enumerate(ordered)}
