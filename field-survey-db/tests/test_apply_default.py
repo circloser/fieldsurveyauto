@@ -127,7 +127,8 @@ def test_classify_bundles_by_title_similarity(tmp_path, monkeypatch):
     d = r.json()
     assert d["ok_count"] == 2
     assert d["forms"] == 2
-    assert {g["form"] for g in d["by_form"]} == {"하천 조사표 1", "습지 조사표 1"}
+    # 시트 이름은 '템플릿 양식'의 제목 — 입력 제목("… 1")의 변형은 따라가지 않는다
+    assert {g["form"] for g in d["by_form"]} == {"하천 조사표", "습지 조사표"}
     tpl_used = {m2["template"] for m2 in d["match_info"]}
     assert tpl_used == {"하천", "습지"}      # 제목 유사도로 각자 맞는 템플릿에 배정
 
@@ -135,8 +136,8 @@ def test_classify_bundles_by_title_similarity(tmp_path, monkeypatch):
     from openpyxl import load_workbook
     dl = client.get("/api/pdf/download")
     wb = load_workbook(io.BytesIO(dl.content))
-    assert set(wb.sheetnames) == {"하천 조사표 1", "습지 조사표 1"}
-    ws = wb["하천 조사표 1"]
+    assert set(wb.sheetnames) == {"하천 조사표", "습지 조사표"}
+    ws = wb["하천 조사표"]
     vals = [c.value for row in ws.iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals                   # 값도 맞는 시트에 들어간다
 
@@ -178,7 +179,7 @@ def test_page_level_classify_title_only(tmp_path, monkeypatch):
     d = r.json()
     assert d["ok_count"] == 2
     assert d["forms"] == 2
-    assert {g["form"] for g in d["by_form"]} == {"하천 조사표 5", "습지 조사표 5"}
+    assert {g["form"] for g in d["by_form"]} == {"하천 조사표", "습지 조사표"}
     tpl_used = {m2["template"] for m2 in d["match_info"]}
     assert tpl_used == {"하천", "습지"}
 
@@ -186,8 +187,8 @@ def test_page_level_classify_title_only(tmp_path, monkeypatch):
     from openpyxl import load_workbook
     dl = client.get("/api/pdf/download")
     wb = load_workbook(io.BytesIO(dl.content))
-    assert set(wb.sheetnames) == {"하천 조사표 5", "습지 조사표 5"}
-    vals = [c.value for row in wb["하천 조사표 5"].iter_rows(min_row=2) for c in row]
+    assert set(wb.sheetnames) == {"하천 조사표", "습지 조사표"}
+    vals = [c.value for row in wb["하천 조사표"].iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals   # 라벨이 달라도 좌표 폴백으로 값까지 추출
 
 
@@ -234,15 +235,16 @@ def test_booklet_template_splits_per_page(tmp_path, monkeypatch):
     d = r.json()
     assert d["ok_count"] == 4                       # 페이지 1장 = 1행
     assert d["forms"] == 2
-    assert {g["form"] for g in d["by_form"]} == {"하천 조사표 1", "습지 조사표 1"}
+    # 시트 이름 = 템플릿 '쪽'의 제목 (입력 제목의 "… 1" 변형은 무시)
+    assert {g["form"] for g in d["by_form"]} == {"하천 조사표", "습지 조사표"}
     assert all(g["count"] == 2 for g in d["by_form"])
 
     import io
     from openpyxl import load_workbook
     dl = client.get("/api/pdf/download")
     wb = load_workbook(io.BytesIO(dl.content))
-    vals_r = [c.value for row in wb["하천 조사표 1"].iter_rows(min_row=2) for c in row]
-    vals_w = [c.value for row in wb["습지 조사표 1"].iter_rows(min_row=2) for c in row]
+    vals_r = [c.value for row in wb["하천 조사표"].iter_rows(min_row=2) for c in row]
+    vals_w = [c.value for row in wb["습지 조사표"].iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals_r and "오십천" in vals_r
     assert "묵논습지" in vals_w and "산들습지" in vals_w
 
@@ -326,3 +328,44 @@ def test_outlier_cells_styled_in_excel(tmp_path):
     normal = next(row[col - 1] for row in ws.iter_rows(min_row=2)
                   if row[col - 1].value == "25")
     assert str(normal.fill.fgColor.rgb).lower() in ("00000000", "none")
+
+
+def test_sheet_named_by_template_title_accumulates(tmp_path, monkeypatch):
+    """시트 이름은 템플릿 양식의 제목 — 입력 제목이 차수 등으로 조금씩 달라도
+    ('1차 하천 조사표', '2차 하천 조사표') 같은 양식이면 한 시트에 축적된다."""
+    import io
+    import fitz
+    import app.main as app_main
+    from openpyxl import load_workbook
+
+    tpl = tmp_path / "tpl.pdf"
+    _draw_form(tpl, [("하천명", ""), ("보길이", "")], y_top=60, title="하천 조사표")
+    store = _FakeStore({"하천": {"name": "하천", "boxes": _boxes_for(tpl)}})
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    p1 = tmp_path / "p1.pdf"
+    _draw_form(p1, [("하천명", "가곡천"), ("보길이", "25")], y_top=60, title="1차 하천 조사표")
+    p2 = tmp_path / "p2.pdf"
+    _draw_form(p2, [("하천명", "오십천"), ("보길이", "18")], y_top=60, title="2차 하천 조사표")
+    mixed = tmp_path / "mixed_r.pdf"
+    m = fitz.open()
+    for p in (p1, p2):
+        src = fitz.open(str(p)); m.insert_pdf(src); src.close()
+    m.save(str(mixed)); m.close()
+
+    r = _apply([("mixed.pdf", mixed)], [])
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok_count"] == 2
+    assert d["forms"] == 1                                  # 시트 하나로 축적
+    assert d["by_form"][0]["form"] == "하천 조사표"          # 템플릿 제목이 시트명
+
+    dl = client.get("/api/pdf/download")
+    wb = load_workbook(io.BytesIO(dl.content))
+    assert wb.sheetnames == ["하천 조사표"]
+    ws = wb["하천 조사표"]
+    hdr = [c.value for c in ws[1]]
+    assert "하천명" in hdr and "보길이" in hdr               # 항목명 = 템플릿 기준
+    vals = [c.value for row in ws.iter_rows(min_row=2) for c in row]
+    assert "가곡천" in vals and "오십천" in vals             # 두 차수가 한 시트에

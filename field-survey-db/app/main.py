@@ -1057,15 +1057,17 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 row = apply_pixel_template(doc.pages, ext["boxes"], page_map=page_map,
                                            pdf_path=pdf_path)
                 fname = uf.filename if len(accepted) == 1 else f"{uf.filename} #{bi}"
-                # 시트 제목: 제목 박스 값 → 그 묶음 첫 페이지 큰 글씨 → 템플릿(쪽) 제목
-                title_field = next((b["field"] for b in sorted(ext["boxes"],
-                                                               key=lambda z: z.get("order", 0))
-                                    if b.get("mode") == "title"), None)
-                title = (row.get(title_field) or "").strip() if title_field else ""
+                # 시트 제목: 템플릿(양식) 기준이 원칙 — 양식 쪽 제목을 시트 이름으로.
+                # 차수 표기 등으로 입력 제목이 조금씩 달라도 같은 양식이면 같은 시트에
+                # 축적된다. 템플릿에 제목이 없을 때만 입력 문서의 큰 글씨로 폴백.
+                title = (ext.get("title") or "").strip()
+                if not title:
+                    title_field = next((b["field"] for b in sorted(ext["boxes"],
+                                                                   key=lambda z: z.get("order", 0))
+                                        if b.get("mode") == "title"), None)
+                    title = (row.get(title_field) or "").strip() if title_field else ""
                 if not title:
                     title = page_title(first_ip) if page_map else ""
-                if not title:
-                    title = ext["title"]
                 g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
                 for fld in ext["fields"]:
                     if fld not in g["fields"]:
