@@ -1022,12 +1022,20 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                     sc = 0.6 * tsim + 0.4 * lbest
                     if sc > best_sc:
                         best_u, best_sc, best_ts, best_ls = u, sc, tsim, lbest
-                # 확인 통과 기준 — 제목이 사실상 같거나(포함·0.85↑), 표 구조(라벨)가
-                # 맞거나, 둘 다 어느 정도 맞을 때만 배정. 아니면 버림.
-                if best_u is not None and (
-                        best_ts >= 0.85
-                        or best_ls >= 0.35
-                        or (best_ts >= 0.7 and best_ls >= 0.25)):
+                # 확인 통과 기준 — 제목 확인이 원칙:
+                #   · 제목이 사실상 같으면(포함·0.85↑, 또는 0.7↑ + 라벨 뒷받침) 배정
+                #   · 제목이 '있는' 양식(유닛)에는 제목 확인 없이 라벨만으로 넣지 않음
+                #     — 제목이 다른 미등록 양식을 억지로 넣지 않고 버린다.
+                #   · 제목 정보가 없는 유닛(현재 양식 등)만 구조(라벨 0.35↑)로 인정.
+                ok = False
+                if best_u is not None:
+                    unit_title = (best_u["title"] if best_u["kind"] == "page"
+                                  else best_u["T"]["title"])
+                    if best_ts >= 0.85 or (best_ts >= 0.7 and best_ls >= 0.25):
+                        ok = True
+                    elif best_ls >= 0.35 and not unit_title:
+                        ok = True
+                if ok:
                     page_assign[ip] = best_u
                 else:
                     unmatched.append(ip)

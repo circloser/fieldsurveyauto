@@ -439,3 +439,41 @@ def test_wrong_number_sibling_discarded(tmp_path, monkeypatch):
         assert d["discarded"] == [{"title": "하천 조사표 1", "pages": 1}]
     else:  # 전부 버려져 처리 행이 0이면 400 + 버림 안내도 허용
         assert "버림" in (d.get("error") or "") or d.get("failed")
+
+
+def test_same_labels_different_title_discarded(tmp_path, monkeypatch):
+    """표 구조(라벨)가 완전히 같아도 제목이 다른 미등록 양식은 버림 —
+    새 시트를 만들거나 추출 항목을 임의로 지정하지 않는다."""
+    import io
+    import fitz
+    import app.main as app_main
+    from openpyxl import load_workbook
+
+    tpl = tmp_path / "tpl.pdf"
+    _draw_form(tpl, [("하천명", ""), ("보길이", "")], y_top=60, title="하천 조사표")
+    store = _FakeStore({"조사표": {"name": "조사표", "boxes": _boxes_for(tpl)}})
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    p1 = tmp_path / "p1.pdf"
+    _draw_form(p1, [("하천명", "가곡천"), ("보길이", "25")], y_top=60, title="하천 조사표")
+    p2 = tmp_path / "p2.pdf"   # 라벨은 동일, 제목만 다른 미등록 양식
+    _draw_form(p2, [("하천명", "오십천"), ("보길이", "18")], y_top=60, title="하천 점검표")
+    mixed = tmp_path / "mixed_s.pdf"
+    m = fitz.open()
+    for p in (p1, p2):
+        src = fitz.open(str(p)); m.insert_pdf(src); src.close()
+    m.save(str(mixed)); m.close()
+
+    r = _apply([("mixed.pdf", mixed)], [])
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok_count"] == 1
+    assert d["forms"] == 1                                   # 새 시트 생성 없음
+    assert d["discarded"] == [{"title": "하천 점검표", "pages": 1}]
+
+    dl = client.get("/api/pdf/download")
+    wb = load_workbook(io.BytesIO(dl.content))
+    assert wb.sheetnames == ["하천 조사표"]
+    vals = [c.value for row in wb["하천 조사표"].iter_rows(min_row=2) for c in row]
+    assert "가곡천" in vals and "오십천" not in vals          # 점검표 데이터 미혼입
