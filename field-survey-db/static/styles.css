@@ -1,56 +1,79 @@
-/* 토스풍 화이트 테마 — 검정&흰색, 깔끔/전문적 */
+/* 오토다타 디자인 시스템 — 회색 바탕 위 백색 카드, 큰 타이포, 모노 캡션 */
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url("/static/fonts/PretendardVariable.woff2") format("woff2-variations");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  --bg: #ffffff;
-  --surface: #f9fafb;
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --surface: #f4f5f7;
   --border: #e5e8eb;
-  --text: #191f28;
+  --text: #17181c;
   --text-sub: #6b7684;
-  --point: #191f28;
+  --text-cap: #8b95a1;
+  --point: #17181c;
   --accent: #3182f6;
   --ok: #04b56a;
   --warn: #f59f00;
   --err: #f04452;
-  --radius: 16px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+  --radius: 18px;
+  --shadow: 0 1px 2px rgba(23, 24, 28, 0.04), 0 10px 30px rgba(23, 24, 28, 0.05);
+  --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic",
-    "Apple SD Gothic Neo", sans-serif;
+  font-family: var(--font);
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum";   /* 숫자 폭 고정 — 통계·표가 흔들리지 않게 */
   /* 한글은 어절(공백) 단위로만 줄바꿈 — 글자 중간에서 끊기지 않게 */
   word-break: keep-all;
   overflow-wrap: break-word;
+}
+
+/* 모노 마이크로 캡션 — 통계 카드·표 머리글용(레퍼런스의 'CALLS THIS WEEK' 톤) */
+.cap, .tile-label, .tbl-cap {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-cap);
 }
 
 .wrap { max-width: 880px; margin: 0 auto; padding: 48px 24px 80px; }
 
 header { margin-bottom: 40px; }
 .logo {
-  display: inline-flex; align-items: center; gap: 10px;
-  font-size: 15px; font-weight: 700; color: var(--text-sub);
-  letter-spacing: -0.2px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-cap);
 }
-.logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--point); }
+.logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 
-h1 { font-size: 34px; font-weight: 800; letter-spacing: -1px; margin: 20px 0 8px; }
-.subtitle { font-size: 17px; color: var(--text-sub); letter-spacing: -0.3px; }
+h1 { font-size: 38px; font-weight: 800; letter-spacing: -0.045em; line-height: 1.15; margin: 18px 0 10px; }
+.subtitle { font-size: 16.5px; color: var(--text-sub); letter-spacing: -0.01em; line-height: 1.65; }
 
 .card {
-  background: var(--bg);
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 28px;
   box-shadow: var(--shadow);
   margin-top: 24px;
 }
-.card h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 6px; }
-.card p.desc { font-size: 15px; color: var(--text-sub); margin-bottom: 18px; }
+.card h2 { font-size: 19px; font-weight: 750; letter-spacing: -0.02em; margin-bottom: 6px; }
+.card p.desc { font-size: 14.5px; color: var(--text-sub); margin-bottom: 18px; line-height: 1.7; }
 
 .status-row {
   display: flex; align-items: center; gap: 10px;
@@ -115,9 +138,9 @@ footer { margin-top: 40px; font-size: 13px; color: var(--text-sub); text-align: 
 .btn-download { background: var(--accent); }
 
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 8px; }
-.tile { background: var(--surface); border-radius: 14px; padding: 18px; text-align: center; }
-.tile-num { font-size: 30px; font-weight: 800; letter-spacing: -1px; }
-.tile-label { font-size: 13px; color: var(--text-sub); margin-top: 4px; font-weight: 600; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 16px; text-align: left; }
+.tile-num { font-size: 32px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.tile-label { margin-top: 8px; }
 .tile.ok .tile-num { color: var(--ok); }
 .tile.warn .tile-num { color: var(--warn); }
 
@@ -127,7 +150,11 @@ table.preview th, table.preview td {
   padding: 11px 12px; text-align: left; border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
-table.preview th { color: var(--text-sub); font-weight: 700; font-size: 13px; background: var(--surface); }
+table.preview th {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.05em; color: var(--text-cap); background: var(--surface);
+}
+table.preview tbody tr:hover td { background: #fafbfc; }
 .badge { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
 .badge.ok { background: #e7f9f0; color: var(--ok); }
 .badge.warn { background: #fff7e0; color: #b0820a; }

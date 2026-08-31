@@ -5,37 +5,75 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>오토다타 (AutoData)</title>
 <style>
-  :root { --ink:#191F28; --line:#e5e8eb; --muted:#8b95a1; --accent:#3182f6; }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif; color:var(--ink);
-         background:linear-gradient(180deg,#f7f8fa,#eef1f5); min-height:100vh;
-         word-break:keep-all; overflow-wrap:break-word; }
-  header { background:var(--ink); color:#fff; padding:18px 24px; text-align:center; }
-  header .logo { font-size:12.5px; color:#9db8ff; display:flex; align-items:center; justify-content:center; gap:7px; }
-  header .dot { width:8px; height:8px; border-radius:50%; background:#3182f6; display:inline-block; }
-  header h1 { font-size:20px; margin:6px 0 0; }
-  .wrap { max-width:960px; margin:0 auto; padding:40px 20px; }
-  .lead { text-align:center; color:var(--muted); font-size:15px; margin:0 0 30px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
-  a.card { text-decoration:none; color:inherit; background:#fff; border:1px solid var(--line);
-           border-radius:16px; padding:26px 22px; display:flex; flex-direction:column; gap:10px;
-           transition:transform .12s, box-shadow .12s, border-color .12s; }
-  a.card:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(25,31,40,.10); border-color:var(--accent); }
-  .ic { font-size:34px; }
-  .ct { font-size:18px; font-weight:700; }
-  .cd { font-size:13.5px; color:var(--muted); line-height:1.6; }
-  .go { margin-top:auto; color:var(--accent); font-weight:600; font-size:14px; }
-  footer { text-align:center; color:var(--muted); font-size:12px; padding:10px 0 30px; }
+  @font-face {
+    font-family: "Pretendard Variable";
+    src: url("/static/fonts/PretendardVariable.woff2") format("woff2-variations");
+    font-weight: 45 920;
+    font-display: swap;
+  }
+  :root {
+    --ink: #17181c; --line: #e5e8eb; --muted: #6b7684; --cap: #8b95a1;
+    --accent: #3182f6; --bg: #f6f7f9;
+    --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink); background: var(--bg); min-height: 100vh;
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", "Malgun Gothic", sans-serif;
+    -webkit-font-smoothing: antialiased; font-feature-settings: "tnum";
+    word-break: keep-all; overflow-wrap: break-word;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 64px 24px 48px; }
+
+  .brand {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--cap);
+  }
+  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  h1 { font-size: 42px; font-weight: 800; letter-spacing: -0.045em; line-height: 1.12; margin: 18px 0 12px; }
+  .lead { color: var(--muted); font-size: 16.5px; line-height: 1.65; margin: 0 0 14px; }
+  .secure {
+    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 40px;
+    background: #f0faf3; border: 1px solid #cdebd6; color: #1f6b46;
+    border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+  }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  a.card {
+    text-decoration: none; color: inherit; background: #fff; border: 1px solid var(--line);
+    border-radius: 20px; padding: 26px 24px; display: flex; flex-direction: column; gap: 12px;
+    box-shadow: 0 1px 2px rgba(23,24,28,.04), 0 10px 30px rgba(23,24,28,.05);
+    transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+  }
+  a.card:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(23,24,28,.10); border-color: #c9d6ea; }
+  .ic {
+    width: 48px; height: 48px; border-radius: 14px; font-size: 24px;
+    display: flex; align-items: center; justify-content: center; background: #eef4ff;
+  }
+  a.card:nth-child(2) .ic { background: #f0faf3; }
+  a.card:nth-child(3) .ic { background: #f4f5f7; }
+  .ct { font-size: 18.5px; font-weight: 750; letter-spacing: -0.02em; }
+  .cd { font-size: 14px; color: var(--muted); line-height: 1.7; }
+  .go { margin-top: auto; padding-top: 8px; color: var(--accent); font-weight: 650; font-size: 14px; }
+  a.card:hover .go { text-decoration: underline; text-underline-offset: 3px; }
+
+  footer {
+    max-width: 1020px; margin: 0 auto; padding: 36px 24px 40px;
+    color: var(--cap); font-size: 12.5px; display: flex; gap: 8px; align-items: center;
+  }
+  footer .sep { color: var(--line); }
+  @media (max-width: 640px) { h1 { font-size: 32px; } .wrap { padding-top: 44px; } }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo"><span class="dot"></span> AutoData</div>
-  <h1>오토다타</h1>
-</header>
-
 <div class="wrap">
-  <p class="lead">무엇을 하시겠어요? 아래에서 골라 시작하세요.</p>
+  <div class="brand"><span class="dot"></span> AutoData</div>
+  <h1>오토다타</h1>
+  <p class="lead">현장 조사표를 올리면, 자동으로 엑셀 데이터가 됩니다.<br>무엇을 하시겠어요?</p>
+  <div class="secure">🔒 자료는 이 컴퓨터에서만 처리됩니다 — 인터넷으로 전송·저장되지 않습니다</div>
+
   <div class="grid">
     <a class="card" href="/pdf-designer">
       <div class="ic">🧩</div>
@@ -58,6 +96,6 @@
   </div>
 </div>
 
-<footer>로컬에서 동작합니다 · 자료는 이 컴퓨터에서만 처리됩니다</footer>
+<footer>로컬 전용 <span class="sep">·</span> 완전 무료 <span class="sep">·</span> AutoData</footer>
 </body>
 </html>

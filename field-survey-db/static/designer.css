@@ -38,12 +38,13 @@
 @media (max-width: 560px) { .designer-grid { grid-template-columns: 1fr; } }
 
 /* 하단 절차(3·4·5·6) — 전체폭으로 순서대로(세로) 배치 */
-.steps-bottom { display: flex; flex-direction: column; gap: 18px; margin-top: 22px; }
+.steps-bottom { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; }
 .step-card { min-width: 0; }
-.step-card h2 { font-size: 16px; margin: 0 0 4px; }
+.step-card h2 { font-size: 17px; font-weight: 750; letter-spacing: -0.02em; margin: 0 0 6px; }
 
 .grid-pane, .box-pane, .step-card {
-  background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: var(--shadow);
+  background: var(--card, #fff); border: 1px solid var(--border); border-radius: 18px;
+  padding: 24px; box-shadow: var(--shadow);
 }
 /* 넓은 표가 1fr 칸을 부풀리지 않도록(가로 스크롤로 가둠) */
 .grid-pane { min-width: 0; }
@@ -149,6 +150,11 @@
 .save-row .btn { width: auto; margin-top: 0; padding: 10px 16px; white-space: nowrap; }
 .sep { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 #applyInput { display: block; margin: 8px 0; font-size: 13px; }
-.apply-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
-.apply-table th, .apply-table td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; white-space: nowrap; }
-.apply-table th { color: var(--text-sub); background: var(--surface); }
+.apply-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+.apply-table th, .apply-table td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; white-space: nowrap; }
+.apply-table th {
+  font-family: var(--mono, monospace); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.05em; color: var(--text-cap, var(--text-sub)); background: var(--surface);
+}
+.apply-table tbody tr:hover td { background: #fafbfc; }
+.apply-table td:first-child { font-weight: 600; }
