@@ -864,6 +864,24 @@ def _title_sim(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, ka, kb).ratio()
 
 
+def _title_match(page_title: str, tpl_title: str) -> float:
+    """페이지 제목 ↔ 템플릿 제목 '확인' — 같은 양식인지 검사한 유사도.
+
+    꼬리 번호가 서로 다르면(예: '…조사표 1' vs '…조사표 2') 다른 양식으로
+    보고 -1(탈락)을 준다. 글자만 비슷한 형제 양식('…현장사진' vs
+    '…현장조사표')이 섞이지 않도록, 포함 관계가 아니면 점수가 낮게 나온다."""
+    import re
+    from core.normalize import normalize_key
+    ka, kb = normalize_key(page_title), normalize_key(tpl_title)
+    if not ka or not kb:
+        return 0.0
+    ta = re.search(r"(\d+)$", ka)
+    tb = re.search(r"(\d+)$", kb)
+    if ta and tb and ta.group(1) != tb.group(1):
+        return -1.0
+    return _title_sim(page_title, tpl_title)
+
+
 def _pdf_title_text(pdf_path, max_pages: int = 3) -> str:
     """PDF 앞쪽 페이지에서 처음 발견되는 큰 글씨 제목(양식의 제목 텍스트)."""
     from core.pdf_pipeline import detect_title
@@ -953,6 +971,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
 
     groups: dict[str, dict] = {}  # 제목 값 → {"label", "fields", "rows"}
     failed, match_info = [], []
+    discarded: dict[str, int] = {}  # 버려진 페이지 제목 → 쪽수(맞는 양식 없음)
     for uf in files:
         dest = req_dir / (uf.filename or "unnamed")
         with dest.open("wb") as f:
@@ -989,17 +1008,26 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 for u in units:
                     T = u["T"]
                     if u["kind"] == "page":
-                        tsim = _title_sim(pt, u["title"])
+                        tsim = _title_match(pt, u["title"])
+                        if tsim < 0:      # 제목 확인 결과 다른 양식(꼬리 번호 불일치)
+                            continue
                         lbest = _lbl_hit(u["labels"], text)
                     else:
-                        tsim = max(_title_sim(pt, T["title"]),
-                                   _title_sim(pt, T["name"]))
+                        tsim = _title_match(pt, T["title"])
+                        if tsim < 0:
+                            continue
+                        tsim = max(tsim, _title_sim(pt, T["name"]))
                         lbest = max((_lbl_hit(ls, text)
                                      for ls in T["labels"].values()), default=0.0)
                     sc = 0.6 * tsim + 0.4 * lbest
                     if sc > best_sc:
                         best_u, best_sc, best_ts, best_ls = u, sc, tsim, lbest
-                if best_u is not None and (best_ts >= 0.55 or best_ls >= 0.35):
+                # 확인 통과 기준 — 제목이 사실상 같거나(포함·0.85↑), 표 구조(라벨)가
+                # 맞거나, 둘 다 어느 정도 맞을 때만 배정. 아니면 버림.
+                if best_u is not None and (
+                        best_ts >= 0.85
+                        or best_ls >= 0.35
+                        or (best_ts >= 0.7 and best_ls >= 0.25)):
                     page_assign[ip] = best_u
                 else:
                     unmatched.append(ip)
@@ -1037,8 +1065,10 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                                          {"name": T["name"], "boxes": T["boxes"],
                                           "fields": T["fields"], "title": T["title"]},
                                          pm))
-            if not accepted and box_list:
-                # 어떤 템플릿과도 못 맞춘 파일 — 현재 양식으로라도 추출(기존 동작 유지)
+            if (not accepted and box_list
+                    and not any(page_title(ip) for ip in page_text)):
+                # 제목이 전혀 없는 문서(스캔 등)만 — 현재 양식으로 폴백(기존 동작).
+                # 제목이 있는데 안 맞으면 억지로 넣지 않고 버림 처리한다.
                 cur = templates[0]
                 maps = (match_bundles(cur["boxes"], doc.pages)
                         or [match_pages(cur["boxes"], doc.pages)])
@@ -1048,7 +1078,14 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                             for pm in maps]
             if not accepted:
                 failed.append({"name": uf.filename,
-                               "error": "맞는 템플릿을 찾지 못했습니다(제목·라벨 모두 불일치)."})
+                               "error": "맞는 양식(템플릿)이 없어 버림 처리했습니다."})
+                if unmatched:
+                    match_info.append({"name": uf.filename,
+                                       "template": "버림(맞는 양식 없음)",
+                                       "bundles": len(unmatched)})
+                    for ip in unmatched:
+                        t = page_title(ip) or "(제목 없음)"
+                        discarded[t] = discarded.get(t, 0) + 1
                 continue
 
             accepted.sort(key=lambda a: a[0])  # 문서 순서대로 행 생성
@@ -1078,8 +1115,11 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 match_info.append({"name": uf.filename, "template": tname,
                                    "bundles": cnt})
             if unmatched:
-                match_info.append({"name": uf.filename, "template": "미배정 페이지",
+                match_info.append({"name": uf.filename, "template": "버림(맞는 양식 없음)",
                                    "bundles": len(unmatched)})
+                for ip in unmatched:
+                    t = page_title(ip) or "(제목 없음)"
+                    discarded[t] = discarded.get(t, 0) + 1
         except Exception as e:  # noqa: BLE001
             failed.append({"name": uf.filename, "error": str(e)})
 
@@ -1111,6 +1151,8 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
     return JSONResponse({"auto_classify": True, "forms": len(group_list),
                          "ok_count": sum(len(g["rows"]) for g in group_list),
                          "by_form": by_form, "failed": failed, "match_info": match_info,
+                         "discarded": [{"title": t, "pages": n}
+                                       for t, n in discarded.items()],
                          "outlier_count": outlier_total, "report_used": False})
 
 

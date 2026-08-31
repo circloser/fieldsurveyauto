@@ -369,3 +369,73 @@ def test_sheet_named_by_template_title_accumulates(tmp_path, monkeypatch):
     assert "하천명" in hdr and "보길이" in hdr               # 항목명 = 템플릿 기준
     vals = [c.value for row in ws.iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals and "오십천" in vals             # 두 차수가 한 시트에
+
+
+def test_unmatched_form_discarded(tmp_path, monkeypatch):
+    """템플릿에 없는 양식은 버림 — 이름이 비슷한 형제 양식('…현장사진')이
+    '…현장조사표' 시트에 억지로 섞이지 않는다(사용자 실사례 재현)."""
+    import io
+    import fitz
+    import app.main as app_main
+    from openpyxl import load_workbook
+
+    # 템플릿: '인공구조물 현장조사표' 하나뿐 (사진 양식 없음)
+    tpl = tmp_path / "tpl.pdf"
+    _draw_form(tpl, [("하천명", ""), ("보길이", "")], y_top=60, title="인공구조물 현장조사표")
+    store = _FakeStore({"조사표": {"name": "조사표", "boxes": _boxes_for(tpl)}})
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    # 입력: 조사표 1쪽 + 사진 1쪽(제목이 비슷하지만 다른 양식, 라벨도 다름)
+    p1 = tmp_path / "p1.pdf"
+    _draw_form(p1, [("하천명", "가곡천"), ("보길이", "25")], y_top=60,
+               title="인공구조물 현장조사표 1")
+    p2 = tmp_path / "p2.pdf"
+    _draw_form(p2, [("보 전경", "사진1"), ("상류 방향", "사진2")], y_top=60,
+               title="인공구조물 현장사진")
+    mixed = tmp_path / "mixed_d.pdf"
+    m = fitz.open()
+    for p in (p1, p2):
+        src = fitz.open(str(p)); m.insert_pdf(src); src.close()
+    m.save(str(mixed)); m.close()
+
+    r = _apply([("mixed.pdf", mixed)], [])
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok_count"] == 1                       # 조사표만 추출
+    assert d["forms"] == 1
+    assert d["by_form"][0]["form"] == "인공구조물 현장조사표"
+    # 버림 보고: 사진 양식의 제목이 확인 결과로 표시된다
+    assert d["discarded"] == [{"title": "인공구조물 현장사진", "pages": 1}]
+
+    dl = client.get("/api/pdf/download")
+    wb = load_workbook(io.BytesIO(dl.content))
+    assert wb.sheetnames == ["인공구조물 현장조사표"]
+    vals = [c.value for row in wb["인공구조물 현장조사표"].iter_rows(min_row=2)
+            for c in row]
+    assert "가곡천" in vals
+    assert "사진1" not in vals and "인공구조물 현장사진" not in vals  # 혼입 없음
+
+
+def test_wrong_number_sibling_discarded(tmp_path, monkeypatch):
+    """꼬리 번호가 다른 양식('조사표 1' 입력 vs '조사표 2' 템플릿만 존재)은
+    표 구조(라벨)가 같아도 다른 양식으로 확인하고 버린다."""
+    import fitz
+    import app.main as app_main
+
+    tpl = tmp_path / "tpl2.pdf"
+    _draw_form(tpl, [("하천명", ""), ("보길이", "")], y_top=60, title="하천 조사표 2")
+    store = _FakeStore({"하천템플릿": {"name": "하천템플릿", "boxes": _boxes_for(tpl)}})
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    p1 = tmp_path / "in1.pdf"
+    _draw_form(p1, [("하천명", "가곡천"), ("보길이", "25")], y_top=60, title="하천 조사표 1")
+
+    r = _apply([("in1.pdf", p1)], [])
+    d = r.json()
+    if r.status_code == 200:
+        assert d.get("ok_count", 0) == 0
+        assert d["discarded"] == [{"title": "하천 조사표 1", "pages": 1}]
+    else:  # 전부 버려져 처리 행이 0이면 400 + 버림 안내도 허용
+        assert "버림" in (d.get("error") or "") or d.get("failed")

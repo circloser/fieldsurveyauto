@@ -659,6 +659,11 @@ function renderApplyAuto(d) {
     html += `<p class="muted" style="margin-top:8px">🔎 분류 결과: `
       + d.match_info.map((m) => `${m.name} → <b>${m.template}</b>` + ((m.bundles || 1) > 1 ? `×${m.bundles}` : ``)).join(", ") + `</p>`;
   }
+  if (d.discarded && d.discarded.length) {
+    html += `<p class="muted">🗑 버림 — 맞는 양식(템플릿)이 없는 페이지: `
+      + d.discarded.map((x) => `<b>${x.title}</b> ${x.pages}쪽`).join(", ")
+      + ` <span class="muted">(이 양식도 추출하려면 템플릿에 추가하세요)</span></p>`;
+  }
   if (d.failed && d.failed.length) {
     html += `<p class="muted">⚠️ 미분류/실패: ` + d.failed.map((f) => `${f.name} (${f.error})`).join(", ") + `</p>`;
   }
