@@ -1073,15 +1073,19 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
     if "" in groups:  # 제목이 없는 조사표: 전부 무제면 시트 하나, 섞였으면 별도 시트
         groups[""]["label"] = "추출결과" if len(groups) == 1 else "(제목없음)"
     group_list = list(groups.values())
-    excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
-    write_bundle_excel(group_list, str(excel_path))
 
+    # 이상치 탐지 → 행에 부착(엑셀 셀 서식용) → 엑셀 저장
     by_form, outlier_total = [], 0
     for g in group_list:
         og = find_outliers([{f: r.get(f, "") for f in g["fields"]} for r in g["rows"]])
+        for r, o in zip(g["rows"], og):
+            if o:
+                r["_이상치"] = o
         cnt = sum(len(o) for o in og)
         outlier_total += cnt
         by_form.append({"form": g["label"], "count": len(g["rows"]), "outliers": cnt})
+    excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
+    write_bundle_excel(group_list, str(excel_path))
 
     _PDF_APPLY["excel_path"] = str(excel_path)
     _PDF_APPLY["groups"] = group_list
@@ -1168,6 +1172,14 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_used = False
 
+    # 이상치(오추출 의심) — 여러 파일(행) 교차비교. 엑셀 저장 전에 행에 부착해
+    # 해당 칸이 주황 서식 + 사유 메모로 표시되게 한다.
+    from core.analysis import find_outliers
+    outliers = find_outliers([{f: r.get(f, "") for f in fields} for r in rows])
+    for r, o in zip(rows, outliers):
+        if o:
+            r["_이상치"] = o
+
     # 편집된 양식(report_id) 우선, 없으면 직접 업로드한 양식(backward compat)
     tpl_path = None
     if report_id and report_id in _REPORT_DOCS:
@@ -1198,9 +1210,6 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         write_template_excel(rows, fields, str(excel_path),
                              sheet_name_field=(None if group_field else (sheet_name_field or None)),
                              group_field=group_field)
-    # 이상치(오추출 의심) 리포팅 — 여러 파일(행) 교차비교로 튀는 값 탐지
-    from core.analysis import find_outliers
-    outliers = find_outliers([{f: r.get(f, "") for f in fields} for r in rows])
 
     _PDF_APPLY["excel_path"] = str(excel_path)
     _PDF_APPLY["rows"] = rows            # AI 분석용 보관

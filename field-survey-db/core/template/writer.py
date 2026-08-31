@@ -5,6 +5,7 @@ sheet_name_field 를 주면 요약 시트 뒤에 대상지(행)마다 개별 시
 from __future__ import annotations
 
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -13,6 +14,26 @@ from core.report import _sheet_name, record_sheet_base
 _HEADER_FILL = PatternFill("solid", fgColor="191F28")
 _HEADER_FONT = Font(color="FFFFFF", bold=True, size=11)
 _CENTER = Alignment(horizontal="center", vertical="center")
+
+# 이상치 칸 — 옅은 주황 배경 + 진한 주황 굵은 글씨 + 셀 메모(사유)
+_OUT_FILL = PatternFill("solid", fgColor="FFE9D8")
+_OUT_FONT = Font(color="C2410C", bold=True)
+
+
+def _mark_outliers(ws, row_idx: int, row: dict, fields: list[str],
+                   col_offset: int = 2) -> None:
+    """행 dict의 '_이상치'({필드: 사유})를 읽어 해당 셀에 서식·메모를 입힌다."""
+    flags = row.get("_이상치") or {}
+    if not flags:
+        return
+    for j, f in enumerate(fields):
+        reason = flags.get(f)
+        if not reason:
+            continue
+        c = ws.cell(row=row_idx, column=col_offset + j)
+        c.fill = _OUT_FILL
+        c.font = _OUT_FONT
+        c.comment = Comment(str(reason), "오토다타")
 
 
 def write_bundle_excel(groups: list[dict], out_path: str) -> str:
@@ -37,6 +58,7 @@ def write_bundle_excel(groups: list[dict], out_path: str) -> str:
         ws.freeze_panes = "A2"
         for row in g["rows"]:
             ws.append([row.get("_파일명", "")] + [row.get(f, "") for f in g["fields"]])
+            _mark_outliers(ws, ws.max_row, row, list(g["fields"]))
         for i, h in enumerate(headers, start=1):
             ws.column_dimensions[get_column_letter(i)].width = max(10, min(30, len(str(h)) * 2 + 4))
     if not wb.sheetnames:  # 추출 결과가 하나도 없을 때
@@ -77,6 +99,7 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
 
     for row in rows:
         ws.append([row.get("_파일명", "")] + [row.get(f, "") for f in fields])
+        _mark_outliers(ws, ws.max_row, row, fields)
 
     for i, h in enumerate(headers, start=1):
         ws.column_dimensions[get_column_letter(i)].width = max(10, min(30, len(str(h)) * 2 + 4))
@@ -93,6 +116,7 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
             _style_header(s, len(headers))
             for row in grows:
                 s.append([row.get("_파일명", "")] + [row.get(f, "") for f in fields])
+                _mark_outliers(s, s.max_row, row, fields)
             for i, h in enumerate(headers, start=1):
                 s.column_dimensions[get_column_letter(i)].width = max(10, min(30, len(str(h)) * 2 + 4))
 
@@ -110,8 +134,14 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
                 c.font = _HEADER_FONT
                 c.alignment = _CENTER
             s.append(["파일명", row.get("_파일명", "")])
+            flags = row.get("_이상치") or {}
             for f in fields:
                 s.append([f, row.get(f, "")])
+                if flags.get(f):
+                    c = s.cell(row=s.max_row, column=2)
+                    c.fill = _OUT_FILL
+                    c.font = _OUT_FONT
+                    c.comment = Comment(str(flags[f]), "오토다타")
             s.column_dimensions["A"].width = 22
             s.column_dimensions["B"].width = 34
             s.freeze_panes = "A2"

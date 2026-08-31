@@ -287,3 +287,42 @@ def test_report_generate_from_batch_result(tmp_path):
     filled = [ws2["B1"].value for sn in out.sheetnames[1:]
               for ws2 in [out[sn]] if ws2["B1"].value not in (None, "{하천명}")]
     assert "가곡천" in filled and "오십천" in filled
+
+
+def test_outlier_cells_styled_in_excel(tmp_path):
+    """4번 일괄 처리 엑셀 — 이상치 칸은 주황 서식 + 사유 메모로 표시된다."""
+    import io
+    from openpyxl import load_workbook
+
+    base = tmp_path / "base.pdf"
+    _draw_form(base, [("하천명", "한천"), ("보길이", "30")], y_top=60, title="하천 조사표")
+    files = []
+    for i, bo in enumerate(["25", "25", "25", "25", "349"]):   # 마지막이 이상치
+        p = tmp_path / f"in{i}.pdf"
+        _draw_form(p, [("하천명", f"천{i}"), ("보길이", bo)], y_top=60, title="하천 조사표")
+        files.append((f"in{i}.pdf", p))
+
+    r = _apply(files, _boxes_for(base))
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok_count"] == 5
+    assert d["outlier_count"] >= 1                    # 349가 잡힌다
+
+    dl = client.get("/api/pdf/download")
+    wb = load_workbook(io.BytesIO(dl.content))
+    ws = wb[wb.sheetnames[0]]
+    hdr = [c.value for c in ws[1]]
+    col = hdr.index("보길이") + 1
+    styled = []
+    for row in ws.iter_rows(min_row=2):
+        c = row[col - 1]
+        if c.value == "349":
+            styled.append((c.fill.fgColor.rgb, c.comment is not None))
+    assert styled, "349 값 셀이 있어야 한다"
+    rgb, has_comment = styled[0]
+    assert str(rgb).endswith("FFE9D8")                # 주황 배경
+    assert has_comment                                 # 사유 메모
+    # 정상 값 셀은 서식 없음
+    normal = next(row[col - 1] for row in ws.iter_rows(min_row=2)
+                  if row[col - 1].value == "25")
+    assert str(normal.fill.fgColor.rgb).lower() in ("00000000", "none")
