@@ -176,6 +176,32 @@ def suggest_from_cells(pdf_path: str, page_no: int) -> list[dict]:
     return boxes
 
 
+def neighbor_labels(pdf_path: str, page_no: int, rect: dict) -> dict:
+    """값 칸(rect와 가장 겹치는 표 칸)의 왼쪽·위쪽 이웃 칸 텍스트.
+
+    '항목명 전환'용 — 박스 이름을 왼쪽 라벨 ↔ 위쪽 라벨로 바꿀 때 후보를 준다.
+    """
+    cells = detect_cells(pdf_path, page_no)
+    bx0, by0 = float(rect["x0"]), float(rect["y0"])
+    bx1, by1 = float(rect["x1"]), float(rect["y1"])
+
+    def _ov(c: Cell) -> float:
+        return (max(0.0, min(bx1, c.x1) - max(bx0, c.x0))
+                * max(0.0, min(by1, c.y1) - max(by0, c.y0)))
+
+    vcell = max(cells, key=_ov, default=None)
+    if vcell is None or _ov(vcell) <= 0:
+        return {"left": "", "top": ""}
+    left = [c for c in cells if c is not vcell
+            and abs(c.x1 - vcell.x0) < 4 and _voverlap(c, vcell)]
+    top = [c for c in cells if c is not vcell
+           and abs(c.y1 - vcell.y0) < 4 and _hoverlap(c, vcell)]
+    left.sort(key=lambda c: -c.x1)
+    top.sort(key=lambda c: -c.y1)
+    return {"left": (left[0].text or "").strip() if left else "",
+            "top": (top[0].text or "").strip() if top else ""}
+
+
 def suggest_cells_maximal(pdf_path: str, page_no: int) -> list[dict]:
     """모든 표 칸에 박스를 만든다(최대 생성 → 사용자가 삭제).
 

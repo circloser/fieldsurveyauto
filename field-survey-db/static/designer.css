@@ -120,6 +120,12 @@
   max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .anchor-tg.on { background: #e7f9f0; color: var(--ok); border-color: #b6ebd2; }
+.swap-lbl {
+  border: 1px solid var(--border); background: #fff; border-radius: 6px; cursor: pointer;
+  padding: 3px 8px; font-size: 11px; font-weight: 600; color: var(--text-sub); font-family: inherit;
+  white-space: nowrap;
+}
+.swap-lbl:hover { color: var(--accent); border-color: var(--accent); background: #f5f9ff; }
 .empty-hint { list-style: none; color: var(--text-sub); font-size: 13px; padding: 16px 4px; text-align: center; }
 
 .mini-btn {

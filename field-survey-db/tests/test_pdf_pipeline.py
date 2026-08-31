@@ -363,3 +363,58 @@ def test_multicell_box_not_clipped(tmp_path):
     box = _plain_box(40, 60, 360, 88)     # 라벨+값 두 칸 전부 덮음
     row = apply_pixel_template(d.pages, [box], pdf_path=str(p))
     assert "하천명" in row["값"] and "가곡천" in row["값"]
+
+
+def _draw_grid_form(path):
+    """위 라벨·왼쪽 라벨이 모두 있는 격자 폼 — '항목명 전환' 검증용.
+
+    (160,32)-(360,60) 하천명(위)  /  (40,60)-(160,88) 관리기관(왼쪽)
+    (160,60)-(360,88) 값 칸 '전남'
+    """
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=500)
+    font = fitz.Font("cjk")
+    tw = fitz.TextWriter(page.rect)
+    for r in [(160, 32, 360, 60), (40, 60, 160, 88), (160, 60, 360, 88)]:
+        page.draw_rect(fitz.Rect(*r), color=(0, 0, 0), width=0.8)
+    tw.append((166, 52), "하천명", font=font, fontsize=10)
+    tw.append((46, 80), "관리기관", font=font, fontsize=10)
+    tw.append((166, 80), "전남", font=font, fontsize=10)
+    tw.write_text(page)
+    doc.save(str(path))
+    doc.close()
+
+
+def test_neighbor_labels(tmp_path):
+    """값 칸의 왼쪽·위쪽 이웃 라벨 텍스트를 찾는다 — '항목명 전환' 후보."""
+    from core.pdf_pipeline import neighbor_labels
+
+    p = tmp_path / "grid.pdf"
+    _draw_grid_form(p)
+    out = neighbor_labels(str(p), 0, {"x0": 162, "y0": 62, "x1": 358, "y1": 86})
+    assert out["left"] == "관리기관"
+    assert out["top"] == "하천명"
+
+
+def test_neighbor_labels_endpoint(tmp_path):
+    """/api/pdf/neighbor_labels — 문서 업로드 후 박스 좌표로 후보를 돌려준다."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    p = tmp_path / "grid.pdf"
+    _draw_grid_form(p)
+    with p.open("rb") as f:
+        r = client.post("/api/pdf/load",
+                        files={"file": ("grid.pdf", f, "application/pdf")})
+    assert r.status_code == 200
+    doc_id = r.json()["doc_id"]
+
+    g = client.post("/api/pdf/neighbor_labels",
+                    json={"doc_id": doc_id, "page": 0,
+                          "x0": 162, "y0": 62, "x1": 358, "y1": 86})
+    assert g.status_code == 200
+    d = g.json()
+    assert d["left"] == "관리기관" and d["top"] == "하천명"

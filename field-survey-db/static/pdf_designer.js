@@ -273,7 +273,9 @@ function renderBoxes() {
       `</div>` +
       `<div class="bi-modes">` +
         MODES.map(([m, l]) => `<button class="mode ${mode === m ? "on" : ""}" data-m="${m}">${l}</button>`).join("") +
-        anchorChip(box) + `<span class="loc">${box.page + 1}쪽</span>` +
+        anchorChip(box) +
+        `<button class="swap-lbl" title="항목명을 위쪽 ↔ 왼쪽 칸 이름으로 전환합니다">⇄ 항목명</button>` +
+        `<span class="loc">${box.page + 1}쪽</span>` +
       `</div>`;
     const input = li.querySelector("input");
     input.addEventListener("input", () => { box.field = input.value; renderPage(); });
@@ -282,6 +284,7 @@ function renderBoxes() {
     li.querySelectorAll(".mode").forEach((mb) => mb.addEventListener("click", () => { box.mode = mb.dataset.m; renderBoxes(); renderPage(); }));
     const atg = li.querySelector(".anchor-tg");
     if (atg) atg.addEventListener("click", () => cycleAnchor(idx));
+    li.querySelector(".swap-lbl").addEventListener("click", () => swapLabel(idx));
     li.addEventListener("click", (e) => { if (!["INPUT", "BUTTON"].includes(e.target.tagName) && !e.target.classList.contains("drag-h")) { selected = idx; renderPage(); renderBoxes(); } });
     const h = li.querySelector(".drag-h");
     h.addEventListener("dragstart", () => { dragBoxIdx = idx; });
@@ -312,6 +315,33 @@ function reorderBox(from, to) {
   const tp = seq.indexOf(BOXES[to]); seq.splice(tp, 0, dragged);
   seq.forEach((b, i) => (b.order = i + 1)); renderBoxes(); renderPage();
 }
+// 항목명 전환 — 박스(값 칸)의 이름을 위쪽 라벨 ↔ 왼쪽 라벨로 바꾼다.
+// 추출 기준(앵커 라벨·방향)도 함께 바뀌어 유기적 추출이 새 라벨을 따라간다.
+async function swapLabel(idx) {
+  const b = BOXES[idx];
+  if (!DOC_ID) { alert("양식 문서를 불러온 상태에서만 전환할 수 있습니다."); return; }
+  try {
+    const d = await (await fetch("/api/pdf/neighbor_labels", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc_id: DOC_ID, page: b.page,
+                             x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }),
+    })).json();
+    if (d.error) throw new Error(d.error);
+    const left = (d.left || "").trim(), top = (d.top || "").trim();
+    const curRel = (b.anchor && b.anchor.relation) || "right";  // 기본 = 왼쪽 라벨
+    const next = curRel === "right"
+      ? (top ? { label: top, relation: "below" } : null)
+      : (left ? { label: left, relation: "right" } : null);
+    if (!next) {
+      alert(curRel === "right" ? "위쪽 칸에서 이름을 찾지 못했습니다." : "왼쪽 칸에서 이름을 찾지 못했습니다.");
+      return;
+    }
+    b.field = next.label.slice(0, 20);
+    b.anchor = { label: next.label, relation: next.relation };
+    renderBoxes(); renderPage();
+  } catch (e) { alert("항목명 전환 실패: " + e.message); }
+}
+
 function cycleAnchor(idx) {
   const box = BOXES[idx]; if (!box.anchor) return;
   const seq = ["right", "below", "off"];

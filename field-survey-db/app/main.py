@@ -395,6 +395,21 @@ def _suggest_all(doc, pdf_path: str) -> list[dict]:
     return boxes
 
 
+@app.post("/api/pdf/neighbor_labels")
+def pdf_neighbor_labels(payload: dict = Body(...)) -> JSONResponse:
+    """박스(값 칸)의 왼쪽·위쪽 라벨 칸 텍스트 — '항목명 전환' 후보."""
+    entry = _PDF_DOCS.get(payload.get("doc_id") or "")
+    if not entry:
+        return JSONResponse({"error": "문서를 찾을 수 없습니다."}, status_code=404)
+    from core.pdf_pipeline import neighbor_labels
+    try:
+        out = neighbor_labels(entry["pdf_path"], int(payload.get("page", 0)),
+                              {k: payload[k] for k in ("x0", "y0", "x1", "y1")})
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"칸을 읽지 못했습니다: {e}"}, status_code=400)
+    return JSONResponse(out)
+
+
 @app.get("/api/pdf/suggest/{doc_id}")
 def pdf_suggest(doc_id: str) -> JSONResponse:
     """자동 제안(표 테두리 기반) 다시 계산."""
