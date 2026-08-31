@@ -133,6 +133,30 @@ function arrow(s, x, y, color) {
   s.addNotes("[시연 직후] \"방금 보신 그대로입니다. 1건 2시간이 — 수십 건 5분이 됐습니다.\"\n가능하면 여기서 '실제 쓰는 보고서 양식으로 출력된 엑셀'을 화면에 잠깐 띄워 대비(쇼잉).\n(2시간/5분은 발표 전 실측으로 최종 확인)");
 }
 
+// ── 6.5 가장 공들인 것 — 믿을 수 있는 자동화 (신뢰 후킹) ────
+{
+  const s = pres.addSlide(); s.background = { color: "FFFFFF" };
+  txt(s, "가장 공을 들인 것 — “믿을 수 있는 자동화”", { x: ML, y: 0.75, w: CW, h: 0.65, fontSize: 30, bold: true, charSpacing: -0.5 });
+  txt(s, "자동화의 적은 ‘못 미더움’입니다. 그래서 속도보다 정확에 공을 들였습니다.", { x: ML, y: 1.5, w: CW, h: 0.4, fontSize: 15, color: SUB });
+  const cy = 2.15, ch = 1.5, cw2 = (CW - 0.5) / 2, gap = 0.5;
+  const feats = [
+    ["📌", "줄이 밀려도 정확", "칸 이름(라벨)을 따라가 값을 찾습니다 —\n서식에 줄이 늘어도 어긋나지 않습니다"],
+    ["🚧", "남의 글자 차단", "칸 경계를 벗어난 글자는 값에 섞이지\n않게 잘라냅니다 — 혼입 원천 차단"],
+    ["📑", "양식 자동 분류", "문서의 제목을 읽고 같은 양식끼리\n알아서 시트로 나눠 쌓습니다"],
+    ["⚠️", "스스로 경고", "튀는 값은 엑셀에서 주황 표시 + 사유\n메모 — 오타·오추출을 스스로 잡습니다"],
+  ];
+  feats.forEach((f2, i) => {
+    const x = ML + (i % 2) * (cw2 + gap);
+    const y = cy + Math.floor(i / 2) * (ch + 0.3);
+    card(s, x, y, cw2, ch, { fill: { color: TINT }, line: { color: TLINE, width: 1 } });
+    txt(s, f2[0], { x: x + 0.25, y: y + 0.3, w: 0.55, h: 0.55, fontSize: 22 });
+    txt(s, f2[1], { x: x + 0.9, y: y + 0.22, w: cw2 - 1.1, h: 0.4, fontSize: 15.5, bold: true });
+    txt(s, f2[2], { x: x + 0.9, y: y + 0.66, w: cw2 - 1.1, h: 0.75, fontSize: 11.5, color: SUB, lineSpacing: 16 });
+  });
+  txt(s, "사람은 표시된 것만 확인하면 됩니다 — ‘처음부터 다시 대조하는 밤’이 사라집니다.", { x: ML, y: 5.85, w: CW, h: 0.45, fontSize: 14.5, bold: true, align: "center", color: SUB });
+  s.addNotes("[시연 직후 신뢰 굳히기 — 25초]\n\"빠른 건 방금 보셨습니다. 저희가 정말 공들인 건 '믿을 수 있느냐'입니다. 서식이 밀려도 칸 이름을 따라가고, 칸 밖 글자는 잘라내고, 양식을 스스로 분류하고, 이상한 값은 스스로 경고합니다. 그래서 사람은 표시된 것만 확인하면 됩니다.\"\n(기술 용어 금지 — 효과로만 말하기)");
+}
+
 // ── 7. AI 해석까지 (밸류 완성) ─────────────────────────────
 {
   const s = pres.addSlide(); s.background = { color: "FFFFFF" };
@@ -171,20 +195,29 @@ function arrow(s, x, y, color) {
   s.addNotes("빈칸(__건, __시간, __일)은 발표 전 실측·기관 실적으로 확정 기입.\n\"이 시간이 전부 조사와 분석으로 돌아갑니다\" — 절감의 '용도'까지 말해야 설득 완성.");
 }
 
-// ── 9. 확장 (구체적으로) ───────────────────────────────────
+// ── 9. 국민에게 확산되면 (국민 서비스 개선 — 가점 후킹) ─────
 {
   const s = pres.addSlide(); s.background = { color: "FFFFFF" };
-  txt(s, "조사표만이 아닙니다", { x: ML, y: 0.85, w: CW, h: 0.7, fontSize: 32, bold: true, charSpacing: -0.5 });
-  txt(s, "\"표가 있는 서식은 전부 같은 방식으로\" — 원리가 하나라, 확장에 개발이 필요 없습니다.", { x: ML, y: 1.65, w: CW, h: 0.4, fontSize: 14, color: SUB });
-  const cy = 2.3, ch = 1.35, cw2 = (CW - 0.5) / 2;
-  card(s, ML, cy, cw2, ch * 2 + 0.3, { fill: { color: TINT }, line: { color: TLINE, width: 1 } });
-  txt(s, "원내 — 바로 적용", { x: ML + 0.25, y: cy + 0.2, w: cw2 - 0.5, h: 0.35, fontSize: 14, bold: true, color: BLUE_D });
-  txt(s, "· 시설물 점검표 · 안전점검 체크리스트\n· 행사·교육 신청서 · 설문지\n· 각종 수기 관리대장", { x: ML + 0.25, y: cy + 0.65, w: cw2 - 0.5, h: 1.9, fontSize: 13, color: SUB, lineSpacing: 22 });
-  card(s, ML + cw2 + 0.5, cy, cw2, ch * 2 + 0.3, { fill: { color: TINT }, line: { color: TLINE, width: 1 } });
-  txt(s, "원 밖 — 같은 문제를 겪는 모든 곳", { x: ML + cw2 + 0.75, y: cy + 0.2, w: cw2 - 0.5, h: 0.35, fontSize: 14, bold: true, color: GREEN });
-  txt(s, "· 의료 — 수기 기록지·검사지 전산화\n· 지자체 — 민원·현장 점검 서식\n· 연구기관 — 실험·관측 야장", { x: ML + cw2 + 0.75, y: cy + 0.65, w: cw2 - 0.5, h: 1.9, fontSize: 13, color: SUB, lineSpacing: 22 });
-  txt(s, "종이 서식과 엑셀 사이에서 시간을 잃는 모든 조직이 대상입니다.", { x: ML, y: 5.55, w: CW, h: 0.45, fontSize: 14.5, bold: true, align: "center", color: SUB });
-  s.addNotes("확장은 '가능성'이 아니라 '이미 되는 것'으로 말하기: 표 기반 서식이면 개발 없이 템플릿만 만들면 됨. 타 분야는 의료 기록지 예시 한 개만 짚고 넘어가기(20초).");
+  txt(s, "국민에게 확산되면", { x: ML, y: 0.7, w: CW, h: 0.65, fontSize: 32, bold: true, charSpacing: -0.5 });
+  txt(s, "표가 있는 서식이면 어디든 — 개발 없이 템플릿만 만들면 됩니다. 원내 점검표·설문·관리대장은 즉시, 그리고 —", { x: ML, y: 1.45, w: CW, h: 0.4, fontSize: 14, color: SUB });
+  const cy = 2.05, ch = 2.5, cw3 = (CW - 0.8) / 3;
+  const cases = [
+    ["🏥", "보건소·병원", "수기 문진표·검사 기록지를\n자동 전산화", "접수 대기가 짧아지고,\n기록 오류가 줄어듭니다", BLUE_BG2, "BCD7FF", BLUE_D],
+    ["🏛", "지자체 현장 민원", "현장 점검 서식을 그 자리에서\n데이터로", "민원 처리·회신이\n빨라집니다", GREEN_BG2, "B6EBD2", GREEN],
+    ["🏫", "학교·복지시설", "안전점검 기록을 쌓아\n이상 신호를 조기에", "사고를 데이터로\n예방합니다", "FFFBEF", "F5DEA6", "A06F00"],
+  ];
+  cases.forEach((c2, i) => {
+    const x = ML + i * (cw3 + 0.4);
+    card(s, x, cy, cw3, ch, { fill: { color: c2[4] }, line: { color: c2[5], width: 1.25 } });
+    txt(s, c2[0], { x, y: cy + 0.25, w: cw3, h: 0.5, fontSize: 24, align: "center" });
+    txt(s, c2[1], { x, y: cy + 0.8, w: cw3, h: 0.4, fontSize: 15.5, bold: true, align: "center" });
+    txt(s, c2[2], { x: x + 0.2, y: cy + 1.22, w: cw3 - 0.4, h: 0.6, fontSize: 11.5, color: SUB, align: "center", lineSpacing: 16 });
+    txt(s, c2[3], { x: x + 0.2, y: cy + 1.85, w: cw3 - 0.4, h: 0.55, fontSize: 12, bold: true, color: c2[6], align: "center", lineSpacing: 16 });
+  });
+  rrect(s, { x: ML, y: 4.85, w: CW, h: 0.62, rectRadius: 0.08, fill: { color: TINT }, line: { color: TLINE, width: 1 } });
+  txt(s, "🔒 완전 로컬 + 무료 — 자료가 컴퓨터 밖으로 나가지 않아, 민감정보를 다루는 공공·의료 현장에도 안심하고 확산할 수 있습니다.", { x: ML + 0.25, y: 4.98, w: CW - 0.5, h: 0.4, fontSize: 12.5, color: SUB });
+  txt(s, "공공의 종이가 데이터가 되는 속도만큼 — 국민이 기다리는 시간이 줄어듭니다.", { x: ML, y: 5.8, w: CW, h: 0.45, fontSize: 15, bold: true, align: "center" });
+  s.addNotes("[국민 서비스 개선 — 30초]\n\"이건 조사표만의 이야기가 아닙니다. 보건소 문진표, 지자체 현장 민원 서식, 학교 안전점검 — 종이와 엑셀 사이에서 시간을 잃는 모든 공공 현장이 대상입니다. 자료가 컴퓨터 밖으로 안 나가는 로컬 방식이라 민감한 현장에도 그대로 확산할 수 있습니다. 공공의 종이가 데이터가 되는 속도만큼, 국민이 기다리는 시간이 줄어듭니다.\"\n(마지막 문장은 또박또박 — 이 슬라이드의 후킹 라인)");
 }
 
 // ── 10. 이름 공개 (다크) ───────────────────────────────────
@@ -208,8 +241,9 @@ function arrow(s, x, y, color) {
     { text: "조사는 현장에서,", options: { color: "FFFFFF", breakLine: true } },
     { text: "입력은 AI가.", options: { color: "9DB8FF", breakLine: false } },
   ], { x: 0, y: 2.3, w: W, h: 2.0, fontFace: F, fontSize: 46, bold: true, align: "center", isTextBox: true, margin: 0, lineSpacing: 58, charSpacing: -1 });
-  txt(s, "들어주셔서 감사합니다 — 질문 주시면 바로 시연으로 답하겠습니다.", { x: 0, y: 5.1, w: W, h: 0.5, fontSize: 15, color: "9DA5B4", align: "center" });
-  s.addNotes("4분 안에 여기 도착이 목표. 남는 시간은 전부 질의응답 — 질문이 나오면 말 대신 화면으로 시연하며 답변.\n기술 질문 대응: \"발표에선 사용성 위주로 보여드렸고, 내부 구조는 별도로 정리해 두었습니다\" 한 줄로 정리 후 비즈니스로 복귀.");
+  txt(s, "종이와 엑셀 사이에서 사라지던 시간을 — 현장과 국민에게 돌려드리겠습니다.", { x: 0, y: 4.75, w: W, h: 0.5, fontSize: 16, color: "C8CEDA", align: "center" });
+  txt(s, "들어주셔서 감사합니다 — 질문 주시면 바로 시연으로 답하겠습니다.", { x: 0, y: 5.45, w: W, h: 0.5, fontSize: 14, color: "9DA5B4", align: "center" });
+  s.addNotes("4분 30초 안에 여기 도착이 목표. 남는 시간은 전부 질의응답 — 질문이 나오면 말 대신 화면으로 시연하며 답변.\n기술 질문 대응: \"발표에선 사용성 위주로 보여드렸고, 내부 구조는 별도로 정리해 두었습니다\" 한 줄로 정리 후 비즈니스로 복귀.");
 }
 
 pres.writeFile({ fileName: "autodata-pitch.pptx" }).then(() => console.log("OK autodata-pitch.pptx"));
