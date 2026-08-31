@@ -74,7 +74,7 @@ _ACCUM = AccumulateStore(config.OUTPUT_DIR / "누적DB.json")
 def _regenerate_excel() -> str:
     result: ExtractionResult = _LAST["result"]  # type: ignore[assignment]
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    excel_path = config.OUTPUT_DIR / f"현장조사표_DB_{stamp}.xlsx"
+    excel_path = config.OUTPUT_DIR / f"조사데이터_DB_{stamp}.xlsx"
     write_excel(result, str(excel_path))
     _LAST["excel_path"] = str(excel_path)
     return str(excel_path)
@@ -1099,7 +1099,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
         cnt = sum(len(o) for o in og)
         outlier_total += cnt
         by_form.append({"form": g["label"], "count": len(g["rows"]), "outliers": cnt})
-    excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
+    excel_path = config.OUTPUT_DIR / f"조사데이터_추출_{stamp}.xlsx"
     write_bundle_excel(group_list, str(excel_path))
 
     _PDF_APPLY["excel_path"] = str(excel_path)
@@ -1211,7 +1211,7 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
             shutil.copyfileobj(report_template.file, f)
 
     if tpl_path:
-        excel_path = config.OUTPUT_DIR / f"현장조사표_보고서_{stamp}.xlsx"
+        excel_path = config.OUTPUT_DIR / f"조사데이터_보고서_{stamp}.xlsx"
         try:
             from core.report import build_report_workbook
             build_report_workbook(tpl_path, rows, fields, str(excel_path),
@@ -1221,7 +1221,7 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
             return JSONResponse({"error": f"보고서 양식 처리 실패(엑셀 양식이 맞는지 확인): {e}"},
                                 status_code=400)
     else:
-        excel_path = config.OUTPUT_DIR / f"현장조사표_추출_{stamp}.xlsx"
+        excel_path = config.OUTPUT_DIR / f"조사데이터_추출_{stamp}.xlsx"
         write_template_excel(rows, fields, str(excel_path),
                              sheet_name_field=(None if group_field else (sheet_name_field or None)),
                              group_field=group_field)
@@ -1356,7 +1356,7 @@ def report_generate(payload: dict = Body(...)) -> JSONResponse:
                     if f not in fields:
                         fields.append(f)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        excel_path = config.OUTPUT_DIR / f"현장조사표_보고서_{stamp}.xlsx"
+        excel_path = config.OUTPUT_DIR / f"조사데이터_보고서_{stamp}.xlsx"
         sheet_field = ("_제목" if any((r.get("_제목") or "").strip() for r in rows)
                        else None)
         build_report_workbook(tpl_path, rows, fields, str(excel_path),

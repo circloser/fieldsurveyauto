@@ -5,9 +5,9 @@
 /* AI 자동 이해 = 이 화면의 핵심 기능 → 주 버튼(파란색)으로 강조 */
 #aiBtn {
   background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700;
-  box-shadow: 0 1px 2px rgba(49,130,246,.25);
+  box-shadow: 0 1px 2px rgba(78,159,47,.25);
 }
-#aiBtn:hover { background: #1f74e8; color: #fff; }
+#aiBtn:hover { background: #3f8425; color: #fff; }
 
 /* 보안 안내 배지 */
 .security-badge {
@@ -45,7 +45,7 @@
 .rpt-grid td { border: 1px solid var(--border); padding: 0; }
 .rpt-grid input { border: none; padding: 4px 6px; font-size: 12px; font-family: inherit; width: 110px; background: transparent; }
 .rpt-grid input:focus { outline: 2px solid var(--accent); outline-offset: -2px; background: #fff; }
-.rpt-grid input.ph { background: #eaf3ff; color: var(--accent); font-weight: 600; }
+.rpt-grid input.ph { background: #eef7e5; color: var(--accent); font-weight: 600; }
 .rpt-grid input.formula { background: #fff7e0; color: #b0820a; }
 .page-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
 .tp-del {
@@ -53,16 +53,16 @@
   color: #ffd7dc; font-size: 11px;
 }
 .tp-del:hover { background: rgba(255,255,255,.2); color: #fff; }
-.tp-add { border-style: dashed; color: var(--accent); background: #f5f9ff; }
-.tp-add:hover { background: #eaf3ff; }
+.tp-add { border-style: dashed; color: var(--accent); background: #f4faee; }
+.tp-add:hover { background: #eef7e5; }
 
 /* 보고서 AI 초안 */
 .rpt-draft-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
 .draft-dl {
   font-size: 13px; font-weight: 700; color: var(--accent); text-decoration: none;
-  padding: 5px 10px; border: 1px solid #d6e6ff; border-radius: 8px; background: #f0f6ff;
+  padding: 5px 10px; border: 1px solid #cfe8b8; border-radius: 8px; background: #eef7e5;
 }
-.draft-dl:hover { background: #e4efff; }
+.draft-dl:hover { background: #dff0cd; }
 
 /* 일괄 처리 — 대상지별 시트 이름 선택 */
 .sheetname-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
@@ -91,60 +91,59 @@
 
 .pbox {
   position: absolute; box-sizing: border-box;
-  border: 2px solid var(--accent); background: rgba(49,130,246,.12);
+  border: 2px solid var(--accent); background: rgba(78,159,47,.12);
   cursor: move; z-index: 2;
 }
 /* 선택된 박스는 항상 최상단(크기조절 점이 다른 박스에 가려지지 않게) */
-.pbox.sel { border-color: #1b64da; background: rgba(27,100,218,.20); z-index: 100; }
+.pbox.sel { border-color: #3f8425; background: rgba(63,132,37,.20); z-index: 100; }
 /* 제목(위계) 박스 — 보라색으로 구분 */
 .pbox.title-mode { border-color: #8b5cf6; background: rgba(139,92,246,.12); }
 .pbox.title-mode .pbox-tag { background: #8b5cf6; }
 .pbox.title-mode.sel { border-color: #6d28d9; background: rgba(109,40,217,.20); }
 .pbox-resize {
   position: absolute; right: -7px; bottom: -7px; width: 13px; height: 13px;
-  background: #1b64da; border: 2px solid #fff; border-radius: 2px;
+  background: #3f8425; border: 2px solid #fff; border-radius: 2px;
   cursor: nwse-resize; z-index: 101; box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 .pbox:not(.sel) .pbox-resize { opacity: 0; }
 .pbox.sel .pbox-resize, .pbox:hover .pbox-resize { opacity: 1; }
-.pbox.drawing { background: rgba(27,100,218,.14); border-style: dashed; pointer-events: none; z-index: 5; }
+.pbox.drawing { background: rgba(63,132,37,.14); border-style: dashed; pointer-events: none; z-index: 5; }
 .pbox-tag {
   position: absolute; top: -16px; left: -2px;
   background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
   padding: 0 5px; border-radius: 4px 4px 4px 0; white-space: nowrap; max-width: 200px;
   overflow: hidden; text-overflow: ellipsis; display: flex; gap: 4px; align-items: center;
 }
-.pbox.sel .pbox-tag { background: #1b64da; }
+.pbox.sel .pbox-tag { background: #3f8425; }
 .pbox-x { cursor: pointer; opacity: .85; font-size: 9px; }
 .pbox-x:hover { color: #ffd7dc; }
 
 .grid-pane { min-width: 0; }
 #pageHost { overflow: auto; }
 
-/* ── 발표 모드(시연용 간소화) — 안내 문구를 숨기고 핵심 요소만 남김 ── */
-#demoToggle {
-  position: fixed; right: 14px; bottom: 14px; z-index: 80;
-  border: 1px solid var(--border); border-radius: 999px; background: #fff;
-  padding: 7px 14px; font-size: 12px; font-weight: 700; color: var(--text-sub);
-  font-family: inherit; cursor: pointer; box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+
+/* ── 헤더: 다크 밴드 + 그린 탭바 ── */
+.dheader { display: block; text-align: left; max-width: 900px; margin-bottom: 22px; }
+.hd-band {
+  background: var(--ink-block); color: #fff; border-radius: 14px 14px 0 0;
+  padding: 20px 24px; display: flex; align-items: center; gap: 14px;
 }
-#demoToggle:hover { color: var(--accent); border-color: var(--accent); }
-body.demo-mode #demoToggle { opacity: .25; }
-body.demo-mode #demoToggle:hover { opacity: 1; }
+.hd-mark {
+  width: 44px; height: 44px; border-radius: 11px; background: var(--lime);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 16px; color: #fff; flex: none;
+}
+.dheader h1 { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; margin: 0; color: #fff; }
+.dheader .subtitle { font-size: 13px; color: #aeb6ad; margin: 3px 0 0; }
+.tabbar { display: flex; background: var(--lime); border-radius: 0 0 14px 14px; overflow: hidden; }
+.tabbar a {
+  flex: 1; text-align: center; padding: 11px 0; font-size: 13.5px; font-weight: 650;
+  color: rgba(255, 255, 255, .88); text-decoration: none;
+}
+.tabbar a:hover { background: rgba(255, 255, 255, .14); color: #fff; }
+.tabbar a.on { background: var(--accent); color: #fff; }
 
-body.demo-mode .subtitle,
-body.demo-mode .nav-row,
-body.demo-mode .sb-note,
-body.demo-mode .desc,
-body.demo-mode .muted,
-body.demo-mode .hint { display: none !important; }
-
-/* 처리 결과·상태 피드백은 발표 모드에서도 그대로 표시 */
-body.demo-mode #applyResult .muted,
-body.demo-mode #reportMsg,
-body.demo-mode #saveMsg { display: revert !important; }
-
-/* 남은 요소는 화면에서 잘 보이게 조금 크게 */
-body.demo-mode #loadCard h2,
-body.demo-mode .pane-head h2 { font-size: 20px; }
-body.demo-mode .step-card h2 { font-size: 19px; }
+/* 섹션 타이틀 — 그린 라이트(레퍼런스 'Summary/Accounts' 톤) */
+.step-card h2, #loadCard h2, .pane-head h2 {
+  color: var(--accent); font-weight: 650;
+}

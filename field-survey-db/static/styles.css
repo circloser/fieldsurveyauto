@@ -8,20 +8,25 @@
 }
 
 :root {
-  --bg: #f6f7f9;
+  --bg: #f4f6f2;
   --card: #ffffff;
-  --surface: #f4f5f7;
-  --border: #e5e8eb;
-  --text: #17181c;
-  --text-sub: #6b7684;
-  --text-cap: #8b95a1;
-  --point: #17181c;
-  --accent: #3182f6;
+  --surface: #f3f6ef;
+  --border: #e3e8de;
+  --text: #1e2126;
+  --text-sub: #6b7480;
+  --text-cap: #8d968f;
+  --point: #1e2126;
+  --accent: #4e9f2f;          /* 진한 그린 — 주 버튼·액션 */
+  --lime: #7dc242;            /* 라임 그린 — 브랜드 포인트 */
+  --accent-soft: #eef7e5;     /* 옅은 그린 배경 */
+  --accent-line: #cfe8b8;     /* 옅은 그린 테두리 */
+  --accent-dark: #3f8425;     /* hover */
+  --ink-block: #1e2126;       /* 다크 밴드 */
   --ok: #04b56a;
   --warn: #f59f00;
   --err: #f04452;
-  --radius: 18px;
-  --shadow: 0 1px 2px rgba(23, 24, 28, 0.04), 0 10px 30px rgba(23, 24, 28, 0.05);
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(30, 33, 38, 0.04), 0 8px 24px rgba(30, 33, 38, 0.05);
   --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
     "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
@@ -107,13 +112,13 @@ footer { margin-top: 40px; font-size: 13px; color: var(--text-sub); text-align: 
 
 .designer-cta {
   display: inline-block; margin-top: 16px; padding: 10px 16px; border-radius: 10px;
-  background: #f0f6ff; color: var(--accent); font-size: 14px; font-weight: 700;
-  text-decoration: none; border: 1px solid #d6e6ff;
+  background: #eef7e5; color: var(--accent); font-size: 14px; font-weight: 700;
+  text-decoration: none; border: 1px solid #cfe8b8;
 }
 .designer-cta:hover { background: #e4efff; }
 
 .dropzone { cursor: pointer; }
-.dropzone.drag { border-color: var(--accent); background: #f0f6ff; color: var(--accent); }
+.dropzone.drag { border-color: var(--accent); background: #eef7e5; color: var(--accent); }
 
 .filelist { list-style: none; margin: 16px 0 0; }
 .filelist li {

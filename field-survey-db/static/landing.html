@@ -12,90 +12,111 @@
     font-display: swap;
   }
   :root {
-    --ink: #17181c; --line: #e5e8eb; --muted: #6b7684; --cap: #8b95a1;
-    --accent: #3182f6; --bg: #f6f7f9;
-    --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+    --ink: #1e2126; --line: #e3e8de; --muted: #6b7480;
+    --green: #4e9f2f; --green-dark: #3f8425; --lime: #7dc242;
+    --soft: #eef7e5; --soft-line: #cfe8b8;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; color: var(--ink); background: var(--bg); min-height: 100vh;
+    margin: 0; color: var(--ink); min-height: 100vh;
+    background: linear-gradient(160deg, #5da93c 0%, #3e8a2a 55%, #2f7020 100%);
     font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
       "Segoe UI", "Malgun Gothic", sans-serif;
     -webkit-font-smoothing: antialiased; font-feature-settings: "tnum";
     word-break: keep-all; overflow-wrap: break-word;
   }
-  .wrap { max-width: 1020px; margin: 0 auto; padding: 64px 24px 48px; }
-
-  .brand {
-    display: flex; align-items: center; gap: 8px;
-    font-family: var(--mono); font-size: 12px; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase; color: var(--cap);
+  .shell {
+    max-width: 960px; margin: 56px auto 40px; background: #fff;
+    border-radius: 18px; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(20, 40, 12, .35);
   }
-  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-  h1 { font-size: 42px; font-weight: 800; letter-spacing: -0.045em; line-height: 1.12; margin: 18px 0 12px; }
-  .lead { color: var(--muted); font-size: 16.5px; line-height: 1.65; margin: 0 0 14px; }
+  .band {
+    background: #1e2126; color: #fff; padding: 30px 40px 26px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .band .mark {
+    width: 52px; height: 52px; border-radius: 12px; background: var(--lime);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 19px; color: #fff; letter-spacing: -0.02em;
+  }
+  .band h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+  .band .tag { font-size: 13.5px; color: #aeb6ad; margin-top: 3px; }
+  .tabs { display: flex; background: var(--lime); }
+  .tabs span {
+    flex: 1; text-align: center; padding: 12px 0; font-size: 13.5px; font-weight: 650;
+    color: rgba(255,255,255,.85);
+  }
+  .tabs span.on { background: var(--green); color: #fff; }
+
+  .content { padding: 36px 40px 40px; }
+  .sec-title { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; color: var(--green); margin: 0 0 6px; }
+  .lead { color: var(--muted); font-size: 15.5px; line-height: 1.65; margin: 0 0 12px; }
   .secure {
-    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 40px;
-    background: #f0faf3; border: 1px solid #cdebd6; color: #1f6b46;
+    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 26px;
+    background: var(--soft); border: 1px solid var(--soft-line); color: #35701d;
     border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600;
   }
-
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
   a.card {
     text-decoration: none; color: inherit; background: #fff; border: 1px solid var(--line);
-    border-radius: 20px; padding: 26px 24px; display: flex; flex-direction: column; gap: 12px;
-    box-shadow: 0 1px 2px rgba(23,24,28,.04), 0 10px 30px rgba(23,24,28,.05);
-    transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+    border-radius: 14px; padding: 22px 20px; display: flex; flex-direction: column; gap: 10px;
+    transition: transform .13s ease, box-shadow .13s ease, border-color .13s ease;
   }
-  a.card:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(23,24,28,.10); border-color: #c9d6ea; }
+  a.card:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(30,33,38,.12); border-color: var(--lime); }
   .ic {
-    width: 48px; height: 48px; border-radius: 14px; font-size: 24px;
-    display: flex; align-items: center; justify-content: center; background: #eef4ff;
+    width: 44px; height: 44px; border-radius: 12px; font-size: 22px;
+    display: flex; align-items: center; justify-content: center; background: var(--soft);
   }
-  a.card:nth-child(2) .ic { background: #f0faf3; }
-  a.card:nth-child(3) .ic { background: #f4f5f7; }
-  .ct { font-size: 18.5px; font-weight: 750; letter-spacing: -0.02em; }
-  .cd { font-size: 14px; color: var(--muted); line-height: 1.7; }
-  .go { margin-top: auto; padding-top: 8px; color: var(--accent); font-weight: 650; font-size: 14px; }
+  .ct { font-size: 17px; font-weight: 750; letter-spacing: -0.02em; }
+  .cd { font-size: 13.5px; color: var(--muted); line-height: 1.65; }
+  .go { margin-top: auto; padding-top: 6px; color: var(--green); font-weight: 650; font-size: 14px; }
   a.card:hover .go { text-decoration: underline; text-underline-offset: 3px; }
 
-  footer {
-    max-width: 1020px; margin: 0 auto; padding: 36px 24px 40px;
-    color: var(--cap); font-size: 12.5px; display: flex; gap: 8px; align-items: center;
-  }
-  footer .sep { color: var(--line); }
-  @media (max-width: 640px) { h1 { font-size: 32px; } .wrap { padding-top: 44px; } }
+  footer { text-align: center; color: rgba(255,255,255,.75); font-size: 12.5px; padding: 0 0 34px; }
+  @media (max-width: 700px) { .shell { margin: 24px 14px; } .band, .content { padding-left: 22px; padding-right: 22px; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="brand"><span class="dot"></span> AutoData</div>
-  <h1>오토다타</h1>
-  <p class="lead">현장 조사표를 올리면, 자동으로 엑셀 데이터가 됩니다.<br>무엇을 하시겠어요?</p>
-  <div class="secure">🔒 자료는 이 컴퓨터에서만 처리됩니다 — 인터넷으로 전송·저장되지 않습니다</div>
+<div class="shell">
+  <div class="band">
+    <div class="mark">AD</div>
+    <div>
+      <h1>오토다타</h1>
+      <div class="tag">종이 서식을 올리면, 자동으로 엑셀 데이터가 됩니다</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <span class="on">시작하기</span><span>템플릿 디자이너</span><span>AI 자동 추출</span><span>환경설정</span>
+  </div>
 
-  <div class="grid">
-    <a class="card" href="/pdf-designer">
-      <div class="ic">🧩</div>
-      <div class="ct">템플릿 디자이너 및 대량 추출</div>
-      <div class="cd">양식에 추출 칸(박스)을 지정해 템플릿을 만들고, 같은 양식 파일을 한꺼번에 엑셀로. 결과 AI 분석 포함.</div>
-      <div class="go">시작하기 →</div>
-    </a>
-    <a class="card" href="/ai">
-      <div class="ic">🤖</div>
-      <div class="ct">AI 자동추출 및 분석</div>
-      <div class="cd">양식을 몰라도 파일을 넣으면 AI가 페이지별로 읽어 엑셀로. 검수·이상치 경고·데이터 분석까지.</div>
-      <div class="go">시작하기 →</div>
-    </a>
-    <a class="card" href="/settings">
-      <div class="ic">⚙️</div>
-      <div class="ct">환경설정</div>
-      <div class="cd">사용할 AI 제공자(Claude·ChatGPT·Gemini) 선택과 본인 API 키 입력(암호화 저장), 연결 테스트.</div>
-      <div class="go">설정하기 →</div>
-    </a>
+  <div class="content">
+    <h2 class="sec-title">시작하기</h2>
+    <p class="lead">조사 데이터, 점검표, 신청서 — 표가 있는 서식이면 무엇이든 정리합니다.</p>
+    <div class="secure">🔒 모든 자료는 내 컴퓨터에서만 처리됩니다</div>
+
+    <div class="grid">
+      <a class="card" href="/pdf-designer">
+        <div class="ic">🧩</div>
+        <div class="ct">템플릿 디자이너</div>
+        <div class="cd">양식에 추출 칸을 지정하고, 같은 양식 파일들을 한꺼번에 엑셀로.</div>
+        <div class="go">시작하기 →</div>
+      </a>
+      <a class="card" href="/ai">
+        <div class="ic">🤖</div>
+        <div class="ct">AI 자동 추출</div>
+        <div class="cd">양식을 몰라도 파일만 넣으면 AI가 읽어 엑셀로 정리합니다.</div>
+        <div class="go">시작하기 →</div>
+      </a>
+      <a class="card" href="/settings">
+        <div class="ic">⚙️</div>
+        <div class="ct">환경설정</div>
+        <div class="cd">AI 제공자 선택과 API 키 설정(암호화 저장).</div>
+        <div class="go">설정하기 →</div>
+      </a>
+    </div>
   </div>
 </div>
 
-<footer>로컬 전용 <span class="sep">·</span> 완전 무료 <span class="sep">·</span> AutoData</footer>
+<footer>AutoData · 로컬 전용 · 완전 무료</footer>
 </body>
 </html>

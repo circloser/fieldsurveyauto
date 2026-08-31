@@ -11,30 +11,32 @@
 <body>
   <div class="dwrap">
     <header class="dheader">
-      <div>
-        <div class="logo"><span class="dot"></span> AutoData</div>
-        <h1>오토다타 · 템플릿 디자이너</h1>
-        <p class="subtitle">양식을 올리면 <b>실제 문서 그대로</b> 보여주고 추출할 칸에 박스를 <b>자동 생성</b>합니다. hwpx·PDF·스캔본 모두 같은 방식으로 처리됩니다.</p>
-        <div class="nav-row" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-          <a href="/" style="text-decoration:none; background:#f1f3f5; color:#191F28; padding:8px 16px; border-radius:8px; font-size:14px; font-weight:600;">🏠 홈</a>
-          <a href="/ai" style="text-decoration:none; background:#3182f6; color:#fff; padding:8px 16px; border-radius:8px; font-size:14px; font-weight:600;">🤖 AI 자동 추출</a>
-          <a href="/settings" style="text-decoration:none; background:#fff; color:#3182f6; border:1px solid #3182f6; padding:8px 16px; border-radius:8px; font-size:14px; font-weight:600;">⚙️ 환경설정(AI 키)</a>
+      <div class="hd-band">
+        <div class="hd-mark">AD</div>
+        <div>
+          <h1>템플릿 디자이너</h1>
+          <p class="subtitle">양식을 올리면 문서 그대로 보여주고, 추출 칸을 자동으로 잡아줍니다.</p>
         </div>
       </div>
+      <nav class="tabbar">
+        <a href="/">홈</a>
+        <a class="on" href="/pdf-designer">템플릿 디자이너</a>
+        <a href="/ai">AI 자동 추출</a>
+        <a href="/settings">환경설정</a>
+      </nav>
     </header>
 
     <div class="security-badge">
       <span class="sb-lock">🔒</span>
       <div>
-        <b>보안 — 자료는 이 컴퓨터에서만 분석됩니다.</b>
-        올린 조사표는 <b>이 프로그램이 도는 컴퓨터(로컬)에서만</b> 처리되며, 인터넷으로 <b>전송·저장되지 않습니다.</b>
-        <span class="sb-note">※ 선택 기능 ‘🤖 AI 자동 이해’를 켤 때만, 해당 양식의 칸 글자가 외부(Claude)로 전송됩니다.</span>
+        <b>모든 자료는 내 컴퓨터에서만 처리됩니다.</b> 인터넷으로 전송·저장되지 않습니다.
+        <span class="sb-note">※ 선택 기능 ‘🤖 AI 자동 이해’를 켤 때만 양식의 칸 글자가 AI로 전송됩니다.</span>
       </div>
     </div>
 
     <div class="card" id="loadCard">
       <h2>1. 양식 불러오기</h2>
-      <p class="desc">기준이 될 조사표(hwpx 또는 pdf) 하나를 올려주세요. hwpx는 한글로 PDF 변환 후 표시됩니다(첫 파일은 다소 걸립니다).</p>
+      <p class="desc">기준이 될 양식(hwpx·pdf) 하나를 올리세요.</p>
       <div class="dropzone" id="dropzone">
         <strong>양식 파일 놓기</strong> 또는 클릭
         <input type="file" id="fileInput" accept=".hwpx,.hwp,.pdf" hidden />
@@ -42,19 +44,19 @@
 
       <div class="tpl-start" id="tplStart" hidden>
         <div class="or-sep"><span>또는</span></div>
-        <p class="tpl-start-label">저장된 템플릿으로 <b>양식 없이 바로 처리</b></p>
+        <p class="tpl-start-label">저장된 템플릿으로 <b>바로 처리</b></p>
         <div class="tpl-start-row">
           <select id="startTplSel"><option value="">— 저장된 템플릿 선택 —</option></select>
           <button class="btn-inline" id="startTplBtn">시작</button>
         </div>
-        <p class="muted" style="margin-top:8px">함께 저장된 <b>조사표 양식 PDF도 화면에 그대로 표시</b>되어 박스 확인·수정 후 바로 일괄 처리할 수 있습니다.</p>
+        <p class="muted" style="margin-top:8px">저장된 양식이 화면에 표시되어 확인 후 바로 처리할 수 있습니다.</p>
       </div>
     </div>
 
     <div class="designer-main" id="main" hidden>
       <div class="tpl-banner" id="tplBanner" hidden>
         <div class="tpl-banner-msg">
-          📄 <b id="tplBannerName">템플릿</b> 을 불러왔습니다 — 오른쪽 <b>‘일괄 처리’</b>에 조사표들을 올려 추출하세요.
+          📄 <b id="tplBannerName">템플릿</b> 을 불러왔습니다 — 아래 <b>‘일괄 처리’</b>에 파일을 올려 추출하세요.
           <span class="muted">박스를 수정하려면 기준 양식을 올리세요.</span>
         </div>
         <div class="tpl-banner-actions">
@@ -66,7 +68,7 @@
       <div class="grid-pane">
         <div class="pane-head">
           <h2>2. 박스 확인·정리</h2>
-          <span class="hint">표 칸마다 박스 자동 생성 → <b>필요 없는 건 선택 후 Delete(또는 ✕)로 삭제</b> · 이름 확인 · 값이 빠진 곳은 드래그로 추가</span>
+          <span class="hint">필요 없는 박스는 Delete로 삭제 · 빠진 곳은 드래그로 추가</span>
         </div>
         <div class="tools-row">
           <button class="mini-btn" id="aiBtn" title="Claude AI가 양식을 읽고 추출 항목을 자동으로 찾아 이름까지 붙입니다 (외부 API·인터넷 사용)">🤖 AI 자동 이해</button>
@@ -103,13 +105,13 @@
       <div class="steps-bottom">
         <div class="step-card">
           <h2>3. 저장된 템플릿</h2>
-          <p class="muted" style="margin:4px 0 10px">저장한 템플릿을 불러와 바로 일괄 처리에 사용합니다.</p>
+          <p class="muted" style="margin:4px 0 10px">저장한 템플릿을 불러옵니다.</p>
           <ul class="tpl-list" id="tplList"></ul>
         </div>
 
         <div class="step-card">
           <h2>4. 일괄 처리</h2>
-          <p class="desc">조사표 파일(hwpx·pdf)들을 선택하고 버튼만 누르세요 — 양식을 자동으로 알아보고, <b>제목이 같은 조사표끼리 한 시트</b>로 정리합니다(제목이 없으면 시트 하나). 결과에 <b>빈칸·이상치 요약</b>이 함께 표시됩니다.</p>
+          <p class="desc">파일들을 선택하고 버튼만 누르세요 — 양식을 알아보고 <b>제목별 시트</b>로 정리합니다. 이상한 값은 표시해 드립니다.</p>
           <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
           <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
           <div id="applyResult"></div>
@@ -117,10 +119,9 @@
 
         <div class="step-card">
           <h2>5. 보고서 출력 양식 <span class="pill">선택</span></h2>
-          <p class="desc">위 <b>4번 일괄 처리를 먼저 실행</b>한 뒤 — 엑셀 양식(.xlsx)을 올리면 <b>미리보기·편집</b>이 뜨고, <b>‘보고서 양식으로 정리’</b>를 누르면 4번 결과가 그 양식에 채워져 다운로드됩니다. 수식 <b>=B3+B4</b>는 그대로 보존.</p>
+          <p class="desc">4번 실행 후 — 엑셀 양식(.xlsx)을 올리고 <b>‘보고서로 정리’</b>를 누르면 결과가 양식에 채워집니다. 수식은 보존됩니다.</p>
           <p class="desc" style="background:#f1f3f5;border-radius:8px;padding:8px 10px">
-            • <b>{하천명}</b> — 조사표마다 <b>개별 시트</b> 1장씩 (각 시트에 그 조사표 값)<br>
-            • <b>{하천명#2}</b> — <b>한 시트</b>에서 <b>2번째</b> 조사표를 참조(종합·비교표) → 순번은 요약(DB)/파일 순서
+            • <b>{항목}</b> — 건마다 개별 시트 · <b>{항목#2}</b> — 종합표에서 2번째 건 참조
           </p>
           <div class="rpt-draft-row">
             <button class="mini-btn" id="aiDraftBtn" title="추출 항목을 보고 AI가 보고서 양식 초안(xlsx)을 만들어 줍니다. 다운로드해 엑셀에서 편집한 뒤 다시 올릴 수 있습니다.">🤖 AI 초안 만들기</button>
@@ -133,13 +134,13 @@
               <span class="muted">미리보기 — 셀 클릭 후 삽입:</span>
               <select id="rptFieldSel"><option value="">— 추출 항목 —</option></select>
               <input type="number" id="rptIdxInput" min="1" placeholder="순번(선택)" style="width:96px"
-                     title="비우면 개별 시트용 {항목}, 숫자를 넣으면 그 순번 조사표를 참조하는 {항목#N} 삽입(종합보고서)" />
+                     title="비우면 개별 시트용 {항목}, 숫자를 넣으면 그 순번 데이터를 참조하는 {항목#N} 삽입(종합보고서)" />
               <button class="mini-btn" id="rptInsertBtn">삽입</button>
             </div>
             <div class="rpt-scroll"><table class="rpt-grid" id="rptGrid"></table></div>
           </div>
           <div id="rptRunRow" hidden>
-            <button class="btn btn-download" id="rptGenBtn">📊 보고서 양식으로 정리 — 4번 결과를 이 양식에 채우기</button>
+            <button class="btn btn-download" id="rptGenBtn">📊 보고서로 정리</button>
             <a id="rptGenDl" class="draft-dl" href="/api/report/result" hidden>📥 정리된 보고서 다운로드</a>
             <p class="muted" id="rptGenMsg" style="margin-top:6px"></p>
           </div>
@@ -147,8 +148,8 @@
 
         <div class="step-card">
           <h2>6. AI 결과 해석 <span class="pill">선택</span></h2>
-          <p class="desc">일괄 처리(4번) 후, 추출된 데이터 전체를 AI가 <b>요약·분포·추세·품질(빈칸·이상치)</b> 관점으로 해석합니다. (환경설정에 AI 키 필요)</p>
-          <button class="btn" id="pdfAnalyzeBtn" style="background:#fff;color:#3182f6;border:1px solid #3182f6">📊 AI로 결과 해석하기</button>
+          <p class="desc">추출 결과를 AI가 요약·해석합니다. (환경설정에 AI 키 필요)</p>
+          <button class="btn" id="pdfAnalyzeBtn" style="background:#fff;color:var(--accent);border:1px solid var(--accent)">📊 AI로 결과 해석하기</button>
           <div id="pdfAnalysis" style="margin-top:12px;padding:14px;background:#f1f3f5;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.6;display:none"></div>
         </div>
       </div><!-- /steps-bottom -->
