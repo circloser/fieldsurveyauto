@@ -2,7 +2,7 @@
 """포터블(OCR 포함) 빌드 스펙 — 스캔(이미지) PDF 글자 인식까지 되는 큰 버전.
 
 빌드:  .venv\\Scripts\\python.exe -m PyInstaller --noconfirm FieldSurveyDB_OCR.spec
-결과:  dist/FieldSurveyDB_OCR/  (용량 큼: torch CPU + EasyOCR 한국어 모델 동봉)
+결과:  dist/FieldSurveyDB/ (기본 제품 — OCR 포함)  (용량 큼: torch CPU + EasyOCR 한국어 모델 동봉)
 - EasyOCR 모델(craft/korean)을 함께 넣어 다른 PC에서 인터넷 없이 OCR 동작.
 - 기본(가벼운) 버전은 FieldSurveyDB.spec 사용.
 """
@@ -58,7 +58,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="FieldSurveyDB_OCR",
+    name="FieldSurveyDB",
     console=True,
     disable_windowed_traceback=False,
 )
@@ -68,5 +68,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="FieldSurveyDB_OCR",
+    name="FieldSurveyDB",
 )
