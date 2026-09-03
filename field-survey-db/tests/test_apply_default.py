@@ -477,3 +477,73 @@ def test_same_labels_different_title_discarded(tmp_path, monkeypatch):
     assert wb.sheetnames == ["하천 조사표"]
     vals = [c.value for row in wb["하천 조사표"].iter_rows(min_row=2) for c in row]
     assert "가곡천" in vals and "오십천" not in vals          # 점검표 데이터 미혼입
+
+
+def test_template_mode_does_not_absorb_unmatched(tmp_path, monkeypatch):
+    """템플릿 모드(저장 템플릿 박스를 그대로 화면에 불러온 상태, 문서 없음) —
+    제목 없는 '현재 양식' 복사본이 끼어들어 미등록 양식을 흡수하지 않는다."""
+    import fitz
+    import app.main as app_main
+
+    tpl = tmp_path / "tpl.pdf"
+    _draw_form(tpl, [("하천명", ""), ("보길이", "")], y_top=60, title="하천 조사표")
+    boxes = _boxes_for(tpl)
+    store = _FakeStore({"조사표": {"name": "조사표", "boxes": boxes}})
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    p1 = tmp_path / "p1.pdf"
+    _draw_form(p1, [("하천명", "가곡천"), ("보길이", "25")], y_top=60, title="하천 조사표")
+    p2 = tmp_path / "p2.pdf"   # 라벨 같고 제목 다른 미등록 양식
+    _draw_form(p2, [("하천명", "오십천"), ("보길이", "18")], y_top=60, title="하천 점검표")
+    mixed = tmp_path / "mixed_t.pdf"
+    m = fitz.open()
+    for p in (p1, p2):
+        src = fitz.open(str(p)); m.insert_pdf(src); src.close()
+    m.save(str(mixed)); m.close()
+
+    # 템플릿 모드: 화면 박스 = 저장 템플릿 박스 그대로, doc_id 없음
+    r = _apply([("mixed.pdf", mixed)], boxes)
+    d = r.json()
+    assert d["ok_count"] == 1 and d["forms"] == 1
+    assert d["by_form"][0]["form"] == "하천 조사표"
+    assert d["discarded"] == [{"title": "하천 점검표", "pages": 1}]
+    assert "현재 양식" not in {m2["template"] for m2 in d["match_info"]}
+
+
+def test_discard_confirm_override_assigns(tmp_path, monkeypatch):
+    """확인 절차 — 버려진 페이지를 사용자가 특정 양식으로 지정하면 그 양식으로 추출된다."""
+    import fitz
+    import app.main as app_main
+
+    tpl = tmp_path / "tpl.pdf"
+    _draw_form(tpl, [("하천명", ""), ("보길이", "")], y_top=60, title="하천 조사표")
+    store = _FakeStore({"조사표": {"name": "조사표", "boxes": _boxes_for(tpl)}})
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    p2 = tmp_path / "p2.pdf"
+    _draw_form(p2, [("하천명", "오십천"), ("보길이", "18")], y_top=60, title="하천 점검표")
+
+    # 1차: 버림 + 선택 가능한 양식 목록(units) 제공
+    r1 = _apply([("p2.pdf", p2)], [])
+    d1 = r1.json()
+    assert d1.get("discarded") == [{"title": "하천 점검표", "pages": 1}]
+    keys = {u["key"]: u["label"] for u in d1["units"]}
+    assert "조사표" in keys and keys["조사표"] == "하천 조사표"
+
+    # 2차: 사용자가 '하천 조사표' 양식으로 처리하겠다고 확정 → 재처리
+    files = [("files", ("p2.pdf", open(p2, "rb"), "application/pdf"))]
+    try:
+        r2 = client.post("/api/pdf/apply",
+                         data={"boxes": "[]", "sheet_name_field": "__group_title__",
+                               "auto_classify": "1",
+                               "assign_overrides": json.dumps({"하천 점검표": "조사표"})},
+                         files=files)
+    finally:
+        files[0][1][1].close()
+    d2 = r2.json()
+    assert r2.status_code == 200
+    assert d2["ok_count"] == 1 and d2["forms"] == 1
+    assert d2["by_form"][0]["form"] == "하천 조사표"
+    assert not d2.get("discarded")

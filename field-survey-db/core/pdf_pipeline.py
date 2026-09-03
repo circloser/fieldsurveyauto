@@ -386,6 +386,29 @@ def detect_title(pdf_path: str, page_no: int) -> dict | None:
             "x1": round(x1, 1), "y1": round(y1, 1)}
 
 
+def detect_title_from_words(page: PdfPage) -> str:
+    """스캔(OCR) 페이지용 제목 감지 — 글자 레이어가 없어 detect_title 이 못 볼 때,
+    OCR 단어의 높이(≈글자 크기)로 상단 30% 안의 큰 글씨 줄을 제목으로 잇는다."""
+    import statistics
+
+    ws = [w for w in page.words if (w.text or "").strip()]
+    if len(ws) < 3:
+        return ""
+    hs = [w.y1 - w.y0 for w in ws]
+    med = statistics.median(hs)
+    big = [w for w in ws if (w.y1 - w.y0) >= max(med * 1.25, med + 2)
+           and w.y0 < page.height * 0.30]
+    if not big:
+        return ""
+    lines: dict[int, list] = {}
+    for w in big:
+        lines.setdefault(round(w.y0 / max(6.0, med * 0.8)), []).append(w)
+    best = max(lines.values(), key=lambda row: (max(w.y1 - w.y0 for w in row),
+                                                -min(w.y0 for w in row)))
+    best.sort(key=lambda w: w.x0)
+    return normalize(" ".join(w.text for w in best))
+
+
 # ---------- 픽셀박스 추출 ----------
 
 def _cell_anchor_value(cells: list[Cell], box: dict,
@@ -454,17 +477,50 @@ def _clip_to_cell(cells: list[Cell], bb: dict) -> dict:
     return nb
 
 
+_NUM_RE = _re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
+IMG_PREFIX = "__IMG__:"   # 이미지 캡처 박스의 값 표식 — 엑셀 작성 시 그림으로 삽입
+
+
+def _to_number(text: str) -> str:
+    """'숫자' 모드 — 문자열에서 첫 숫자만 뽑아 단위·잡글자를 걷어낸다(예: '약 25.5 m' → '25.5')."""
+    m = _NUM_RE.search(text or "")
+    return m.group(0).replace(",", "") if m else ""
+
+
+def crop_box_image(pdf_path: str, page_no: int, bb: dict, dpi: int = 150) -> str:
+    """'이미지' 모드 — 박스 영역을 PNG로 잘라 저장하고 표식 문자열을 돌려준다."""
+    import hashlib
+    from pathlib import Path
+
+    import fitz
+
+    out_dir = Path(pdf_path).parent / "_crops"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    key = hashlib.md5(f"{pdf_path}|{page_no}|{bb['x0']:.1f}|{bb['y0']:.1f}|"
+                      f"{bb['x1']:.1f}|{bb['y1']:.1f}".encode()).hexdigest()[:12]
+    out = out_dir / f"{Path(pdf_path).stem}_p{page_no}_{key}.png"
+    if not out.exists():
+        doc = fitz.open(pdf_path)
+        try:
+            clip = fitz.Rect(float(bb["x0"]), float(bb["y0"]), float(bb["x1"]), float(bb["y1"]))
+            pix = doc[page_no].get_pixmap(clip=clip, dpi=dpi)
+            pix.save(str(out))
+        finally:
+            doc.close()
+    return IMG_PREFIX + str(out)
+
+
 def _box_value(page: PdfPage, box: dict) -> str:
     mode = box.get("mode", "text")
     bbox = {"x0": box["x0"], "y0": box["y0"], "x1": box["x1"], "y1": box["y1"]}
 
-    # 라벨 앵커 우선(text/bold) — 못 찾으면 박스 좌표로 폴백
+    # 라벨 앵커 우선(text/bold/number) — 못 찾으면 박스 좌표로 폴백
     anchor = box.get("anchor")
-    if anchor and box.get("use_anchor", True) and anchor.get("label") and mode in ("text", "bold"):
+    if anchor and box.get("use_anchor", True) and anchor.get("label") and mode in ("text", "bold", "number"):
         v = value_by_label(page, anchor["label"], anchor.get("relation", "right"),
                            bold_only=(mode == "bold"))
         if v:
-            return v
+            return _to_number(v) if mode == "number" else v
 
     if mode == "check":
         ws = words_in_bbox(page, bbox)
@@ -472,7 +528,8 @@ def _box_value(page: PdfPage, box: dict) -> str:
             return ""  # 체크 없으면 빈 값
         return normalize(" ".join(w.text for w in ws if not has_check_mark(w.text)))
 
-    return text_in_bbox(page, bbox, bold_only=(mode == "bold"))
+    v = text_in_bbox(page, bbox, bold_only=(mode == "bold"))
+    return _to_number(v) if mode == "number" else v
 
 
 def match_pages(boxes: list[dict], pages: list[PdfPage], threshold: float = 0.35) -> dict[int, int]:
@@ -583,13 +640,13 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
         if page is None:
             results[i] = ""
             continue
-        if pdf_path and b.get("mode", "text") == "text" and (b.get("anchor") or {}).get("label"):
+        if pdf_path and b.get("mode", "text") in ("text", "number") and (b.get("anchor") or {}).get("label"):
             cells = cells_for(page.page_no)
             if cells:
                 r = _cell_anchor_value(cells, b, return_cell=True)
                 if r is not None:
                     val, vcell = r
-                    results[i] = val
+                    results[i] = _to_number(val) if b.get("mode") == "number" else val
                     deltas.setdefault(page.page_no, []).append(
                         (vcell.x0 - float(b["x0"]), vcell.y0 - float(b["y0"])))
                     continue
@@ -631,6 +688,12 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
             cells = cells_for(page.page_no)
             if cells:
                 bb = _clip_to_cell(cells, bb)
+        if b.get("mode") == "image":   # 이미지 캡처 박스 — 글자 대신 영역 그림
+            try:
+                results[i] = crop_box_image(pdf_path, page.page_no, bb) if pdf_path else ""
+            except Exception:  # noqa: BLE001
+                results[i] = ""
+            continue
         results[i] = _box_value(page, bb)
 
     return {b["field"]: results[i] for i, b in enumerate(ordered)}

@@ -138,7 +138,8 @@ function renderPage() {
     d.style.top = (box.y0 * sc) + "px";
     d.style.width = ((box.x1 - box.x0) * sc) + "px";
     d.style.height = ((box.y1 - box.y0) * sc) + "px";
-    const mark = box.mode === "bold" ? "𝐁 " : box.mode === "check" ? "☑ " : box.mode === "title" ? "📑 " : "";
+    const mark = box.mode === "bold" ? "𝐁 " : box.mode === "check" ? "☑ " : box.mode === "title" ? "📑 "
+      : box.mode === "number" ? "# " : box.mode === "image" ? "🖼 " : "";
     d.innerHTML = `<span class="pbox-tag">${mark}${box.field}<span class="pbox-x">✕</span></span>` +
                   `<span class="pbox-resize" title="크기 조절"></span>`;
     d.querySelector(".pbox-x").addEventListener("click", (e) => { e.stopPropagation(); deleteBox(idx); });
@@ -241,7 +242,8 @@ function sortBoxesByPosition() {
 }
 
 // ---------- 박스 목록 ----------
-const MODES = [["text", "일반"], ["bold", "굵게"], ["check", "체크"], ["title", "제목"]];
+const MODES = [["text", "일반"], ["number", "숫자"], ["bold", "굵게"], ["check", "체크"],
+               ["image", "이미지"], ["title", "제목"]];
 const REL = { right: "오른쪽", below: "아래", self: "그 칸" };
 function anchorChip(box) {
   if (!box.anchor || !box.anchor.label) return "";
@@ -504,8 +506,10 @@ async function deleteTemplate(name) {
   renderTplList(d.templates || []);
 }
 
+let LAST_APPLY_FILES = null;   // 확인 절차(버려진 페이지 재배정)에서 같은 파일로 다시 처리
 async function runApply(files, opts) {
   if (!files || !files.length) { alert("처리할 파일을 선택하세요."); return; }
+  LAST_APPLY_FILES = files;
   reindex();
   // 실제 하는 일만 정확히 안내: PDF는 변환 없이 바로 읽고, 한글 파일만 변환을 거친다
   const hasHwp = [...files].some((f) => /\.hwpx?$/i.test(f.name || ""));
@@ -518,6 +522,7 @@ async function runApply(files, opts) {
   fd.append("sheet_name_field", "__group_title__");
   fd.append("auto_classify", "1");
   if (DOC_ID) fd.append("doc_id", DOC_ID);   // 현재 양식의 제목 텍스트(분류 기준)용
+  if (opts && opts.overrides) fd.append("assign_overrides", JSON.stringify(opts.overrides));
   // 보고서 양식은 4번에서 쓰지 않는다 — 5번 '보고서 양식으로 정리'가 결과를 채운다
   try {
     const d = await (await fetch("/api/pdf/apply", { method: "POST", body: fd })).json();
@@ -647,7 +652,11 @@ $("rptInsertBtn").addEventListener("click", () => {
 function renderApplyAuto(d) {
   let html = `<p class="muted">✅ ${d.ok_count}행 처리 · <b>시트 ${d.forms}개</b>로 정리`
     + (d.failed && d.failed.length ? ` · ⚠️ ${d.failed.length}개 미분류/실패` : "") + `</p>`;
-  html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
+  if ((d.ok_count || 0) > 0) {
+    html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
+  } else {
+    html += `<p class="muted">추출된 행이 없습니다 — 아래 '버려진 페이지 확인'에서 처리 방법을 정하거나, 해당 양식을 템플릿에 추가하세요.</p>`;
+  }
   html += `<p style="margin:10px 0 4px;font-size:13px">📊 이상치 <b style="color:#e8590c">${d.outlier_count || 0}건</b>`
     + ` <span class="muted">— 자세한 해석은 아래 6번 ‘AI 결과 해석’</span></p>`;
   html += `<table class="apply-table"><thead><tr><th>시트(제목)</th><th>행 수</th><th>이상치</th></tr></thead><tbody>`;
@@ -663,11 +672,29 @@ function renderApplyAuto(d) {
     html += `<p class="muted">🗑 버림 — 맞는 양식(템플릿)이 없는 페이지: `
       + d.discarded.map((x) => `<b>${x.title}</b> ${x.pages}쪽`).join(", ")
       + ` <span class="muted">(이 양식도 추출하려면 템플릿에 추가하세요)</span></p>`;
+    // 확인 절차 — 버려진 페이지를 어떻게 처리할지 사용자가 확정(기본: 버림)
+    const uopts = (d.units || []).map((u) => `<option value="${u.key}">${u.label}</option>`).join("");
+    html += `<div class="discard-confirm"><p style="margin:10px 0 6px;font-size:13px"><b>🔎 버려진 페이지 확인</b> — 처리 방법을 정해 주세요 (기본: 버림)</p>`
+      + `<table class="apply-table"><thead><tr><th>페이지 제목</th><th>쪽수</th><th>처리</th></tr></thead><tbody>`
+      + d.discarded.map((x) => `<tr><td>${x.title}</td><td>${x.pages}</td><td><select class="dc-sel" data-title="${encodeURIComponent(x.title)}">`
+        + `<option value="__discard__">버림 (기본)</option>${uopts}</select></td></tr>`).join("")
+      + `</tbody></table><button class="mini-btn" id="dcApplyBtn" style="margin-top:8px">✔ 확인 후 다시 처리</button></div>`;
   }
   if (d.failed && d.failed.length) {
     html += `<p class="muted">⚠️ 미분류/실패: ` + d.failed.map((f) => `${f.name} (${f.error})`).join(", ") + `</p>`;
   }
   $("applyResult").innerHTML = html;
+  const dcBtn = $("dcApplyBtn");
+  if (dcBtn) dcBtn.addEventListener("click", () => {
+    const overrides = {};
+    document.querySelectorAll(".dc-sel").forEach((s) => {
+      overrides[decodeURIComponent(s.dataset.title)] = s.value;
+    });
+    const changed = Object.values(overrides).some((v) => v !== "__discard__");
+    if (!changed) { alert("모두 '버림'으로 확정되었습니다. (결과 엑셀은 그대로 사용하시면 됩니다)"); return; }
+    if (!LAST_APPLY_FILES) { alert("다시 처리할 파일이 없습니다. 파일을 다시 선택해 주세요."); return; }
+    runApply(LAST_APPLY_FILES, { overrides, scrollToResult: true });
+  });
 }
 
 function renderApply(d) {
@@ -701,7 +728,8 @@ function renderApply(d) {
   d.rows.forEach((row, i) => {
     const ol = OL[i] || {};
     html += `<tr><td>${row["_파일명"] || ""}</td>` + d.fields.map((f) => {
-      const v = (row[f] || "").slice(0, 18);
+      const raw = row[f] || "";
+      const v = raw.startsWith("__IMG__:") ? "🖼 이미지" : raw.slice(0, 18);
       return ol[f]
         ? `<td style="background:#fff0e0;border:1px solid #ff922b" title="${ol[f]}">⚠️ ${v}</td>`
         : `<td>${v}</td>`;

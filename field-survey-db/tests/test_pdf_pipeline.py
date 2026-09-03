@@ -418,3 +418,46 @@ def test_neighbor_labels_endpoint(tmp_path):
     assert g.status_code == 200
     d = g.json()
     assert d["left"] == "관리기관" and d["top"] == "하천명"
+
+
+def test_number_mode_extracts_numeric_only(tmp_path):
+    """'숫자' 모드 — 단위·잡글자를 걷어내고 숫자만 뽑는다."""
+    p = tmp_path / "num.pdf"
+    _draw_form(p, [("보길이", "약 25.5 m"), ("개수", "1,250개")], y_top=60)
+    d = read_pdf(str(p), ocr_scanned=False)
+    from core.pdf_pipeline import suggest_from_cells
+    boxes = suggest_from_cells(str(p), 0)
+    for b in boxes:
+        b["mode"] = "number"
+    row = apply_pixel_template(d.pages, boxes, pdf_path=str(p))
+    assert row["보길이"] == "25.5"
+    assert row["개수"] == "1250"
+
+
+def test_image_mode_crops_and_embeds(tmp_path):
+    """'이미지' 모드 — 박스 영역을 그림으로 잘라 엑셀 셀에 삽입한다."""
+    from openpyxl import load_workbook
+    from core.pdf_pipeline import IMG_PREFIX, suggest_from_cells
+    from core.template.writer import write_bundle_excel
+
+    p = tmp_path / "img.pdf"
+    _draw_form(p, [("보 전경", "사진자리"), ("하천명", "가곡천")], y_top=60)
+    d = read_pdf(str(p), ocr_scanned=False)
+    boxes = suggest_from_cells(str(p), 0)
+    for b in boxes:
+        if b["field"] == "보 전경":
+            b["mode"] = "image"
+    row = apply_pixel_template(d.pages, boxes, pdf_path=str(p))
+    assert row["보 전경"].startswith(IMG_PREFIX)
+    from pathlib import Path
+    assert Path(row["보 전경"][len(IMG_PREFIX):]).exists()     # PNG 생성
+    assert row["하천명"] == "가곡천"                              # 다른 칸은 그대로
+
+    out = tmp_path / "img.xlsx"
+    write_bundle_excel([{"label": "양식", "fields": ["보 전경", "하천명"],
+                         "rows": [{"_파일명": "img.pdf", **row}]}], str(out))
+    wb = load_workbook(str(out))
+    ws = wb["양식"]
+    assert len(ws._images) == 1                                   # 그림 1개 삽입
+    assert ws.cell(row=2, column=2).value in (None, "")           # 경로 문자열은 남지 않음
+    assert ws.cell(row=2, column=3).value == "가곡천"

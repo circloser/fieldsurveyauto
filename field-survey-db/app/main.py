@@ -895,9 +895,18 @@ def _pdf_title_text(pdf_path, max_pages: int = 3) -> str:
     return ""
 
 
+def _same_boxes(a: list[dict], b: list[dict]) -> bool:
+    """두 박스 집합이 같은 템플릿에서 온 것인지(위치·페이지 지문 비교)."""
+    def fp(bx):
+        return sorted((int(x.get("page", 0)), round(float(x["x0"])), round(float(x["y0"])),
+                       round(float(x["x1"])), round(float(x["y1"]))) for x in bx)
+    return len(a) == len(b) and fp(a) == fp(b)
+
+
 def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                     box_list: list[dict] | None = None,
-                    cur_pdf_path: str | None = None) -> JSONResponse:
+                    cur_pdf_path: str | None = None,
+                    overrides: dict[str, str] | None = None) -> JSONResponse:
     """기본 일괄 처리: 입력 파일의 '페이지 단위'로 템플릿과 대조해 분류한다.
 
     페이지마다 (제목 유사 0.6 + 라벨 일치 0.4)로 가장 맞는 템플릿에 배정하고,
@@ -937,12 +946,13 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 "npages": max(1, len(tpages))}
 
     templates: list[dict] = []
-    if box_list:  # 화면에서 편집 중인 박스를 첫 후보로 — 단일 양식 사용자는 항상 이걸로 추출됨
+    saved: list[tuple[str, dict]] = [(n, _TEMPLATES.get(n)) for n in _TEMPLATES.list_names()]
+    saved = [(n, t) for n, t in saved if t and t.get("boxes")]
+    # 화면의 박스가 저장 템플릿을 그대로 불러온 것(템플릿 모드)이면 '현재 양식'으로
+    # 중복 등록하지 않는다 — 제목 없는 복사본이 끼어들어 미등록 양식을 흡수하는 것 방지
+    if box_list and not any(_same_boxes(box_list, t["boxes"]) for _, t in saved):
         templates.append(_mk_template("현재 양식", box_list, cur_pdf_path))
-    for name in _TEMPLATES.list_names():
-        t = _TEMPLATES.get(name)
-        if not t or not t.get("boxes"):
-            continue
+    for name, t in saved:
         tpdf = _tpl_pdf_path(name)
         templates.append(_mk_template(t["name"], t["boxes"],
                                       tpdf if tpdf.exists() else None))
@@ -961,13 +971,18 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 if not ub:
                     continue
                 units.append({"kind": "page", "T": T, "tp": tp,
+                              "key": f"{T['name']}#{tp}",
+                              "label": ptitle or f"{T['name']} {tp + 1}쪽",
                               "title": ptitle,
                               "labels": T["labels"].get(tp, set()),
                               "boxes": ub,
                               "fields": [b["field"] for b in
                                          sorted(ub, key=lambda z: z.get("order", 0))]})
         else:
-            units.append({"kind": "whole", "T": T, "title": T["title"]})
+            units.append({"kind": "whole", "T": T, "key": T["name"],
+                          "label": T["title"] or T["name"], "title": T["title"]})
+    unit_by_key = {u["key"]: u for u in units}
+    overrides = overrides or {}   # 확인 절차: {페이지 제목: 유닛 key | "__discard__"}
 
     groups: dict[str, dict] = {}  # 제목 값 → {"label", "fields", "rows"}
     failed, match_info = [], []
@@ -981,13 +996,20 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
             doc = read_pdf(pdf_path)
 
             ptitle: dict[int, str] = {}
+            by_page = {p.page_no: p for p in doc.pages}
             def page_title(ip: int) -> str:
                 if ip not in ptitle:
                     try:
                         t = detect_title(pdf_path, ip)
-                        ptitle[ip] = (t.get("text") or "").strip() if t else ""
+                        txt = (t.get("text") or "").strip() if t else ""
                     except Exception:  # noqa: BLE001
-                        ptitle[ip] = ""
+                        txt = ""
+                    if not txt:   # 스캔(OCR) 페이지 — 글자 레이어가 없으면 OCR 단어 크기로
+                        pg = by_page.get(ip)
+                        if pg is not None and getattr(pg, "ocr", False):
+                            from core.pdf_pipeline import detect_title_from_words
+                            txt = detect_title_from_words(pg)
+                    ptitle[ip] = txt
                 return ptitle[ip]
 
             # ① 페이지 단위 배정 — 페이지마다 모든 분류 단위(소양식 쪽·전체 템플릿)와
@@ -1004,6 +1026,14 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
             unmatched: list[int] = []
             for ip, text in page_text.items():
                 pt = page_title(ip)
+                # 확인 절차에서 사용자가 정한 처리(버림 확정 / 특정 양식으로 배정)
+                ov = overrides.get(pt) if pt else None
+                if ov == "__discard__":
+                    unmatched.append(ip)
+                    continue
+                if ov and ov in unit_by_key:
+                    page_assign[ip] = unit_by_key[ov]
+                    continue
                 best_u, best_sc, best_ts, best_ls = None, -1.0, 0.0, 0.0
                 for u in units:
                     T = u["T"]
@@ -1033,8 +1063,8 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                                   else best_u["T"]["title"])
                     if best_ts >= 0.85 or (best_ts >= 0.7 and best_ls >= 0.25):
                         ok = True
-                    elif best_ls >= 0.35 and not unit_title:
-                        ok = True
+                    elif best_ls >= 0.35 and (not unit_title or not pt):
+                        ok = True   # 제목 확인이 불가능한 경우(무제 유닛/제목 없는 쪽)만 구조로
                 if ok:
                     page_assign[ip] = best_u
                 else:
@@ -1132,6 +1162,15 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
             failed.append({"name": uf.filename, "error": str(e)})
 
     if not groups:
+        if discarded:   # 전부 버림 — 확인 절차(재배정)를 거칠 수 있게 정상 응답으로
+            _PDF_APPLY.update({"rows": [], "groups": [], "fields": [], "excel_path": None})
+            return JSONResponse({"auto_classify": True, "forms": 0, "ok_count": 0,
+                                 "by_form": [], "failed": failed, "match_info": match_info,
+                                 "discarded": [{"title": t, "pages": n}
+                                               for t, n in discarded.items()],
+                                 "units": [{"key": u["key"], "label": u["label"]}
+                                           for u in units],
+                                 "outlier_count": 0, "report_used": False})
         return JSONResponse(
             {"error": "처리된 파일이 없습니다. 양식과 입력 파일이 맞는지 확인하세요.",
              "failed": failed}, status_code=400)
@@ -1161,6 +1200,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                          "by_form": by_form, "failed": failed, "match_info": match_info,
                          "discarded": [{"title": t, "pages": n}
                                        for t, n in discarded.items()],
+                         "units": [{"key": u["key"], "label": u["label"]} for u in units],
                          "outlier_count": outlier_total, "report_used": False})
 
 
@@ -1168,7 +1208,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
 async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
                     report_id: str = Form(""), report_edits: str = Form(""),
                     sheet_name_field: str = Form(""), auto_classify: str = Form(""),
-                    doc_id: str = Form(""),
+                    doc_id: str = Form(""), assign_overrides: str = Form(""),
                     report_template: UploadFile | None = None) -> JSONResponse:
     import json as _json
     auto = auto_classify.strip().lower() in ("1", "true", "on", "yes")
@@ -1189,7 +1229,12 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
     if auto and not has_report:
         entry = _PDF_DOCS.get(doc_id) if doc_id else None
         cur_pdf = entry["pdf_path"] if entry else None
-        return _pdf_apply_auto(files, req_dir, stamp0, box_list, cur_pdf)
+        try:
+            ov = _json.loads(assign_overrides) if assign_overrides else {}
+        except _json.JSONDecodeError:
+            ov = {}
+        return _pdf_apply_auto(files, req_dir, stamp0, box_list, cur_pdf,
+                               overrides=ov if isinstance(ov, dict) else {})
 
     # 중복 이름은 접미사로 유일화(엑셀 열 충돌 방지). 사용자가 이름을 안 바꾼 경우 대비.
     box_list, fields = _dedup_box_fields(box_list)

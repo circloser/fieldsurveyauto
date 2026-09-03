@@ -39,8 +39,10 @@ def clean_dist():
 
 def build():
     clean_dist()
+    # 기본 = OCR 포함 스펙(스캔·수기 문서 글자 인식 기본 탑재). --lite 는 경량판.
+    spec = "FieldSurveyDB.spec" if "--lite" in sys.argv else "FieldSurveyDB_OCR.spec"
     r = subprocess.run([str(ROOT / ".venv" / "Scripts" / "pyinstaller.exe"),
-                        str(ROOT / "FieldSurveyDB.spec"), "--noconfirm"],
+                        str(ROOT / spec), "--noconfirm"],
                        cwd=str(ROOT))
     if r.returncode != 0:
         raise SystemExit("PyInstaller 빌드 실패")

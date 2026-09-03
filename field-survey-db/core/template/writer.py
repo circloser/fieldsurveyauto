@@ -20,6 +20,37 @@ _OUT_FILL = PatternFill("solid", fgColor="FFE9D8")
 _OUT_FONT = Font(color="C2410C", bold=True)
 
 
+IMG_PREFIX = "__IMG__:"   # 이미지 캡처 박스 값 표식(core.pdf_pipeline.IMG_PREFIX 와 동일)
+
+
+def _place_images(ws, row_idx: int, row: dict, fields: list[str],
+                  col_offset: int = 2) -> None:
+    """'이미지' 모드 값(__IMG__:경로)은 글자 대신 그림을 셀에 넣는다."""
+    from openpyxl.drawing.image import Image as XLImage
+
+    for j, f in enumerate(fields):
+        v = row.get(f, "")
+        if not (isinstance(v, str) and v.startswith(IMG_PREFIX)):
+            continue
+        col = col_offset + j
+        cell = ws.cell(row=row_idx, column=col)
+        cell.value = None
+        try:
+            img = XLImage(v[len(IMG_PREFIX):])
+            scale = min(160 / max(1, img.width), 90 / max(1, img.height), 1.0)
+            img.width = int(img.width * scale)
+            img.height = int(img.height * scale)
+            img.anchor = cell.coordinate
+            ws.add_image(img)
+            rd = ws.row_dimensions[row_idx]
+            rd.height = max(rd.height or 15, img.height * 0.75 + 4)
+            cl = get_column_letter(col)
+            cd = ws.column_dimensions[cl]
+            cd.width = max(cd.width or 10, img.width / 7 + 2)
+        except Exception:  # noqa: BLE001  (그림 파일 유실 등 — 표식만 남김)
+            cell.value = "[이미지]"
+
+
 def _mark_outliers(ws, row_idx: int, row: dict, fields: list[str],
                    col_offset: int = 2) -> None:
     """행 dict의 '_이상치'({필드: 사유})를 읽어 해당 셀에 서식·메모를 입힌다."""
@@ -58,6 +89,7 @@ def write_bundle_excel(groups: list[dict], out_path: str) -> str:
         ws.freeze_panes = "A2"
         for row in g["rows"]:
             ws.append([row.get("_파일명", "")] + [row.get(f, "") for f in g["fields"]])
+            _place_images(ws, ws.max_row, row, list(g["fields"]))
             _mark_outliers(ws, ws.max_row, row, list(g["fields"]))
         for i, h in enumerate(headers, start=1):
             ws.column_dimensions[get_column_letter(i)].width = max(10, min(30, len(str(h)) * 2 + 4))
@@ -99,6 +131,7 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
 
     for row in rows:
         ws.append([row.get("_파일명", "")] + [row.get(f, "") for f in fields])
+        _place_images(ws, ws.max_row, row, fields)
         _mark_outliers(ws, ws.max_row, row, fields)
 
     for i, h in enumerate(headers, start=1):
@@ -116,6 +149,7 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
             _style_header(s, len(headers))
             for row in grows:
                 s.append([row.get("_파일명", "")] + [row.get(f, "") for f in fields])
+                _place_images(s, s.max_row, row, fields)
                 _mark_outliers(s, s.max_row, row, fields)
             for i, h in enumerate(headers, start=1):
                 s.column_dimensions[get_column_letter(i)].width = max(10, min(30, len(str(h)) * 2 + 4))
