@@ -1070,6 +1070,20 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 else:
                     unmatched.append(ip)
 
+            # 설문지(칸 없음) 자동 인식 — 어떤 양식과도 안 맞는 페이지가 '문항 번호' 구조를
+            # 가지면 버리지 않고 설문 파서로 추출한다(스캔본은 잉크 밀도로 표시 판정).
+            survey_rows: list[tuple[int, dict]] = []
+            if unmatched:
+                from core.survey import extract_survey, is_survey_page
+                keep: list[int] = []
+                for ip in unmatched:
+                    pg = by_page.get(ip)
+                    if pg is not None and is_survey_page(pg):
+                        survey_rows.append((ip, extract_survey(pg, pdf_path=pdf_path)))
+                    else:
+                        keep.append(ip)
+                unmatched = keep
+
             # ② 추출 대상 확정 — 소양식 쪽은 '페이지 1장 = 1행',
             #    전체 템플릿은 배정된 페이지 안에서 묶음(조사표) 구성
             accepted = []  # (첫 페이지, {name, boxes, fields, title}, page_map)
@@ -1114,7 +1128,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                              {"name": cur["name"], "boxes": cur["boxes"],
                               "fields": cur["fields"], "title": cur["title"]}, pm)
                             for pm in maps]
-            if not accepted:
+            if not accepted and not survey_rows:
                 failed.append({"name": uf.filename,
                                "error": "맞는 양식(템플릿)이 없어 버림 처리했습니다."})
                 if unmatched:
@@ -1149,6 +1163,15 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                         g["fields"].append(fld)
                 g["rows"].append({"_파일명": fname, "_제목": title, **row})
                 tcount[ext["name"]] = tcount.get(ext["name"], 0) + 1
+            for ip, srow in survey_rows:
+                title = page_title(ip) or "설문지"
+                fname = f"{uf.filename} #{ip + 1}쪽"
+                g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
+                for fld in srow:
+                    if not fld.startswith("_") and fld not in g["fields"]:
+                        g["fields"].append(fld)
+                g["rows"].append({"_파일명": fname, "_제목": title, **srow})
+                tcount["설문지(자동 인식)"] = tcount.get("설문지(자동 인식)", 0) + 1
             for tname, cnt in tcount.items():
                 match_info.append({"name": uf.filename, "template": tname,
                                    "bundles": cnt})
@@ -1184,7 +1207,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
         og = find_outliers([{f: r.get(f, "") for f in g["fields"]} for r in g["rows"]])
         for r, o in zip(g["rows"], og):
             if o:
-                r["_이상치"] = o
+                r["_이상치"] = {**(r.get("_이상치") or {}), **o}
         cnt = sum(len(o) for o in og)
         outlier_total += cnt
         by_form.append({"form": g["label"], "count": len(g["rows"]), "outliers": cnt})
