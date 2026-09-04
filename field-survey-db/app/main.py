@@ -362,15 +362,42 @@ async def pdf_load(file: UploadFile) -> JSONResponse:
 
     doc_id = uuid.uuid4().hex[:10]
     _PDF_DOCS[doc_id] = {"pdf_path": pdf_path, "doc": doc}
+    # 설문지(문항 번호 목록·척도표)면 칸 박스가 무의미 → 박스 없이 '설문지로 인식' 안내만
+    survey = _survey_info(doc, pdf_path)
     # 표 테두리 기반 자동 제안(기본). 스캔본 등 칸이 없으면 단어 방식으로 폴백.
-    boxes = _suggest_all(doc, pdf_path)
+    boxes = [] if survey else _suggest_all(doc, pdf_path)
     return JSONResponse({
         "doc_id": doc_id,
         "filename": file.filename,
         "pages": [{"page_no": p.page_no, "width": p.width, "height": p.height,
                    "needs_ocr": p.needs_ocr, "ocr": getattr(p, "ocr", False)} for p in doc.pages],
         "boxes": boxes,
+        "survey": survey,
     })
+
+
+def _survey_info(doc, pdf_path: str) -> dict | None:
+    """문서의 쪽 과반이 설문지(문항 목록 또는 척도표)로 인식되면 {pages, questions, likert}."""
+    from core.likert import _COL_CACHE, parse_likert
+    from core.survey import is_survey_page, parse_survey
+    pages: list[int] = []
+    questions = 0
+    likert = 0
+    for p in doc.pages:
+        try:
+            grid = parse_likert(p, fallback=_COL_CACHE.get(pdf_path))
+            if grid is not None:
+                likert += 1
+                questions += len(grid.rows)
+                pages.append(p.page_no)
+            elif is_survey_page(p, pdf_path=pdf_path):
+                questions += len(parse_survey(p))
+                pages.append(p.page_no)
+        except Exception:  # noqa: BLE001
+            continue
+    if not pages or len(pages) * 2 < len(doc.pages):
+        return None
+    return {"pages": pages, "questions": questions, "likert": likert > 0}
 
 
 def _suggest_all(doc, pdf_path: str) -> list[dict]:
@@ -1070,16 +1097,31 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
 
             # 설문지(칸 없음) 자동 인식 — 어떤 양식과도 안 맞는 페이지가 '문항 번호' 구조를
             # 가지면 버리지 않고 설문 파서로 추출한다(스캔본은 잉크 밀도로 표시 판정).
-            survey_rows: list[tuple[int, dict]] = []
+            survey_rows: list[tuple[int, dict]] = []   # (첫 쪽, 행) — 행에 '_쪽들' = 합쳐진 쪽 번호들
             if unmatched:
-                from core.survey import extract_survey, is_survey_page
+                from core.survey import extract_survey, is_survey_page, merge_survey_rows
                 keep: list[int] = []
-                for ip in unmatched:
+                prev_ip, prev_last, prev_nq = None, None, 0
+                for ip in sorted(unmatched):
                     pg = by_page.get(ip)
-                    if pg is not None and is_survey_page(pg, pdf_path=pdf_path):
-                        survey_rows.append((ip, extract_survey(pg, pdf_path=pdf_path)))
-                    else:
+                    if pg is None or not is_survey_page(pg, pdf_path=pdf_path):
                         keep.append(ip)
+                        prev_ip = None
+                        continue
+                    srow = extract_survey(pg, pdf_path=pdf_path)
+                    span = srow.pop("_문항범위", None)
+                    nq = srow.pop("_문항수", 0)
+                    # 문항 번호가 앞 쪽에서 이어지면(1~10 → 11~17) 같은 응답자 → 한 행으로 합침
+                    if (prev_ip is not None and ip == prev_ip + 1 and prev_last is not None
+                            and span and span[0] == prev_last + 1):
+                        base = survey_rows[-1][1]
+                        merge_survey_rows(base, srow, prev_nq)
+                        base["_쪽들"].append(ip)
+                        prev_ip, prev_last, prev_nq = ip, span[1], prev_nq + nq
+                    else:
+                        srow["_쪽들"] = [ip]
+                        survey_rows.append((ip, srow))
+                        prev_ip, prev_last, prev_nq = ip, (span[1] if span else None), nq
                 unmatched = keep
 
             # ② 추출 대상 확정 — 소양식 쪽은 '페이지 1장 = 1행',
@@ -1162,14 +1204,26 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 g["rows"].append({"_파일명": fname, "_제목": title, **row})
                 tcount[ext["name"]] = tcount.get(ext["name"], 0) + 1
             for ip, srow in survey_rows:
-                title = page_title(ip) or "설문지"
+                # 설문지 제목: 섹션 머리글('Ⅰ. 의료서비스의 질')이 큰 글씨여도 그건 건너뛰고
+                # 진짜 제목 줄을 고른다(글자 레이어 없는 스캔본은 일반 제목 탐지)
+                try:
+                    from core.survey import survey_title
+                    title = survey_title(pdf_path, ip) or page_title(ip) or "설문지"
+                except Exception:  # noqa: BLE001
+                    title = page_title(ip) or "설문지"
                 # 같은 설문인데 OCR이 제목을 쪽마다 조금씩 다르게 읽으면(오탈자·줄 끊김)
-                # 이미 만든 설문 시트 중 유사한 제목으로 합친다
-                for existing in list(groups):
-                    if existing and existing != title and _title_sim(title, existing) >= 0.6:
-                        title = existing
-                        break
-                fname = f"{uf.filename} #{ip + 1}쪽"
+                # 이미 만든 설문 시트 중 유사한 제목으로 합친다 — 스캔(OCR) 쪽만.
+                # 글자 레이어가 있는 문서는 제목이 정확하므로 '외래…조사'와 '입원…조사'처럼
+                # 비슷하지만 다른 설문을 섞지 않는다.
+                pg0 = by_page.get(ip)
+                if pg0 is not None and getattr(pg0, "ocr", False):
+                    for existing in list(groups):
+                        if existing and existing != title and _title_sim(title, existing) >= 0.6:
+                            title = existing
+                            break
+                pages_in = srow.pop("_쪽들", [ip])
+                fname = (f"{uf.filename} #{pages_in[0] + 1}~{pages_in[-1] + 1}쪽" if len(pages_in) > 1
+                         else f"{uf.filename} #{ip + 1}쪽")
                 g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
                 for fld in srow:
                     if not fld.startswith("_") and fld not in g["fields"]:

@@ -17,7 +17,9 @@ from core.normalize import normalize
 from core.pdf_reader import PdfPage, Word
 
 _ROW_ID = re.compile(r"^(\d{1,2}(?:-\d{1,2})?)[.)]?(?:\s+(.*))?$")   # '1-1' 또는 '1-1 질문…'(한 토큰)
-_SCALE_TOK = re.compile(r"^(?=.*(?:\d|[점죄짐]))\W?\s*\S{1,2}\s*[점죄짐]?\W?$")   # '1점' '(점' '근점' '5죄' 같은 OCR 변형
+# 점수 열 머리글 토큰: '1점' '2점' … 과 OCR 변형('(점' '근점' '3짐' '5죄'), 맨숫자 '1'.
+# '1회' '6명' 같은 단위 붙은 숫자는 제외(설문 선택지 '② 1회 ③ 2회…'를 머리글로 오인 방지)
+_SCALE_TOK = re.compile(r"^\W?\s*(?:\d{1,2}\s*[점죄짐]?|\S{1,2}[점죄짐])\W?$")
 
 
 @dataclass
@@ -69,10 +71,10 @@ def _find_columns(page: PdfPage, lines: list[list[Word]]) -> tuple[list[float], 
     """머리글 행: 오른쪽 절반에 짧은 점수 토큰이 3개 이상 등간격으로 놓인 줄."""
     best = None
     for line in lines:
-        toks = [w for w in line if w.x0 > page.width * 0.5 and len(w.text.strip()) <= 3
-                and _SCALE_TOK.match(w.text.strip())]
-        if len(toks) < 3:
-            continue
+        right = [w for w in line if w.x0 > page.width * 0.5]
+        toks = [w for w in right if len(w.text.strip()) <= 3 and _SCALE_TOK.match(w.text.strip())]
+        if len(toks) < 3 or len(toks) < 0.6 * len(right):
+            continue   # 머리글 줄은 오른쪽 절반이 거의 점수 토큰뿐이어야 함(선택지 줄과 구분)
         xs = sorted(w.cx for w in toks)
         diffs = [b - a for a, b in zip(xs, xs[1:])]
         if not diffs:

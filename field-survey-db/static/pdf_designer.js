@@ -36,6 +36,15 @@ async function loadForm(file) {
     DOC_ID = data.doc_id; PAGES = data.pages;
     BOXES = keepBoxes || data.boxes.map((b, i) => ({ ...b, order: b.order ?? i + 1 }));
     exitTplMode();
+    // 설문지(문항 번호 목록·척도표)로 인식되면: 칸 박스 없이 안내 배너 — 4번에서 바로 처리
+    if (data.survey) {
+      const s = data.survey;
+      $("surveyBannerInfo").textContent =
+        `${s.pages.length}쪽, 문항 ${s.questions}개${s.likert ? " (척도표 포함)" : ""} 인식.`;
+      $("surveyBanner").hidden = false;
+    } else {
+      $("surveyBanner").hidden = true;
+    }
     activePage = PAGES.length ? PAGES[0].page_no : 0; selected = null;  // 항상 1페이지부터
     $("main").hidden = false;
     renderPageNav(); renderPage(); renderBoxes(); loadTemplates();
@@ -47,6 +56,7 @@ async function loadForm(file) {
 function exitTplMode() {
   TPL_MODE = false;
   $("tplBanner").hidden = true;
+  $("surveyBanner").hidden = true;
   document.querySelector(".grid-pane").style.display = "";
 }
 let EDIT_VER = 0;   // 페이지 편집(삭제/추가) 시 증가 — 페이지 이미지 캐시 무효화
