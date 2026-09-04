@@ -114,9 +114,8 @@ def test_scanned_survey_ink_marks(tmp_path, ocr_ready):
     assert pg.ocr
     assert is_survey_page(pg), [w.text for w in pg.words]
     row = extract_survey(pg, pdf_path=str(p))
-    k1 = next(k for k in row if k.startswith("1_"))
-    k2 = next(k for k in row if k.startswith("2_"))
-    k3 = next(k for k in row if k.startswith("3_"))
+    k1, k2, k3 = "문항01", "문항02", "문항03"        # 스캔본: 행 순서 기반 안정 열 이름
+    assert all(k in row for k in (k1, k2, k3)), list(row)
     assert row[k1].startswith("3:")            # 동그라미 → 3번
     assert row[k2].startswith("2:")            # 체크(OCR이 깨뜨린 번호를 순서로 복원) → 2번
     flags = row.get("_이상치", {})

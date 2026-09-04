@@ -164,8 +164,11 @@ def parse_survey(page: PdfPage) -> list[Question]:
     return qs
 
 
-def is_survey_page(page: PdfPage) -> bool:
-    """문항 번호가 순차로 2개 이상 있고, 선택지나 답이 달린 페이지."""
+def is_survey_page(page: PdfPage, pdf_path: str | None = None) -> bool:
+    """문항 번호가 순차로 2개 이상 있고 선택지나 답이 달린 페이지 — 또는 척도표(리커트)."""
+    from core.likert import _COL_CACHE, parse_likert
+    if parse_likert(page, fallback=_COL_CACHE.get(pdf_path or "")) is not None:
+        return True
     qs = parse_survey(page)
     return len(qs) >= 2 and any(q.choices or q.free_text for q in qs)
 
@@ -228,12 +231,13 @@ def mark_by_ink(pdf_path: str, page: PdfPage, questions: list[Question],
             q.flag = f"표시 불명확(잉크 차이 {excess:.0%})"
 
 
-def survey_row(questions: list[Question]) -> dict:
-    """문항 → 엑셀 한 행. 열 = '번호_질문', 값 = '번호:선택지'(복수는 ;), 주관식은 글."""
+def survey_row(questions: list[Question], stable_keys: bool = False) -> dict:
+    """문항 → 엑셀 한 행. 열 = '번호_질문', 값 = '번호:선택지'(복수는 ;), 주관식은 글.
+    stable_keys(스캔본): 열 이름을 '문항NN'(번호)로 — OCR 글자 흔들림에도 열이 일치."""
     row: dict = {}
     flags: dict = {}
     for q in questions:
-        key = f"{q.no}_{q.text[:18].rstrip('?？. ')}"
+        key = f"문항{q.no:02d}" if stable_keys else f"{q.no}_{q.text[:18].rstrip('?？. ')}"
         if q.choices:
             row[key] = ";".join(q.answers)
         else:
@@ -246,11 +250,16 @@ def survey_row(questions: list[Question]) -> dict:
 
 
 def extract_survey(page: PdfPage, pdf_path: str | None = None) -> dict:
-    """페이지 하나를 설문 행으로. 스캔(OCR) 페이지면 잉크 밀도로 표시를 판정한다."""
+    """페이지 하나를 설문 행으로. 척도표(리커트)면 격자 판정, 아니면 문항 목록 파서.
+    스캔(OCR) 페이지면 잉크 밀도로 표시를 판정한다."""
+    from core.likert import extract_likert
+    lk = extract_likert(page, pdf_path=pdf_path)
+    if lk is not None:
+        return lk
     qs = parse_survey(page)
     if pdf_path and getattr(page, "ocr", False):
         try:
             mark_by_ink(pdf_path, page, qs)
         except Exception:  # noqa: BLE001  (렌더 실패 등 — 글자 표시만으로)
             pass
-    return survey_row(qs)
+    return survey_row(qs, stable_keys=bool(getattr(page, "ocr", False)))

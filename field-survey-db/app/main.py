@@ -956,10 +956,8 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
         tpdf = _tpl_pdf_path(name)
         templates.append(_mk_template(t["name"], t["boxes"],
                                       tpdf if tpdf.exists() else None))
-    if not templates:
-        return JSONResponse(
-            {"error": "추출할 박스가 없습니다. 양식을 올려 박스를 만들거나 템플릿을 저장하세요."},
-            status_code=400)
+    # 템플릿이 하나도 없어도 진행 — 설문지(문항 번호·척도표)는 템플릿 없이 인식되므로,
+    # 아무것도 못 뽑았을 때만 마지막에 안내한다.
 
     # 분류 단위: 묶음집(multi) 템플릿은 '페이지 하나 = 소양식 하나'로 쪼개고,
     # 일반 템플릿은 통째로 한 단위(묶음 추출 유지)
@@ -1078,7 +1076,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 keep: list[int] = []
                 for ip in unmatched:
                     pg = by_page.get(ip)
-                    if pg is not None and is_survey_page(pg):
+                    if pg is not None and is_survey_page(pg, pdf_path=pdf_path):
                         survey_rows.append((ip, extract_survey(pg, pdf_path=pdf_path)))
                     else:
                         keep.append(ip)
@@ -1165,6 +1163,12 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 tcount[ext["name"]] = tcount.get(ext["name"], 0) + 1
             for ip, srow in survey_rows:
                 title = page_title(ip) or "설문지"
+                # 같은 설문인데 OCR이 제목을 쪽마다 조금씩 다르게 읽으면(오탈자·줄 끊김)
+                # 이미 만든 설문 시트 중 유사한 제목으로 합친다
+                for existing in list(groups):
+                    if existing and existing != title and _title_sim(title, existing) >= 0.6:
+                        title = existing
+                        break
                 fname = f"{uf.filename} #{ip + 1}쪽"
                 g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
                 for fld in srow:
@@ -1194,9 +1198,10 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                                  "units": [{"key": u["key"], "label": u["label"]}
                                            for u in units],
                                  "outlier_count": 0, "report_used": False})
-        return JSONResponse(
-            {"error": "처리된 파일이 없습니다. 양식과 입력 파일이 맞는지 확인하세요.",
-             "failed": failed}, status_code=400)
+        msg = ("처리된 파일이 없습니다. 양식과 입력 파일이 맞는지 확인하세요." if templates else
+               "추출할 박스가 없습니다. 양식을 올려 박스를 만들거나 템플릿을 저장하세요. "
+               "(설문지는 템플릿 없이 인식되지만, 이 파일에서 설문 구조를 찾지 못했습니다)")
+        return JSONResponse({"error": msg, "failed": failed}, status_code=400)
     if "" in groups:  # 제목이 없는 조사표: 전부 무제면 시트 하나, 섞였으면 별도 시트
         groups[""]["label"] = "추출결과" if len(groups) == 1 else "(제목없음)"
     group_list = list(groups.values())
