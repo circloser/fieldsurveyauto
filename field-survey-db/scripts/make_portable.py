@@ -3,7 +3,7 @@
 
 사용:
   .venv/Scripts/python scripts/make_portable.py              # 기본판(CPU 처리, OCR 포함, ~430MB)
-  .venv/Scripts/python scripts/make_portable.py --gpu        # GPU 가속판(.venv-gpu 의 CUDA torch, ~3.5GB)
+  .venv/Scripts/python scripts/make_portable.py --gpu        # GPU 가속판(.venv-gpu 의 CUDA torch, zip ~2.2GB)
   .venv/Scripts/python scripts/make_portable.py --lite       # 경량판(OCR 없음)
   .venv/Scripts/python scripts/make_portable.py --skip-build # 기존 dist로 zip만
 
@@ -43,7 +43,7 @@ def clean_dist():
                      "실행 중인 FieldSurveyDB.exe 를 닫고 다시 시도하세요.")
 
 
-GPU = "--gpu" in sys.argv          # GPU판: CUDA 빌드 torch 가 든 .venv-gpu 로 빌드(용량 ~3.5GB)
+GPU = "--gpu" in sys.argv          # GPU판: CUDA 빌드 torch 가 든 .venv-gpu 로 빌드(zip ~2.2GB)
 VENV = ROOT / (".venv-gpu" if GPU else ".venv")
 VARIANT = "GPU" if GPU else ("경량" if "--lite" in sys.argv else "")
 
