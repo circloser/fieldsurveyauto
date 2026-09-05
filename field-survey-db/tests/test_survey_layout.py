@@ -128,6 +128,36 @@ def test_question_prefix_and_resync(tmp_path):
     assert survey_title(str(p), 0) == "고객 설문"       # 'Ⅰ. 서비스 만족도' 섹션 머리글은 제목이 아님
 
 
+def test_checkbox_style_choices(tmp_path):
+    """체크 칸 선택지 — '남 □ 여 ■'(이름 뒤 칸)과 '□ 있다 ■ 없다'(칸 뒤 이름) 모두 번호 선택지처럼 잡는다.
+    채워진 칸(■)이 응답, 칸 뒤 괄호 설명('■(이용횟수 회)')은 무시."""
+    p = tmp_path / "checkbox.pdf"
+    doc = fitz.open()
+    pg = doc.new_page(width=520, height=420)
+    _write(doc, pg, [
+        (40, 40, "환자 경험 조사", 14),
+        (40, 80, "문1. 귀하의 성별은 남 □ 여 ■", 9),
+        (40, 110, "문2. 우리병원을 방문하신 경험은? : 초진 □ 재진 ■(이용횟수 회)", 9),
+        (40, 140, "문3. 진료과 ( )과", 9),
+        (40, 180, "1. 주차장을 이용하셨습니까?", 9),
+        (60, 200, "□ 있다 ■ 없다", 9),
+        (40, 230, "2. 만족하십니까?", 9),
+        (60, 250, "① 예 ② 아니오", 9),
+    ])
+    doc.save(str(p))
+    doc.close()
+    d = read_pdf(str(p), ocr_scanned=False)
+    qs = parse_survey(d.pages[0])
+    assert [q.qid for q in qs] == ["문1", "문2", "문3", "1", "2"]
+    assert qs[0].text == "귀하의 성별은" and [c.text for c in qs[0].choices] == ["남", "여"]
+    assert qs[0].answers == ["2:여"]
+    assert [c.text for c in qs[1].choices] == ["초진", "재진"] and qs[1].answers == ["2:재진"]
+    assert qs[2].choices == []                                    # 괄호 빈칸 주관식
+    assert [c.text for c in qs[3].choices] == ["있다", "없다"] and qs[3].answers == ["2:없다"]
+    assert [c.no for c in qs[4].choices] == [1, 2]
+    assert is_survey_page(d.pages[0])
+
+
 def test_likert_header_needs_score_tokens_only(tmp_path):
     """'② 1회 ③ 2회 ④ 3회…' 선택지 줄은 등간격이어도 척도표 머리글이 아니다(문항 목록으로 처리)."""
     from core.likert import parse_likert

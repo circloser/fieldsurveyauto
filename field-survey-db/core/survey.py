@@ -7,6 +7,7 @@
         번호 없이 짧은 이름 + 선택지가 붙은 줄('성별 ① 남 ② 여')은 이름을 항목명으로 하는
         암시 문항(인적사항 표 등). 이름이 선택지 줄의 아래·위에 따로 있어도 붙인다.
 선택지: 문항 아래 줄에서 ①…⑩ / (1) / 1) / 1 형태의 번호가 여러 개 반복.
+        번호 없는 체크 칸 스타일('남 □ 여 □', '□ 있다 □ 없다')도 왼쪽부터 1,2,3…으로 본다.
 레이아웃: 한 쪽에 두 단(좌·우)이 있으면 단을 나눠 왼쪽 단 → 오른쪽 단 순서로 읽는다.
 응답:   (타이핑 PDF) ✓ ■ ● 같은 표시 문자가 붙은 선택지
         (스캔·수기)  선택지 번호 주변의 '잉크 밀도' — 인쇄 글자(단어 상자)를 지운 이미지에서
@@ -264,9 +265,52 @@ def _choices_of(line: list[Word]) -> tuple[list[Choice], list[Word]]:
             c.text = (c.text + " " + " ".join(w.text.strip() for w in ws)).strip()
     # 맨숫자만으로 된 선택지는 2개 이상·오름차순일 때만(값 '25' 등 오인 방지)
     if any(c.bare for c in out) and (len(out) < 2 or [c.no for c in out] != sorted(c.no for c in out)):
-        return [], lead
+        out = []
     if not all(1 <= c.no <= 20 for c in out):
-        return [], lead
+        out = []
+    if not out:
+        return _box_choices(line)      # 번호 선택지가 없으면 체크 칸('남 □ 여 □') 스타일 검사
+    return out, lead
+
+
+_BOX_EMPTY = "□☐口ㅁ"          # 빈 체크 칸(OCR이 '口'·'ㅁ'으로 읽는 변형 포함)
+_BOX_FILLED = "■☑▣✔✓√▪"        # 채워진·체크된 칸
+_BOX_RE = re.compile("^(?P<box>[" + _BOX_EMPTY + _BOX_FILLED + "])(?P<rest>.*)$")
+
+
+def _box_choices(line: list[Word]) -> tuple[list[Choice], list[Word]]:
+    """체크 칸 스타일 선택지 — '남 □ 여 □'(이름 뒤 칸) 또는 '□ 있다 □ 없다'(칸 뒤 이름).
+    칸이 2개 이상일 때만 인정하고 왼쪽부터 1, 2, 3… 으로 번호를 매긴다.
+    채워진 칸(■ ☑)은 표시된 것으로, 빈 칸(□)은 스캔본에서 잉크 밀도로 판정한다."""
+    toks: list[tuple[bool, bool, str, Word]] = []      # (칸인가, 채워짐, 나머지 글, 단어)
+    for w in line:
+        t = w.text.strip()
+        m = _BOX_RE.match(t)
+        if m and (len(t) == 1 or m.group("rest").startswith("(")):   # '□' 또는 '□(이용횟수'
+            toks.append((True, m.group("box") in _BOX_FILLED, m.group("rest"), w))
+        else:
+            toks.append((False, False, t, w))
+    boxes = [i for i, tk in enumerate(toks) if tk[0]]
+    if len(boxes) < 2:
+        return [], list(line)
+    tail = toks[boxes[-1] + 1:]
+    label_before = not tail or bool(toks[boxes[-1]][2])   # 줄이 칸으로 끝나면 '이름 □' 스타일
+    out: list[Choice] = []
+    if label_before:
+        first = boxes[0]
+        lead_end = max(0, first - 1)                       # 첫 칸 바로 앞 한 단어가 첫 선택지 이름
+        for k, bi in enumerate(boxes):
+            start = lead_end if k == 0 else boxes[k - 1] + 1
+            label = " ".join(tk[2] for tk in toks[start:bi] if not tk[0])
+            out.append(Choice(no=k + 1, text=label.strip(), word=toks[bi][3], marked=toks[bi][1]))
+        lead = [tk[3] for tk in toks[:lead_end]]
+    else:
+        for k, bi in enumerate(boxes):
+            end = boxes[k + 1] if k + 1 < len(boxes) else len(toks)
+            label = " ".join(([toks[bi][2]] if toks[bi][2] else []) +
+                             [tk[2] for tk in toks[bi + 1:end] if not tk[0]])
+            out.append(Choice(no=k + 1, text=label.strip(), word=toks[bi][3], marked=toks[bi][1]))
+        lead = [tk[3] for tk in toks[:boxes[0]]]
     return out, lead
 
 
