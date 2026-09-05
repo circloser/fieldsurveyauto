@@ -36,13 +36,16 @@ async function loadForm(file) {
     DOC_ID = data.doc_id; PAGES = data.pages;
     BOXES = keepBoxes || data.boxes.map((b, i) => ({ ...b, order: b.order ?? i + 1 }));
     exitTplMode();
-    // 설문지(문항 번호 목록·척도표)로 인식되면: 칸 박스 없이 안내 배너 — 4번에서 바로 처리
+    // 설문지(문항 번호 목록·척도표)로 인식되면: 칸 박스 없이 안내 배너 — 4번에서 바로 처리.
+    // 인식된 문항은 문서 위에 점선 상자로, 오른쪽 목록에 열 이름으로 보여 준다.
     if (data.survey) {
       const s = data.survey;
+      SURVEY = s.items || [];
       $("surveyBannerInfo").textContent =
-        `${s.pages.length}쪽, 문항 ${s.questions}개${s.likert ? " (척도표 포함)" : ""} 인식.`;
+        `${s.pages.length}쪽, 문항 ${s.questions}개${s.likert ? " (척도표 포함)" : ""} 인식 — 문서 위 점선 상자가 인식된 문항입니다.`;
       $("surveyBanner").hidden = false;
     } else {
+      SURVEY = [];
       $("surveyBanner").hidden = true;
     }
     activePage = PAGES.length ? PAGES[0].page_no : 0; selected = null;  // 항상 1페이지부터
@@ -53,10 +56,13 @@ async function loadForm(file) {
   finally { hideOverlay(); }
 }
 
+let SURVEY = [];   // 설문지로 인식된 문항들 [{page, key, text, choices, x0,y0,x1,y1}] — 표시 전용
+
 function exitTplMode() {
   TPL_MODE = false;
   $("tplBanner").hidden = true;
   $("surveyBanner").hidden = true;
+  SURVEY = [];
   document.querySelector(".grid-pane").style.display = "";
 }
 let EDIT_VER = 0;   // 페이지 편집(삭제/추가) 시 증가 — 페이지 이미지 캐시 무효화
@@ -160,6 +166,20 @@ function renderPage() {
       const kind = e.target.classList.contains("pbox-resize") ? "resize" : "move";
       startBoxDrag(e, idx, p, kind);
     });
+    wrap.appendChild(d);
+  });
+
+  // 설문지로 인식된 문항 — 점선 상자(표시 전용, 편집 불가)
+  SURVEY.forEach((it) => {
+    if (it.page !== p.page_no) return;
+    const d = document.createElement("div");
+    d.className = "sbox";
+    d.style.left = ((it.x0 - 3) * sc) + "px";
+    d.style.top = ((it.y0 - 2) * sc) + "px";
+    d.style.width = ((it.x1 - it.x0 + 6) * sc) + "px";
+    d.style.height = ((it.y1 - it.y0 + 4) * sc) + "px";
+    d.title = `${it.key}${it.choices ? ` · 선택지 ${it.choices}개` : " · 주관식"}`;
+    d.innerHTML = `<span class="sbox-tag">${it.qid}</span>`;
     wrap.appendChild(d);
   });
 
@@ -269,7 +289,18 @@ function renderBoxes() {
   const pageBoxes = TPL_MODE
     ? [...BOXES].sort((a, b) => a.order - b.order)
     : [...BOXES].filter((b) => b.page === page).sort((a, b) => a.order - b.order);
-  if (!pageBoxes.length) { list.innerHTML = `<li class="empty-hint">이 쪽에는 항목이 없습니다. 문서에서 드래그해 추가하세요.</li>`; return; }
+  if (!pageBoxes.length) {
+    const sv = SURVEY.filter((it) => it.page === page);
+    if (sv.length) {
+      // 설문지: 인식된 문항을 열 이름으로 보여 준다(편집 불가 — 4번에서 그대로 열이 됨)
+      list.innerHTML = `<li class="empty-hint">📋 설문지 문항 ${sv.length}개 인식 (엑셀 열 이름)</li>` +
+        sv.map((it) => `<li class="survey-item"><span class="sq">${it.qid}</span>` +
+          `<span class="st">${(it.text || it.key).replace(/</g, "&lt;")}</span>` +
+          `<span class="sc">${it.choices ? "선택지 " + it.choices : "주관식"}</span></li>`).join("");
+      return;
+    }
+    list.innerHTML = `<li class="empty-hint">이 쪽에는 항목이 없습니다. 문서에서 드래그해 추가하세요.</li>`; return;
+  }
   pageBoxes.forEach((box) => {
     const idx = BOXES.indexOf(box);
     const mode = box.mode || "text";

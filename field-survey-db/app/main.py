@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import Body, FastAPI, Form, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import config
@@ -377,10 +377,12 @@ async def pdf_load(file: UploadFile) -> JSONResponse:
 
 
 def _survey_info(doc, pdf_path: str) -> dict | None:
-    """문서의 쪽 과반이 설문지(문항 목록 또는 척도표)로 인식되면 {pages, questions, likert}."""
+    """문서의 쪽 과반이 설문지(문항 목록 또는 척도표)로 인식되면
+    {pages, questions, likert, items: [{page, key, text, choices, x0..y1}]} — items 는 화면 표시용."""
     from core.likert import _COL_CACHE, parse_likert
-    from core.survey import is_survey_page, parse_survey
+    from core.survey import is_survey_page, survey_items
     pages: list[int] = []
+    items: list[dict] = []
     questions = 0
     likert = 0
     for p in doc.pages:
@@ -390,14 +392,21 @@ def _survey_info(doc, pdf_path: str) -> dict | None:
                 likert += 1
                 questions += len(grid.rows)
                 pages.append(p.page_no)
+                for r in grid.rows:
+                    w = r.word
+                    items.append({"page": p.page_no, "key": f"{r.qid}_{r.text[:18]}", "qid": r.qid,
+                                  "text": r.text, "choices": len(grid.columns),
+                                  "x0": w.x0, "y0": w.y0, "x1": max(grid.columns) + 10, "y1": w.y1})
             elif is_survey_page(p, pdf_path=pdf_path):
-                questions += len(parse_survey(p))
+                its = survey_items(p)
+                questions += len(its)
+                items.extend(its)
                 pages.append(p.page_no)
         except Exception:  # noqa: BLE001
             continue
     if not pages or len(pages) * 2 < len(doc.pages):
         return None
-    return {"pages": pages, "questions": questions, "likert": likert > 0}
+    return {"pages": pages, "questions": questions, "likert": likert > 0, "items": items}
 
 
 def _suggest_all(doc, pdf_path: str) -> list[dict]:
@@ -448,12 +457,28 @@ def pdf_suggest(doc_id: str) -> JSONResponse:
 
 def hwp_installed() -> bool:
     """한글(HWP) 설치 여부 — COM ProgID 레지스트리로 빠르게 확인(한글 실행 안 함)."""
-    try:
-        import winreg
-        winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "HWPFrame.HwpObject"))
-        return True
-    except OSError:
-        return False
+    from core.syscheck import hwp_installed as _hwp
+    return _hwp()
+
+
+@app.get("/system")
+def system_page() -> FileResponse:
+    return FileResponse(config.STATIC_DIR / "system.html")
+
+
+@app.get("/api/system/check")
+def system_check(quick: bool = False) -> JSONResponse:
+    """배포용 시스템 점검 — OS·CPU·RAM·디스크·GPU·한글·브라우저·포트·쓰기·엔진·AI.
+    quick=1 이면 오래 걸리는 OCR 엔진 로드는 생략."""
+    from core.syscheck import run_checks
+    return JSONResponse(run_checks(quick=quick))
+
+
+@app.get("/api/system/report")
+def system_report(quick: bool = True) -> PlainTextResponse:
+    """점검 결과를 복사·전달용 텍스트로."""
+    from core.syscheck import report_text, run_checks
+    return PlainTextResponse(report_text(run_checks(quick=quick)))
 
 
 @app.get("/api/env_status")

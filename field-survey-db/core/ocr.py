@@ -22,6 +22,35 @@ class OcrWord:
     text: str
 
 
+def _reader_kwargs() -> dict:
+    """EasyOCR Reader 인자 — 장치(GPU/CPU)는 성능 프로필이 정하고, 포터블(exe)이면 동봉 모델 사용."""
+    import os
+    import sys
+
+    from core import perf
+
+    kwargs: dict = {"gpu": perf.use_gpu()}
+    # 포터블(exe) 배포: 번들에 모델이 동봉돼 있으면 그걸 사용(인터넷 불필요).
+    # 없으면 easyocr 기본 동작(~/.EasyOCR, 필요 시 자동 다운로드).
+    if getattr(sys, "frozen", False):
+        bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "easyocr_models")
+        if os.path.isdir(bundled):
+            kwargs["model_storage_directory"] = bundled
+    return kwargs
+
+
+def _batch_size() -> int:
+    """인식 배치 크기 — GPU면 여러 줄을 한 번에(빠름), CPU는 1(메모리 절약)."""
+    from core import perf
+    return 8 if perf.use_gpu() else 1
+
+
+def device() -> str:
+    """현재 OCR 장치 이름('GPU' | 'CPU')."""
+    from core import perf
+    return "GPU" if perf.use_gpu() else "CPU"
+
+
 def _load_engine():
     global _ENGINE, _ENGINE_KIND, _TRIED
     if _TRIED:
@@ -30,16 +59,10 @@ def _load_engine():
     # 1) EasyOCR (한국어 정식 지원, pip만으로 설치)
     try:
         import easyocr
-        # 포터블(exe) 배포: 번들에 모델이 동봉돼 있으면 그걸 사용(인터넷 불필요).
-        # 없으면 easyocr 기본 동작(~/.EasyOCR, 필요 시 자동 다운로드).
-        kwargs = {}
-        import os
-        import sys
-        if getattr(sys, "frozen", False):
-            bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "easyocr_models")
-            if os.path.isdir(bundled):
-                kwargs["model_storage_directory"] = bundled
-        _ENGINE = easyocr.Reader(["ko", "en"], gpu=False, **kwargs)
+
+        from core import perf
+        perf.apply()   # GPU면 cuDNN 자동 튜닝, CPU면 스레드 수 확보
+        _ENGINE = easyocr.Reader(["ko", "en"], **_reader_kwargs())
         _ENGINE_KIND = "easyocr"
         return _ENGINE_KIND
     except Exception:  # noqa: BLE001
@@ -85,7 +108,7 @@ def _ocr_easy(png_bytes: bytes, scale: float) -> list[OcrWord]:
     img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     arr = np.array(img)
     # detail=1: [ (box[4pt], text, conf), ... ]
-    result = _ENGINE.readtext(arr, detail=1, paragraph=False)
+    result = _ENGINE.readtext(arr, detail=1, paragraph=False, batch_size=_batch_size())
     words: list[OcrWord] = []
     for box, text, _conf in result:
         xs = [pt[0] for pt in box]

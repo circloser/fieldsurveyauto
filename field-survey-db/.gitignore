@@ -9,3 +9,6 @@ tests/fixtures/*.hwpx
 tests/fixtures/*.pdf
 
 tests/fixtures/*.pdf
+.venv-gpu/
+시스템점검_결과.txt
+static/_probe_*.pdf

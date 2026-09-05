@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시스템 점검 — 오토다타 (AutoData)</title>
+<style>
+  @font-face { font-family: "Pretendard Variable"; src: url("/static/fonts/PretendardVariable.woff2") format("woff2-variations"); font-weight: 45 920; font-display: swap; }
+  :root { --ink:#1e2126; --line:#e5e8eb; --muted:#8b95a1; --accent:#4e9f2f; --ok:#e7f5ec; --okt:#0b7a3b; --warn:#fff4d6; --warnt:#9a6700; --err:#ffe3e3; --errt:#c92a2a; --info:#eef2f7; --infot:#3b4a5c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Pretendard Variable",Pretendard,-apple-system,"Segoe UI","Malgun Gothic",sans-serif; color:var(--ink); background:#f7f8fa; word-break:keep-all; overflow-wrap:break-word; }
+  header { background:var(--ink); color:#fff; padding:14px 22px; display:flex; align-items:center; gap:14px; }
+  header h1 { font-size:18px; margin:0; }
+  header a { color:#9db8ff; text-decoration:none; font-size:13px; }
+  header a.right { margin-left:auto; }
+  .wrap { max-width:860px; margin:22px auto; padding:0 18px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .muted { color:var(--muted); font-size:13px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  .overall { display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:10px; font-size:15px; font-weight:600; }
+  .overall.ok { background:var(--ok); color:var(--okt); } .overall.warn { background:var(--warn); color:var(--warnt); } .overall.fail { background:var(--err); color:var(--errt); }
+  .overall .cnt { margin-left:auto; font-weight:500; font-size:13px; opacity:.85; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { text-align:left; padding:10px 8px; border-top:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; border-top:0; }
+  td.st { white-space:nowrap; width:70px; }
+  .badge { display:inline-block; font-size:12px; font-weight:700; padding:3px 9px; border-radius:10px; }
+  .badge.ok { background:var(--ok); color:var(--okt); } .badge.warn { background:var(--warn); color:var(--warnt); }
+  .badge.fail { background:var(--err); color:var(--errt); } .badge.info { background:var(--info); color:var(--infot); }
+  td.nm { font-weight:600; white-space:nowrap; width:130px; }
+  .fix { margin-top:4px; font-size:12.5px; color:#555; background:#fbfbfc; border-left:3px solid #d9dee5; padding:6px 9px; border-radius:4px; }
+  .fix a { color:#2b6cb0; }
+  .btns { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--accent); border:1px solid var(--accent); }
+  button:disabled { background:#c9d2de; color:#fff; border-color:#c9d2de; }
+  .prof { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; font-size:13.5px; }
+  .prof b { color:var(--muted); font-weight:600; font-size:12.5px; }
+  .advice { margin-top:12px; padding:10px 12px; border-radius:8px; background:var(--info); color:var(--infot); font-size:13px; line-height:1.6; }
+  #msg { margin-top:10px; font-size:13px; color:var(--okt); min-height:18px; }
+  .note { background:#fff8e6; border:1px solid #ffe08a; border-radius:8px; padding:12px 14px; font-size:12.5px; line-height:1.6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🩺 시스템 점검</h1>
+  <span class="muted" style="color:#c9d2de">이 컴퓨터에서 무엇이 되고 안 되는지 자동 확인</span>
+  <a class="right" href="/">🏠 홈</a>
+  <a href="/settings">⚙️ 환경설정</a>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div id="overall" class="overall info"><span>점검하는 중…</span></div>
+    <table id="tbl">
+      <thead><tr><th>상태</th><th>항목</th><th>확인 결과</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="btns">
+      <button id="full">전체 점검 (글자 인식 엔진까지)</button>
+      <button id="again" class="ghost">다시 점검</button>
+      <button id="copy" class="ghost">📋 결과 복사 (담당자에게 전달)</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>이 컴퓨터의 처리 성능</h2>
+    <div class="prof" id="prof"></div>
+    <div class="advice" id="advice"></div>
+  </div>
+
+  <div class="note">
+    ℹ️ <b>점검 기준</b>: <b>정상</b>은 바로 사용 가능, <b>주의</b>는 동작하지만 일부 기능·속도 제약(예: 한글 미설치 → hwpx 변환 불가),
+    <b>불가</b>는 해결해야 사용 가능(예: 작업 폴더 쓰기 불가), <b>참고</b>는 정보입니다.<br>
+    프로그램 창에서 <code>FieldSurveyDB.exe --check</code> 로 실행하면 같은 결과를 파일(시스템점검_결과.txt)로 남깁니다.
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const LABEL = { ok: "정상", warn: "주의", fail: "불가", info: "참고" };
+const OVERALL = {
+  ok: "✅ 모든 항목 정상 — 바로 사용할 수 있습니다.",
+  warn: "⚠️ 동작하지만 일부 기능·속도에 제약이 있습니다. 주의 항목을 확인하세요.",
+  fail: "⛔ 이대로는 사용할 수 없는 항목이 있습니다. 불가 항목을 먼저 해결하세요.",
+};
+function linkify(t) {
+  return t.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+function esc(t) { return (t || "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+function render(d) {
+  const ov = $("#overall");
+  ov.className = "overall " + d.overall;
+  const c = d.counts;
+  ov.innerHTML = `<span>${OVERALL[d.overall]}</span><span class="cnt">정상 ${c.ok} · 주의 ${c.warn} · 불가 ${c.fail} · 참고 ${c.info}${d.quick ? " · (빠른 점검)" : ""}</span>`;
+  $("#rows").innerHTML = d.items.map(it => `
+    <tr>
+      <td class="st"><span class="badge ${it.status}">${LABEL[it.status]}</span></td>
+      <td class="nm">${esc(it.name)}</td>
+      <td>${esc(it.detail)}${it.fix && it.status !== "ok" ? `<div class="fix">→ ${linkify(esc(it.fix))}</div>` : ""}</td>
+    </tr>`).join("");
+  const p = d.profile;
+  $("#prof").innerHTML = [
+    ["운영체제", p.os], ["CPU", `${p.cpu} · ${p.logical_cores}스레드`],
+    ["메모리", `${p.ram_total_gb}GB (사용 가능 ${p.ram_avail_gb}GB)`],
+    ["GPU", p.gpus.length ? p.gpus.join(", ") : "없음"],
+    ["글자 인식 엔진", p.torch.installed ? `torch ${p.torch.version}${p.torch.cuda_build ? " (CUDA " + p.torch.cuda_build + ")" : " (CPU 빌드)"}` : "없음(경량판)"],
+    ["처리 방식", p.mode === "gpu" ? "GPU 가속" : "CPU"],
+  ].map(([k, v]) => `<b>${k}</b><span>${esc(v)}</span>`).join("");
+  $("#advice").textContent = p.advice;
+}
+
+async function check(quick) {
+  for (const b of ["#full", "#again", "#copy"]) $(b).disabled = true;
+  $("#msg").textContent = quick ? "" : "글자 인식 엔진을 불러오는 중… (최대 30초)";
+  try {
+    const r = await fetch("/api/system/check?quick=" + (quick ? "1" : "0"));
+    render(await r.json());
+    $("#msg").textContent = quick ? "" : "전체 점검 완료.";
+  } catch (e) {
+    $("#msg").textContent = "점검 실패: " + e.message;
+  } finally {
+    for (const b of ["#full", "#again", "#copy"]) $(b).disabled = false;
+  }
+}
+$("#full").addEventListener("click", () => check(false));
+$("#again").addEventListener("click", () => check(true));
+$("#copy").addEventListener("click", async () => {
+  const t = await (await fetch("/api/system/report?quick=1")).text();
+  try { await navigator.clipboard.writeText(t); $("#msg").textContent = "결과를 복사했습니다. 메일·메신저에 붙여 넣으세요."; }
+  catch (e) { $("#msg").textContent = "복사 실패 — 아래 내용을 직접 복사하세요:\n" + t; }
+});
+check(true);
+</script>
+</body>
+</html>

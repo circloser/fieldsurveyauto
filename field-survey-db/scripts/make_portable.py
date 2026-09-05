@@ -2,11 +2,17 @@
 """포터블 패키징 — 빌드 → 부속 문서 동봉 → 기동 스모크 → 날짜·시간 병기 zip.
 
 사용:
-  .venv/Scripts/python scripts/make_portable.py              # 전체(빌드부터)
+  .venv/Scripts/python scripts/make_portable.py              # 기본판(CPU 처리, OCR 포함, ~430MB)
+  .venv/Scripts/python scripts/make_portable.py --gpu        # GPU 가속판(.venv-gpu 의 CUDA torch, ~3.5GB)
+  .venv/Scripts/python scripts/make_portable.py --lite       # 경량판(OCR 없음)
   .venv/Scripts/python scripts/make_portable.py --skip-build # 기존 dist로 zip만
 
-산출물: dist/FieldSurveyDB_포터블_YYYYMMDD_HHMM.zip
+산출물: dist/FieldSurveyDB[_GPU|_경량]_포터블_YYYYMMDD_HHMM.zip
 (날짜·시간이 파일명에 붙어 버전이 섞이지 않는다)
+
+GPU판 준비(한 번만): python -m venv .venv-gpu
+  .venv-gpu/Scripts/pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu130
+  .venv-gpu/Scripts/pip install -r requirements.txt -r requirements-ocr.txt pyinstaller
 """
 import shutil
 import subprocess
@@ -19,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist" / "FieldSurveyDB"
 PACKAGING = ROOT / "packaging"
-EXTRAS = ["사용법.txt", "README_AI_자동추출.md", "ai_config.txt"]
+EXTRAS = ["사용법.txt", "배포_점검표.md", "README_AI_자동추출.md", "ai_config.txt"]
 PORT = 8765
 
 
@@ -37,13 +43,27 @@ def clean_dist():
                      "실행 중인 FieldSurveyDB.exe 를 닫고 다시 시도하세요.")
 
 
+GPU = "--gpu" in sys.argv          # GPU판: CUDA 빌드 torch 가 든 .venv-gpu 로 빌드(용량 ~3.5GB)
+VENV = ROOT / (".venv-gpu" if GPU else ".venv")
+VARIANT = "GPU" if GPU else ("경량" if "--lite" in sys.argv else "")
+
+
 def build():
     clean_dist()
-    # 기본 = OCR 포함 스펙(스캔·수기 문서 글자 인식 기본 탑재). --lite 는 경량판.
+    # 기본 = OCR 포함 스펙(스캔·수기 문서 글자 인식 기본 탑재). --lite 는 경량판, --gpu 는 GPU 가속판.
     spec = "FieldSurveyDB.spec" if "--lite" in sys.argv else "FieldSurveyDB_OCR.spec"
-    r = subprocess.run([str(ROOT / ".venv" / "Scripts" / "pyinstaller.exe"),
-                        str(ROOT / spec), "--noconfirm"],
-                       cwd=str(ROOT))
+    py = VENV / "Scripts" / "pyinstaller.exe"
+    if not py.exists():
+        raise SystemExit(f"{py} 가 없습니다" + (" — GPU판은 .venv-gpu(CUDA torch) 가 필요합니다: "
+                                             "python -m venv .venv-gpu && pip install torch --index-url "
+                                             "https://download.pytorch.org/whl/cu130 && pip install -r requirements.txt"
+                                             if GPU else ""))
+    if GPU:
+        chk = subprocess.run([str(VENV / "Scripts" / "python.exe"), "-c",
+                              "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)"])
+        if chk.returncode != 0:
+            raise SystemExit(".venv-gpu 의 torch 가 CUDA를 못 씁니다(CPU 빌드거나 드라이버 없음) — GPU판 빌드 중단")
+    r = subprocess.run([str(py), str(ROOT / spec), "--noconfirm"], cwd=str(ROOT))
     if r.returncode != 0:
         raise SystemExit("PyInstaller 빌드 실패")
 
@@ -84,7 +104,8 @@ def make_zip() -> Path:
     (앱을 한 번이라도 켜면 exe 옆에 data/ 가 생기므로 필터가 안전망이다)"""
     import zipfile
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    out = ROOT / "dist" / f"FieldSurveyDB_포터블_{stamp}.zip"
+    tag = f"_{VARIANT}" if VARIANT else ""
+    out = ROOT / "dist" / f"FieldSurveyDB{tag}_포터블_{stamp}.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for p in sorted(DIST.rglob("*")):
             rel = p.relative_to(DIST)

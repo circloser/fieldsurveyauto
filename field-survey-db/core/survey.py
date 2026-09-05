@@ -55,10 +55,26 @@ class Question:
     choices: list[Choice] = field(default_factory=list)
     free_text: list[str] = field(default_factory=list)
     flag: str = ""          # 확인 필요 사유(있으면)
+    words: list[Word] = field(default_factory=list)   # 질문 줄의 단어들(화면 표시용 위치)
 
     @property
     def answers(self) -> list[str]:
         return [f"{c.no}:{c.text}" if c.text else str(c.no) for c in self.choices if c.marked]
+
+    @property
+    def key(self) -> str:
+        """엑셀 열 이름(타이핑 문서 기준) — survey_row 와 같은 규칙."""
+        if self.qid == self.text or not self.text:
+            return self.qid
+        return f"{self.qid}_{self.text[:18].rstrip('?？. ')}"
+
+    def bbox(self) -> tuple[float, float, float, float] | None:
+        """질문 줄 + 선택지 번호들을 감싸는 상자(pt) — 디자이너 화면에 인식 결과를 표시할 때."""
+        ws = list(self.words) + [c.word for c in self.choices]
+        if not ws:
+            return None
+        return (min(w.x0 for w in ws), min(w.y0 for w in ws),
+                max(w.x1 for w in ws), max(w.y1 for w in ws))
 
 
 # ---------- 줄 묶기(2단 레이아웃 지원) ----------
@@ -284,6 +300,7 @@ def parse_survey(page: PdfPage) -> list[Question]:
     last_main: int | None = None
     last_pre = ""
     pending_label = ""          # 선택지 없이 나온 짧은 이름 — 바로 다음 선택지 묶음의 항목명
+    pending_words: list[Word] = []
     name_from_above = False     # 현재 암시 문항의 이름이 선택지 '위' 줄에서 왔는지(두 줄 이름 결합용)
     prev_line: list[Word] | None = None
     for line in _lines(page):
@@ -306,11 +323,11 @@ def parse_survey(page: PdfPage) -> list[Question]:
         q = None if continues else _question_of(line, expected, last_main, last_pre)
         if q:
             no, qid, text, rest, pre = q
-            cur = Question(no=no, text=text, qid=qid, pre=pre)
+            cur = Question(no=no, text=text, qid=qid, pre=pre, words=list(line))
             qs.append(cur)
             last_main = no if no is not None else int(qid.split("-")[0])
             last_pre = pre
-            pending_label = ""
+            pending_label, pending_words = "", []
             name_from_above = False
             ichs, ilead = _choices_of(rest)      # '1. 성별? ① 남 ② 여' — 같은 줄의 선택지
             if ichs and ichs[0].no == 1 and [c.no for c in ichs] == list(range(1, len(ichs) + 1)):
@@ -325,12 +342,14 @@ def parse_survey(page: PdfPage) -> list[Question]:
             restart = cur is None or (bool(cur.choices) and chs[0].no <= cur.choices[-1].no)
             if restart:
                 # 번호 없이 새 선택지 묶음이 시작 → 암시 문항(인적사항 표의 '성별' 같은 항목)
-                cur = Question(no=None, text=label or pending_label, qid="")
+                cur = Question(no=None, text=label or pending_label, qid="",
+                               words=list(lead) + list(pending_words))
                 qs.append(cur)
                 name_from_above = bool(pending_label) and not label
             elif label and not cur.text:
                 cur.text = label            # 이름이 두 번째 선택지 줄에 있는 칸('연 령 ⑤ …')
-            pending_label = ""
+                cur.words.extend(lead)
+            pending_label, pending_words = "", []
             cur.choices.extend(chs)
             continue
 
@@ -340,17 +359,20 @@ def parse_survey(page: PdfPage) -> list[Question]:
         if label and cur.no is None and cur.choices:
             if not cur.text:
                 cur.text = label            # 선택지 줄 아래에 이름이 오는 칸('직 업')
+                cur.words.extend(line)
             elif name_from_above and close and len((cur.text + label).replace(" ", "")) <= 10 \
                     and label != cur.text:
                 cur.text = normalize(cur.text + " " + label)   # 두 줄 이름('최근1년간'+'방문횟수')
+                cur.words.extend(line)
                 name_from_above = False
             else:
-                pending_label = label
+                pending_label, pending_words = label, list(line)
         elif label and cur.choices:
-            pending_label = label           # 다음 선택지 묶음의 이름 후보
+            pending_label, pending_words = label, list(line)   # 다음 선택지 묶음의 이름 후보
         elif not cur.choices and not cur.free_text and close and \
                 not cur.text.rstrip().endswith(_END_PUNCT):
             cur.text = normalize(cur.text + " " + joined)   # 질문이 다음 줄로 이어짐
+            cur.words.extend(line)
         else:
             cur.free_text.append(joined)
     for i, q in enumerate(qs, 1):
@@ -367,6 +389,18 @@ def is_survey_page(page: PdfPage, pdf_path: str | None = None) -> bool:
     qs = parse_survey(page)
     numbered = sum(1 for q in qs if q.no is not None)
     return (numbered >= 2 or len(qs) >= 3) and any(q.choices for q in qs)
+
+
+def survey_items(page: PdfPage) -> list[dict]:
+    """디자이너 화면 표시용 — 쪽에서 인식한 문항들의 이름·선택지 수·위치(pt)."""
+    out = []
+    for q in parse_survey(page):
+        bb = q.bbox()
+        if bb is None:
+            continue
+        out.append({"page": page.page_no, "key": q.key, "qid": q.qid, "text": q.text,
+                    "choices": len(q.choices), "x0": bb[0], "y0": bb[1], "x1": bb[2], "y1": bb[3]})
+    return out
 
 
 def survey_span(questions: list[Question]) -> tuple[int, int] | None:
