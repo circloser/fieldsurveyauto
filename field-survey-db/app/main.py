@@ -1271,13 +1271,18 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                         if existing and existing != title and _title_sim(title, existing) >= 0.6:
                             title = existing
                             break
-                g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
+                g = groups.setdefault(title, {"label": title, "fields": [], "rows": [],
+                                              "num_fields": []})
                 # 표(여러 행) 박스가 있으면 데이터 줄마다 한 행으로 펼친다(열 = 표 머리글)
                 from core.table_rows import explode_rows
                 out_rows, out_fields = explode_rows(row, ext["fields"])
                 for fld in out_fields:
                     if fld not in g["fields"]:
                         g["fields"].append(fld)
+                # '숫자' 유형 열은 엑셀에 수로 기록(합계·평균이 되도록)
+                for b in ext["boxes"]:
+                    if b.get("mode") == "number" and b["field"] not in g["num_fields"]:
+                        g["num_fields"].append(b["field"])
                 for r in out_rows:
                     g["rows"].append({"_파일명": fname, "_제목": title, **r})
                 tcount[ext["name"]] = tcount.get(ext["name"], 0) + 1
@@ -1474,7 +1479,9 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         try:
             from core.report import build_report_workbook
             build_report_workbook(tpl_path, rows, fields, str(excel_path),
-                                  sheet_name_field=sheet_name_field or None)
+                                  sheet_name_field=sheet_name_field or None,
+                                  num_fields=[b["field"] for b in box_list
+                                              if b.get("mode") == "number"])
             report_used = True
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"error": f"보고서 양식 처리 실패(엑셀 양식이 맞는지 확인): {e}"},
@@ -1483,12 +1490,16 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         excel_path = config.OUTPUT_DIR / f"조사데이터_추출_{stamp}.xlsx"
         write_template_excel(rows, fields, str(excel_path),
                              sheet_name_field=(None if group_field else (sheet_name_field or None)),
-                             group_field=group_field)
+                             group_field=group_field,
+                             num_fields=[b["field"] for b in box_list
+                                         if b.get("mode") == "number"])
 
     _PDF_APPLY["excel_path"] = str(excel_path)
     _PDF_APPLY["rows"] = rows            # AI 분석용 보관
     _PDF_APPLY["fields"] = fields
-    _PDF_APPLY["groups"] = [{"label": "템플릿 추출", "fields": fields, "rows": rows}]
+    _PDF_APPLY["groups"] = [{"label": "템플릿 추출", "fields": fields, "rows": rows,
+                             "num_fields": [b["field"] for b in box_list
+                                            if b.get("mode") == "number"]}]
     return JSONResponse({"rows": rows, "fields": fields, "ok_count": len(rows),
                          "failed": failed, "match_info": match_info,
                          "report_used": report_used,
@@ -1621,8 +1632,9 @@ def report_generate(payload: dict = Body(...)) -> JSONResponse:
         excel_path = config.OUTPUT_DIR / f"조사데이터_보고서_{stamp}.xlsx"
         sheet_field = ("_제목" if any((r.get("_제목") or "").strip() for r in rows)
                        else None)
+        nums = [f for g in (_PDF_APPLY.get("groups") or []) for f in (g.get("num_fields") or [])]
         build_report_workbook(tpl_path, rows, fields, str(excel_path),
-                              sheet_name_field=sheet_field)
+                              sheet_name_field=sheet_field, num_fields=nums)
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": f"보고서 양식 처리 실패(엑셀 양식이 맞는지 확인): {e}"},
                             status_code=400)
@@ -1717,7 +1729,7 @@ def sce_export(payload: dict = Body(default={})) -> JSONResponse:
     if evaluate:
         try:
             from sce.cli import run_file  # type: ignore
-            res = run_file(final, out_dir, docx=True, log=lambda *_a, **_k: None)
+            res = run_file(final, out_dir, docx=False, hwpx=True, log=lambda *_a, **_k: None)
             rv = res["result"].river
             result["evaluation"] = {
                 "river_rating": rv.rating, "secured_km": rv.secured_km, "secured_pct": rv.secured_pct,
@@ -1725,7 +1737,7 @@ def sce_export(payload: dict = Body(default={})) -> JSONResponse:
             }
             zpath = out_dir / f"SCE결과_{river_used or '조사하천'}_{stamp}.zip"
             with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
-                for p in (final, res.get("xlsx"), res.get("docx")):
+                for p in (final, res.get("xlsx"), res.get("hwpx"), res.get("docx")):
                     if p and Path(str(p)).exists():
                         z.write(str(p), Path(str(p)).name)
             download = zpath

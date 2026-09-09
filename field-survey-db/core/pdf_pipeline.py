@@ -268,11 +268,15 @@ def suggest_cells_maximal(pdf_path: str, page_no: int, page: PdfPage | None = No
         if key in seen:
             continue
         seen.add(key)
+        # 이름이 수치형(길이·높이·(m) 등)인 값 칸은 '숫자' 유형으로 제안 —
+        # 단위·한글을 걷어내고 엑셀에 수로 기록돼 합계·평균이 바로 된다.
+        from core.numeric import looks_numeric_field
+        mode = "number" if (label and looks_numeric_field(label)) else "text"
         box = {
             "field": field, "page": page_no,
             "x0": round(c.x0, 1), "y0": round(c.y0, 1),
             "x1": round(c.x1, 1), "y1": round(c.y1, 1),
-            "mode": "text", "use_anchor": False, "suggested": True, "from_cell": True,
+            "mode": mode, "use_anchor": False, "suggested": True, "from_cell": True,
             "anchor": {"label": label, "relation": rel} if label else None,
         }
         boxes.append(box)
@@ -506,9 +510,10 @@ IMG_PREFIX = "__IMG__:"   # 이미지 캡처 박스의 값 표식 — 엑셀 작
 
 
 def _to_number(text: str) -> str:
-    """'숫자' 모드 — 문자열에서 첫 숫자만 뽑아 단위·잡글자를 걷어낸다(예: '약 25.5 m' → '25.5')."""
-    m = _NUM_RE.search(text or "")
-    return m.group(0).replace(",", "") if m else ""
+    """'숫자' 모드 — 문자열에서 첫 숫자만 뽑아 단위·잡글자를 걷어낸다(예: '약 25.5 m' → '25.5').
+    규칙은 core.numeric 한 곳에 모아 두었다(엑셀 기록과 같은 규칙을 쓰기 위해)."""
+    from core.numeric import first_number_text
+    return first_number_text(text)
 
 
 def crop_box_image(pdf_path: str, page_no: int, bb: dict, dpi: int = 150) -> str:

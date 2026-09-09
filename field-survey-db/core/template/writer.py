@@ -23,6 +23,17 @@ _OUT_FONT = Font(color="C2410C", bold=True)
 IMG_PREFIX = "__IMG__:"   # 이미지 캡처 박스 값 표식(core.pdf_pipeline.IMG_PREFIX 와 동일)
 
 
+def _row_values(row: dict, fields: list[str], num_fields=None) -> list:
+    """엑셀 한 줄 값 — '숫자' 유형 열은 수(int/float)로 넣어 합계·평균·정렬이 되게 한다.
+
+    숫자로 지정한 열만 바꾼다(일반 열의 '001' 같은 값이 1이 되지 않도록).
+    값 전체가 숫자가 아니면(빈칸·'없음'·'좌안 12 우안 15') 글자 그대로 둔다.
+    """
+    from core.numeric import excel_cell_value
+    nums = set(num_fields or ())
+    return [row.get("_파일명", "")] + [excel_cell_value(row.get(f, ""), f in nums) for f in fields]
+
+
 def _place_images(ws, row_idx: int, row: dict, fields: list[str],
                   col_offset: int = 2) -> None:
     """'이미지' 모드 값(__IMG__:경로)은 글자 대신 그림을 셀에 넣는다."""
@@ -67,10 +78,11 @@ def _mark_outliers(ws, row_idx: int, row: dict, fields: list[str],
         c.comment = Comment(str(reason), "오토다타")
 
 
-def write_bundle_excel(groups: list[dict], out_path: str) -> str:
+def write_bundle_excel(groups: list[dict], out_path: str, num_fields=None) -> str:
     """서식별 시트로 나눠 저장(AI 번들 추출용).
 
     groups: [{"label": 시트이름, "fields": [열...], "rows": [{'_파일명':.., field:val}]}]
+    num_fields: '숫자' 유형 열 이름들(엑셀에 수로 기록). 시트마다 다르면 g["num_fields"] 로 준다.
     """
     wb = Workbook()
     wb.remove(wb.active)  # 기본 시트 제거 후 서식별로 생성
@@ -87,8 +99,9 @@ def write_bundle_excel(groups: list[dict], out_path: str) -> str:
             c.font = _HEADER_FONT
             c.alignment = _CENTER
         ws.freeze_panes = "A2"
+        nums = g.get("num_fields") or num_fields
         for row in g["rows"]:
-            ws.append([row.get("_파일명", "")] + [row.get(f, "") for f in g["fields"]])
+            ws.append(_row_values(row, list(g["fields"]), nums))
             _place_images(ws, ws.max_row, row, list(g["fields"]))
             _mark_outliers(ws, ws.max_row, row, list(g["fields"]))
         for i, h in enumerate(headers, start=1):
@@ -111,7 +124,7 @@ def _style_header(ws, ncols: int) -> None:
 def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
                          sheet_name_field: str | None = None,
                          group_field: str | None = None,
-                         max_sheets: int = 300) -> str:
+                         max_sheets: int = 300, num_fields=None) -> str:
     """rows: [{'_파일명':..., field: value, ...}], fields: 박스 순서.
 
     group_field: 그 필드 값(예: 제목)이 같은 행끼리 묶어 값 이름의 시트로 분류.
@@ -130,7 +143,7 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
     ws.freeze_panes = "A2"
 
     for row in rows:
-        ws.append([row.get("_파일명", "")] + [row.get(f, "") for f in fields])
+        ws.append(_row_values(row, fields, num_fields))
         _place_images(ws, ws.max_row, row, fields)
         _mark_outliers(ws, ws.max_row, row, fields)
 
@@ -148,7 +161,7 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
             s.append(headers)
             _style_header(s, len(headers))
             for row in grows:
-                s.append([row.get("_파일명", "")] + [row.get(f, "") for f in fields])
+                s.append(_row_values(row, fields, num_fields))
                 _place_images(s, s.max_row, row, fields)
                 _mark_outliers(s, s.max_row, row, fields)
             for i, h in enumerate(headers, start=1):
@@ -169,8 +182,10 @@ def write_template_excel(rows: list[dict], fields: list[str], out_path: str,
                 c.alignment = _CENTER
             s.append(["파일명", row.get("_파일명", "")])
             flags = row.get("_이상치") or {}
+            from core.numeric import excel_cell_value
+            nums = set(num_fields or ())
             for f in fields:
-                s.append([f, row.get(f, "")])
+                s.append([f, excel_cell_value(row.get(f, ""), f in nums)])
                 if flags.get(f):
                     c = s.cell(row=s.max_row, column=2)
                     c.fill = _OUT_FILL

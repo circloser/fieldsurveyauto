@@ -138,7 +138,8 @@ def record_sheet_base(rec: dict, sheet_name_field: str | None) -> str:
 def build_report_workbook(template_path: str, records: list[dict],
                           summary_fields: list[str], out_path: str,
                           max_reports: int = 300,
-                          sheet_name_field: str | None = None) -> str:
+                          sheet_name_field: str | None = None,
+                          num_fields=None) -> str:
     """양식을 파일마다 복사해 채우고, 앞에 요약(DB) 시트를 붙여 저장.
 
     sheet_name_field 가 있으면 그 추출값(예: 대상지명)으로 시트 이름을 짓는다.
@@ -173,8 +174,11 @@ def build_report_workbook(template_path: str, records: list[dict],
         cell.font = _HEADER_FONT
         cell.alignment = Alignment(horizontal="center")
     summ.freeze_panes = "A2"
-    for rec in records:
-        summ.append([rec.get("_파일명", "")] + [rec.get(f, "") for f in summary_fields])
+    from core.numeric import excel_cell_value
+    nums = set(num_fields or ())
+    for rec in records:   # '숫자' 유형 열은 요약 시트에도 수로(합계·평균 가능)
+        summ.append([rec.get("_파일명", "")]
+                    + [excel_cell_value(rec.get(f, ""), f in nums) for f in summary_fields])
     for i, h in enumerate(headers, start=1):
         summ.column_dimensions[get_column_letter(i)].width = max(10, min(28, len(str(h)) * 2 + 4))
 

@@ -77,7 +77,12 @@ def test_scanned_form_cells_match_text_pdf(tmp_path, ocr_ready):
     assert len(boxes) == n_text
     labels = {(b.get("anchor") or {}).get("label", "") for b in boxes}
     assert "하천명" in labels and "어도유무" in labels           # 라벨(왼쪽 칸)이 이름으로 붙는다
-    assert all(b["mode"] == "text" for b in boxes)
+    # 유형: 이름이 수치형인 값 칸만 '숫자', 나머지는 '일반'
+    # (OCR이 '낙차 높이'처럼 띄어 읽을 수 있어 공백은 무시하고 비교)
+    modes = {(b["anchor"]["label"] or "").replace(" ", ""): b["mode"]
+             for b in boxes if b.get("anchor")}
+    assert modes.get("보길이") == "number" and modes.get("낙차높이") == "number"
+    assert modes.get("하천명") == "text" and modes.get("어도유무") == "text"
 
 
 def test_scanned_form_extraction_uses_label_anchor(tmp_path, ocr_ready):
