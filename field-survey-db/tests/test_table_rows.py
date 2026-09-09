@@ -107,6 +107,41 @@ def test_suggest_table_box_instead_of_cells(tmp_path):
     assert not inside                            # 표 안의 칸은 따로 박스를 만들지 않음
 
 
+def test_table_box_matches_pages_by_header(tmp_path):
+    """표 박스만 있는 템플릿도 머리글 열 이름으로 입력 페이지를 찾는다(박스 이름은 '표' 하나뿐)."""
+    from core.pdf_pipeline import match_bundles, match_pages
+
+    p = tmp_path / "list.pdf"
+    _draw_table(p)
+    d = read_pdf(str(p), ocr_scanned=False)
+    box = suggest_table_boxes(str(p), d.pages[0])[0]
+    assert match_pages([box], d.pages) == {0: 0}
+    assert match_bundles([box], d.pages) == [{0: 0}]
+
+
+def test_apply_manual_path_explodes_table(tmp_path):
+    """자동 분류를 끄고 박스를 직접 넘겨도(API 경로) 표가 줄마다 한 행으로 펼쳐진다."""
+    import json
+
+    import app.main as app_main
+    from fastapi.testclient import TestClient
+
+    p = tmp_path / "list.pdf"
+    _draw_table(p)
+    d = read_pdf(str(p), ocr_scanned=False)
+    boxes = [b for b in app_main._suggest_all(d, str(p)) if b.get("mode") == "table"]
+    client = TestClient(app_main.app)
+    with p.open("rb") as f:
+        r = client.post("/api/pdf/apply",
+                        data={"boxes": json.dumps(boxes, ensure_ascii=False), "auto_classify": "0"},
+                        files=[("files", ("in.pdf", f, "application/pdf"))])
+    assert r.status_code == 200, r.text
+    dd = r.json()
+    assert dd["ok_count"] == 2 and dd["fields"][:2] == ["기관명", "관리 하천명"]
+    assert [x["관리 하천명"] for x in dd["rows"]] == ["태안천", "원평천"]
+    assert all(x["기관명"] == "태안군" for x in dd["rows"])
+
+
 def test_explode_rows():
     row = {"제목": "제출서", "표": {"__table__": True, "columns": ["기관명", "성명"],
                                   "rows": [{"기관명": "A", "성명": "a"}, {"기관명": "B", "성명": "b"}]}}

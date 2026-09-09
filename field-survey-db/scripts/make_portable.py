@@ -63,7 +63,11 @@ def build():
                               "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)"])
         if chk.returncode != 0:
             raise SystemExit(".venv-gpu 의 torch 가 CUDA를 못 씁니다(CPU 빌드거나 드라이버 없음) — GPU판 빌드 중단")
-    r = subprocess.run([str(py), str(ROOT / spec), "--noconfirm"], cwd=str(ROOT))
+    # 작업 폴더(캐시)를 판마다 따로 — CPU판과 GPU판이 같은 build/ 를 쓰면 서로의 분석 결과가
+    # 섞여(예: GPU판에 CPU torch가 들어가 CUDA 인식 실패) 빌드가 오염된다.
+    work = ROOT / "build" / (VARIANT or "CPU")
+    r = subprocess.run([str(py), str(ROOT / spec), "--noconfirm", "--workpath", str(work)],
+                       cwd=str(ROOT))
     if r.returncode != 0:
         raise SystemExit("PyInstaller 빌드 실패")
 

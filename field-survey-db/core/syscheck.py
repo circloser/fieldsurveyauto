@@ -115,6 +115,14 @@ def _check_gpu(p: dict) -> Item:
     names = ", ".join(p["gpus"]) if p["gpus"] else "없음"
     if t["cuda_available"]:
         return Item("gpu", "GPU 가속", "ok", f"{t['device']} — 글자 인식(OCR) GPU 처리")
+    if p["nvidia"] and t.get("cuda_build"):
+        # GPU판인데 CUDA 초기화 실패 — 배포본·드라이버 문제이므로 '주의'로 알린다
+        g = p["nvidia"][0]
+        why = t.get("cuda_error") or "원인 미상"
+        return Item("gpu", "GPU 가속", "warn",
+                    f"GPU판(CUDA {t['cuda_build']})인데 {g['name']}를 쓰지 못해 CPU로 처리 중({why})",
+                    "NVIDIA 드라이버를 580 이상으로 올리고, zip을 다시 풀어 보세요. "
+                    "그래도 안 되면 기본판(CPU)을 쓰면 됩니다(속도만 느림).")
     if p["nvidia"]:
         g = p["nvidia"][0]
         return Item("gpu", "GPU 가속", "info",

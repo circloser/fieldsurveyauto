@@ -540,6 +540,13 @@ def match_pages(boxes: list[dict], pages: list[PdfPage], threshold: float = 0.35
     """
     tmpl: dict[int, set[str]] = {}
     for b in boxes:
+        if b.get("mode") == "table":
+            # 표(여러 행) 박스는 이름이 '표' 하나뿐이라 지문이 안 되므로 머리글 열 이름을 쓴다
+            for c in b.get("columns") or []:
+                k = normalize_key(c)
+                if k and not k.startswith("열"):
+                    tmpl.setdefault(int(b["page"]), set()).add(k)
+            continue
         lbl = ((b.get("anchor") or {}).get("label")) or b.get("field") or ""
         k = normalize_key(lbl)
         if k and k != "칸":

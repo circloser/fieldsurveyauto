@@ -92,20 +92,23 @@ def ram_gb() -> tuple[float, float]:
 def _torch_info() -> dict:
     try:
         import torch
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         return {"installed": False, "version": "", "cuda_build": "", "cuda_available": False,
-                "device": "", "threads": 0}
+                "device": "", "threads": 0, "cuda_error": str(e)[:200]}
     avail = False
     device = ""
+    err = ""
     try:
         avail = bool(torch.cuda.is_available())
         if avail:
             device = torch.cuda.get_device_name(0)
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         avail = False
+        err = f"{type(e).__name__}: {e}"[:200]
     return {"installed": True, "version": torch.__version__,
             "cuda_build": torch.version.cuda or "", "cuda_available": avail,
-            "device": device, "threads": int(torch.get_num_threads())}
+            "device": device, "threads": int(torch.get_num_threads()),
+            "cuda_error": err}
 
 
 @functools.lru_cache(maxsize=1)
@@ -119,6 +122,11 @@ def profile() -> dict:
     logical = os.cpu_count() or 1
     if mode == "gpu":
         advice = f"GPU 가속 사용 중({torch['device']}) — 스캔 문서 글자 인식이 GPU에서 처리됩니다."
+    elif nvidia and torch["cuda_build"]:
+        # GPU판인데 CUDA를 못 켠 경우 — CPU판으로 오인시키지 말고 원인을 알려 준다
+        why = torch.get("cuda_error") or "그래픽 드라이버가 오래되었거나 프로그램 폴더가 손상됐을 수 있습니다"
+        advice = (f"GPU판(CUDA {torch['cuda_build']})인데 NVIDIA GPU({nvidia[0]['name']})를 쓰지 못해 "
+                  f"CPU로 처리합니다 — {why}. NVIDIA 드라이버 580 이상으로 올리거나 zip을 다시 풀어 보세요.")
     elif nvidia:
         advice = (f"NVIDIA GPU({nvidia[0]['name']})가 있지만 이 배포판은 CPU 처리판입니다. "
                   "GPU판(FieldSurveyDB_GPU)을 쓰면 스캔 문서 글자 인식이 5~10배 빨라집니다.")
