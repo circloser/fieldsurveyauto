@@ -180,15 +180,36 @@ def _cell_lines(page: PdfPage, cell: Cell) -> list[str]:
     return lines
 
 
+_SEP_END = re.compile(r"[,·、;]\s*$")
+
+
+def join_lines(lines: list[str]) -> str:
+    """칸의 여러 줄을 한 값으로.
+
+    · 앞줄이 쉼표로 끝나면 '나열'(예: '김철수,' / '이영희') → '김철수, 이영희' 으로 합친다.
+      담당자가 두 줄로 적힌 칸은 두 사람이 공동으로 맡는다는 뜻이므로 한 값으로 둔다.
+    · 그렇지 않으면 한 값이 줄바꿈된 것(예: '건설과' / '하천팀') → 공백으로 잇는다.
+    """
+    out = ""
+    for t in lines:
+        if not out:
+            out = t
+        elif _SEP_END.search(out):
+            out = _SEP_END.sub("", out).rstrip() + ", " + t   # '김철수 ,' → '김철수, …'
+        else:
+            out += " " + t
+    return normalize(out)
+
+
 def _fill_cell(page: PdfPage, cell: Cell) -> None:
     """칸에 글자(text)와 줄 목록(lines)을 채운다."""
     cell.lines = _cell_lines(page, cell)          # type: ignore[attr-defined]
-    cell.text = normalize(" ".join(cell.lines))   # type: ignore[attr-defined]
+    cell.text = join_lines(cell.lines)
 
 
 def _cell_text(page: PdfPage, cell: Cell) -> str:
     """칸 안 단어들을 읽기 순서로 — 줄이 바뀌어도 이어 붙이되 이메일(@)은 띄지 않는다."""
-    return normalize(" ".join(_cell_lines(page, cell)))
+    return join_lines(_cell_lines(page, cell))
 
 
 def cells_in_region(pdf_path: str, page: PdfPage, region: tuple[float, float, float, float] | None,
@@ -234,23 +255,10 @@ def table_rows(cells: list[Cell], header_rows: int = 1, tol: float = 3.0,
     spans: set[tuple[int, int]] = set()          # 세로로 걸친 칸이 채운 자리(빈 줄 판정에서 제외)
     for c in cells:
         rs = idx(ys, c.y0, c.y1)
-        ks = idx(xs, c.x0, c.x1)
-        lines = [t for t in (getattr(c, "lines", None) or []) if t]
-        if len(rs) > 1 and len(lines) > 1:
-            # 여러 행에 걸친 칸에 값이 여러 줄이면 줄마다 다른 행의 값 → 순서대로 행에 나눠 담는다.
-            # (값이 한 줄뿐인 칸 — 기관명·연락처 — 은 아래처럼 걸친 행마다 같은 값을 채운다)
-            per = {r: "" for r in rs}
-            for i, t in enumerate(lines):
-                t = t.strip().rstrip(",·、;").strip()   # 줄 끝의 나열 쉼표는 뗀다
-                r = rs[min(i, len(rs) - 1)]      # 줄이 행보다 많으면 마지막 행에 이어 붙임
-                per[r] = f"{per[r]} {t}".strip() if per[r] else t
-            for r in rs:
-                for k in ks:
-                    grid[(r, k)] = per[r]
-                    spans.add((r, k))
-            continue
+        # 여러 행에 걸친 칸은 걸친 행마다 같은 값 — 그 칸의 값이 그 행들 전체에 해당하기 때문.
+        # (담당자가 두 줄로 적혀 있으면 '두 사람이 공동 담당' → 쉼표로 한 값으로 합쳐 반복한다)
         for r in rs:
-            for k in ks:
+            for k in idx(xs, c.x0, c.x1):
                 grid[(r, k)] = c.text
                 if len(rs) > 1:
                     spans.add((r, k))

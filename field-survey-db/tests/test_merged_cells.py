@@ -1,6 +1,7 @@
-"""합쳐진 칸(여러 행에 걸친 칸) 처리 — 값이 한 줄이면 행마다 반복, 여러 줄이면 행에 나눠 담기.
+"""합쳐진 칸(여러 행에 걸친 칸) 처리 — 그 칸의 값은 걸친 행 전체에 해당하므로 행마다 반복한다.
 
-예) 담당자 현황: 기관명 '함안군'은 4행 모두, 성명 '김철수 / 이영희'은 두 줄이므로 1·2행에 나눠 담는다.
+담당자가 두 줄로 적힌 칸은 '두 사람이 공동 담당'이라는 뜻이므로 쉼표로 한 값으로 합쳐 반복한다.
+한 값이 줄바꿈된 칸('건설과' / '하천팀')은 공백으로 잇는다.
 """
 from pathlib import Path
 
@@ -61,22 +62,22 @@ def test_single_line_merged_cell_repeats(tmp_path):
     assert all(r["성명"] == "김철수" for r in rows)          # 한 줄이면 반복
 
 
-def test_multi_line_merged_cell_splits_into_rows(tmp_path):
-    """값이 여러 줄인 합쳐진 칸(성명 2명)은 줄 순서대로 행에 나눠 담고, 남는 행은 빈칸."""
+def test_multi_line_merged_cell_joins_with_comma_and_repeats(tmp_path):
+    """담당자가 두 줄인 합쳐진 칸 = 공동 담당 → '김철수, 이영희' 한 값으로 모든 행에 반복."""
     p = tmp_path / "two.pdf"
     _merged_form(p, ["김철수,", "이영희"])
     cols, rows = _rows(p)
     assert len(rows) == 4
-    assert [r["성명"] for r in rows] == ["김철수", "이영희", "", ""]   # 나열 쉼표는 뗀다
-    assert all(r["기관명"] == "함안군" for r in rows)                  # 한 줄 칸은 그대로 반복
+    assert all(r["성명"] == "김철수, 이영희" for r in rows)     # 쉼표 하나로 정리(',,' 아님)
+    assert all(r["기관명"] == "함안군" for r in rows)
 
 
-def test_lines_equal_rows_map_one_to_one(tmp_path):
-    """줄 수와 행 수가 같으면 1:1로 들어간다."""
-    p = tmp_path / "four.pdf"
-    _merged_form(p, ["김가", "이나", "박다", "최라"])
+def test_wrapped_value_joins_with_space(tmp_path):
+    """쉼표 없이 줄바꿈된 한 값('건설과 하천팀')은 공백으로 이어 붙인다."""
+    p = tmp_path / "wrap.pdf"
+    _merged_form(p, ["건설과", "하천팀"])
     _, rows = _rows(p)
-    assert [r["성명"] for r in rows] == ["김가", "이나", "박다", "최라"]
+    assert all(r["성명"] == "건설과 하천팀" for r in rows)
 
 
 def test_email_split_across_lines_stays_one_value(tmp_path):
