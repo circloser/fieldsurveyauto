@@ -11,9 +11,10 @@
 from __future__ import annotations
 
 import re
+import statistics
 
 from core.normalize import normalize
-from core.pdf_reader import Cell, PdfPage, detect_cells
+from core.pdf_reader import Cell, PdfPage, Word, detect_cells
 
 TABLE_MARK = "__table__"        # 추출 결과에서 표 값을 구분하는 표시
 
@@ -142,23 +143,52 @@ def image_grid(pdf_path: str, page_no: int, region: tuple[float, float, float, f
     return cells
 
 
-def _cell_text(page: PdfPage, cell: Cell) -> str:
-    """칸 안 단어들을 읽기 순서로 — 줄이 바뀌어도 이어 붙이되 이메일(@)은 띄지 않는다."""
+def _cell_lines(page: PdfPage, cell: Cell) -> list[str]:
+    """칸 안 글자를 '줄' 단위로. 이메일이 줄바꿈으로 끊긴 것은 앞줄에 이어 붙인다.
+
+    합쳐진 칸(여러 행에 걸친 칸)에 값이 여러 줄 들어 있으면 줄마다 다른 행의 값이므로,
+    행에 나눠 담을 수 있게 줄을 살려 둔다.
+    """
     ws = [w for w in page.words if cell.x0 <= w.cx <= cell.x1 and cell.y0 <= w.cy <= cell.y1
           and (w.text or "").strip()]
     if not ws:
-        return ""
-    ws.sort(key=lambda w: (round(w.cy / 5), w.cx))
-    out = ""
+        return []
+    gap = max(3.0, statistics.median(w.y1 - w.y0 for w in ws) * 0.6)
+    rows: dict[int, list[Word]] = {}
     for w in ws:
-        t = w.text.strip()
+        rows.setdefault(round(w.cy / gap), []).append(w)
+    lines: list[str] = []
+    for k in sorted(rows):
+        out = ""
+        for w in sorted(rows[k], key=lambda w: w.x0):
+            t = w.text.strip()
+            if not out:
+                out = t
+            elif out.endswith("@") or t.startswith("@") or (("@" in out) and re.match(r"^[\w.]+$", t)):
+                out += t
+            else:
+                out += " " + t
+        out = normalize(out)
         if not out:
-            out = t
-        elif out.endswith("@") or t.startswith("@") or (("@" in out) and re.match(r"^[\w.]+$", t)):
-            out += t
+            continue
+        # 앞줄이 이메일인데 이 줄이 그 뒤쪽('@korea.kr' 또는 'kr')이면 한 값으로 이어 붙인다
+        if lines and (out.startswith("@") or lines[-1].endswith("@")
+                      or ("@" in lines[-1] and re.fullmatch(r"[\w.\-]+", out))):
+            lines[-1] += out
         else:
-            out += " " + t
-    return normalize(out)
+            lines.append(out)
+    return lines
+
+
+def _fill_cell(page: PdfPage, cell: Cell) -> None:
+    """칸에 글자(text)와 줄 목록(lines)을 채운다."""
+    cell.lines = _cell_lines(page, cell)          # type: ignore[attr-defined]
+    cell.text = normalize(" ".join(cell.lines))   # type: ignore[attr-defined]
+
+
+def _cell_text(page: PdfPage, cell: Cell) -> str:
+    """칸 안 단어들을 읽기 순서로 — 줄이 바뀌어도 이어 붙이되 이메일(@)은 띄지 않는다."""
+    return normalize(" ".join(_cell_lines(page, cell)))
 
 
 def cells_in_region(pdf_path: str, page: PdfPage, region: tuple[float, float, float, float] | None,
@@ -179,7 +209,7 @@ def cells_in_region(pdf_path: str, page: PdfPage, region: tuple[float, float, fl
         except Exception:  # noqa: BLE001
             cells = []
     for c in cells:
-        c.text = _cell_text(page, c)
+        _fill_cell(page, c)
     return cells
 
 
@@ -204,8 +234,23 @@ def table_rows(cells: list[Cell], header_rows: int = 1, tol: float = 3.0,
     spans: set[tuple[int, int]] = set()          # 세로로 걸친 칸이 채운 자리(빈 줄 판정에서 제외)
     for c in cells:
         rs = idx(ys, c.y0, c.y1)
+        ks = idx(xs, c.x0, c.x1)
+        lines = [t for t in (getattr(c, "lines", None) or []) if t]
+        if len(rs) > 1 and len(lines) > 1:
+            # 여러 행에 걸친 칸에 값이 여러 줄이면 줄마다 다른 행의 값 → 순서대로 행에 나눠 담는다.
+            # (값이 한 줄뿐인 칸 — 기관명·연락처 — 은 아래처럼 걸친 행마다 같은 값을 채운다)
+            per = {r: "" for r in rs}
+            for i, t in enumerate(lines):
+                t = t.strip().rstrip(",·、;").strip()   # 줄 끝의 나열 쉼표는 뗀다
+                r = rs[min(i, len(rs) - 1)]      # 줄이 행보다 많으면 마지막 행에 이어 붙임
+                per[r] = f"{per[r]} {t}".strip() if per[r] else t
+            for r in rs:
+                for k in ks:
+                    grid[(r, k)] = per[r]
+                    spans.add((r, k))
+            continue
         for r in rs:
-            for k in idx(xs, c.x0, c.x1):
+            for k in ks:
                 grid[(r, k)] = c.text
                 if len(rs) > 1:
                     spans.add((r, k))
@@ -333,7 +378,7 @@ def find_tables(pdf_path: str, page: PdfPage) -> list[list[Cell]]:
     for cs in tables:
         for c in cs:
             if not c.text:
-                c.text = _cell_text(page, c)
+                _fill_cell(page, c)
     return tables
 
 

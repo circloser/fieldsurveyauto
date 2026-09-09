@@ -837,8 +837,13 @@ def pdf_pages_delete(payload: dict = Body(...)) -> JSONResponse:
     src.save(tmp)
     src.close()
     shutil.move(tmp, path)
-    entry["doc"] = read_pdf(path)
-    return JSONResponse({"pages": _pages_dto(entry["doc"])})
+    # 이미 읽어 둔 쪽에서 해당 쪽만 빼고 번호를 다시 매긴다.
+    # (문서를 다시 읽으면 스캔본은 OCR을 처음부터 돌려 22쪽이면 수십 초~수 분 걸린다)
+    doc = entry["doc"]
+    doc.pages = [p for p in doc.pages if p.page_no != page_no]
+    for i, p in enumerate(doc.pages):
+        p.page_no = i
+    return JSONResponse({"pages": _pages_dto(doc)})
 
 
 @app.post("/api/pdf/pages/add")
@@ -867,13 +872,18 @@ async def pdf_pages_add(file: UploadFile, doc_id: str = Form("")) -> JSONRespons
     base.save(tmp)
     base.close()
     shutil.move(tmp, path)
-    entry["doc"] = read_pdf(path)
+    # 붙인 파일만 읽어 뒤에 잇는다 — 이미 읽은 앞쪽은 다시 OCR 하지 않는다(스캔본이면 매우 느림)
+    doc = entry["doc"]
+    added = read_pdf(extra_pdf)
+    for i, p in enumerate(added.pages):
+        p.page_no = first_new + i
+        doc.pages.append(p)
     # 새로 붙은 페이지에 자동 박스 제안(표 칸 기반, 없으면 단어 방식)
     new_boxes: list[dict] = []
-    for p in entry["doc"].pages[first_new:]:
-        cb = suggest_cells_maximal(path, p.page_no)
+    for p in doc.pages[first_new:]:
+        cb = suggest_cells_maximal(path, p.page_no, p)
         new_boxes.extend(cb if cb else suggest_pixel_boxes(p))
-    return JSONResponse({"pages": _pages_dto(entry["doc"]),
+    return JSONResponse({"pages": _pages_dto(doc),
                          "first_new_page": first_new, "new_boxes": new_boxes})
 
 
