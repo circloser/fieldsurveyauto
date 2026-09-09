@@ -202,12 +202,36 @@ def neighbor_labels(pdf_path: str, page_no: int, rect: dict) -> dict:
             "top": (top[0].text or "").strip() if top else ""}
 
 
-def suggest_cells_maximal(pdf_path: str, page_no: int) -> list[dict]:
+def page_cells(pdf_path: str, page_no: int, page: PdfPage | None = None) -> list[Cell]:
+    """페이지의 표 칸 — 글자 PDF는 표 선(pdfplumber)으로, 스캔본은 이미지에서 격자를 찾는다.
+
+    스캔(사진) 문서는 선이 벡터가 아니라 그림이어서 pdfplumber 가 칸을 못 찾는다.
+    그때 이미지의 긴 가로·세로 선으로 격자를 만들고(합쳐진 칸 보존) 칸 글자는 OCR 단어로 채운다.
+    page 를 주면 스캔 폴백이 가능하다(단어가 필요).
+    """
+    try:
+        cells = detect_cells(pdf_path, page_no)
+    except Exception:  # noqa: BLE001
+        cells = []
+    if cells or page is None:
+        return cells
+    try:
+        from core.table_rows import find_tables
+        out: list[Cell] = []
+        for cs in find_tables(pdf_path, page):
+            out.extend(cs)
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def suggest_cells_maximal(pdf_path: str, page_no: int, page: PdfPage | None = None) -> list[dict]:
     """모든 표 칸에 박스를 만든다(최대 생성 → 사용자가 삭제).
 
     각 칸의 왼쪽/위 라벨을 이름으로 쓰고, 빈 여백 칸(텍스트도 라벨이웃도 없음)만 제외.
+    page 를 주면 스캔본(선이 그림인 문서)도 이미지 격자로 칸을 잡는다.
     """
-    cells = detect_cells(pdf_path, page_no)
+    cells = page_cells(pdf_path, page_no, page)
     if not cells:
         return []
 
@@ -618,8 +642,8 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
 
     def cells_for(pno: int) -> list[Cell]:
         if pno not in cells_cache:
-            try:
-                cells_cache[pno] = detect_cells(pdf_path, pno)
+            try:   # 스캔본도 이미지 격자로 칸을 잡아 라벨 기준 추출·칸 스냅이 되게
+                cells_cache[pno] = page_cells(pdf_path, pno, by_page.get(pno))
             except Exception:  # noqa: BLE001
                 cells_cache[pno] = []
         return cells_cache[pno]

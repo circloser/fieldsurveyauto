@@ -61,6 +61,11 @@ hwpx·PDF를 **모두 PDF로 통일**해 위치 기반으로 처리. 화면은 *
 - ⚠️ 라이브 Vision 간헐적 403(forbidden): **프록시 앞단(Cloudflare/Anthropic)의 레이트/남용 방지 차단** — 계정/키/이미지크기/UA 무관, 짧은 시간 다량 요청 시 발동, 시간 지나면 해제(대량 테스트로 재현). 실제 사용(가끔 업로드)에선 거의 안 걸림. 대응: `vision_extract._create_with_retry`(지수 백오프) + `extract_bundle(pace_seconds)`. 실제 200 추출 다수 확인됨(파이프라인 정상). B/D/E·범용 라이브 최종검증은 가드 식은 뒤 1회 패스로.
 - 다음: 골드셋 확장(스캔·제목변형·C/D/E) → 하이브리드(규칙 교차검증) → E 형태별물리·수리 상세
 
+## 🐟 SCE(수생태계 종적 연속성 평가) 연계 (2026-09-09)
+- 표준 템플릿 `SCE연계_종적조사표`(값 1개=박스 1개, 282박스) 등록 — `C:\vibecoding\continue\sce` 의 `python -m sce.cli autodata-template --install <이 폴더>` 로 재생성 가능. 좌표 박스의 앵커 라벨에 쪽 제목을 넣어(use_anchor=False) 양식 판별 점수만 올림.
+- `/api/sce/status`, `/api/sce/export`(4번 결과 → SCE 입력 양식, evaluate=true 면 평가 zip), `/api/sce/result` + 4번 결과 화면 버튼 2개(`pdf_designer.js` sceButtons/sceExport). SCE 패키지는 venv 에 editable 설치(`pip install --no-build-isolation -e <SCE 폴더>`); 없으면 버튼이 설치 안내 오류를 표시.
+- 검증: 탄천 80쪽 → 60쪽 배정(사진 20쪽 버림), 구조물 20개 변환, zip(입력·평가결과·워드). 포터블 exe 는 재빌드 필요.
+
 ## 남은 작업
 - **E 횡적연속성** 서식 추출 (등급·비율·면적, 다중 표)
 - **텍스트 PDF** 입력 지원 (샘플 PDF 필요)

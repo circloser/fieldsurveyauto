@@ -12,3 +12,4 @@ tests/fixtures/*.pdf
 .venv-gpu/
 시스템점검_결과.txt
 static/_probe_*.pdf
+sce_config.json

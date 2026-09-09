@@ -70,6 +70,8 @@ def _ai_get(key: str, default: str = "") -> str:
 from core import settings_store  # noqa: E402  (stdlib+win32만 의존, 순환 없음)
 
 SETTINGS_PATH = BASE_DIR / "ai_settings.enc"
+# SCE(수생태계 종적 연속성 평가) 연계 — 선택 기능. 켜짐 여부와 SCE 폴더만 담는다(비밀 아님).
+SCE_CONFIG_PATH = BASE_DIR / "sce_config.json"
 _SETTINGS: dict = {}
 AI_PROVIDER = "claude"
 CLAUDE_API_KEY = OPENAI_API_KEY = GEMINI_API_KEY = ANTHROPIC_API_KEY = ""

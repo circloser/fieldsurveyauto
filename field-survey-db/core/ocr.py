@@ -6,11 +6,16 @@
 """
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 
 _ENGINE = None          # 로드된 엔진 객체
 _ENGINE_KIND = None     # "rapidocr" | "tesseract" | None
 _TRIED = False
+# 엔진 로드(수~십 초)는 한 번만, 그리고 로드가 끝날 때까지 다른 요청이 기다리게 한다.
+# (잠금이 없으면 로드 중에 들어온 요청이 '엔진 없음'으로 보고 OCR을 건너뛴다 —
+#  스캔 문서의 칸 글자가 비어 항목명이 '칸'으로 나오는 증상)
+_LOCK = threading.Lock()
 
 
 @dataclass
@@ -52,31 +57,42 @@ def device() -> str:
 
 
 def _load_engine():
-    global _ENGINE, _ENGINE_KIND, _TRIED
-    if _TRIED:
+    if _TRIED:                # 이미 끝난 로드는 잠금 없이 바로
         return _ENGINE_KIND
-    _TRIED = True
-    # 1) EasyOCR (한국어 정식 지원, pip만으로 설치)
-    try:
-        import easyocr
+    with _LOCK:               # 먼저 들어온 요청이 로드를 끝낼 때까지 기다린다
+        if _TRIED:
+            return _ENGINE_KIND
+        return _load_engine_locked()
 
-        from core import perf
-        perf.apply()   # GPU면 cuDNN 자동 튜닝, CPU면 스레드 수 확보
-        _ENGINE = easyocr.Reader(["ko", "en"], **_reader_kwargs())
-        _ENGINE_KIND = "easyocr"
-        return _ENGINE_KIND
-    except Exception:  # noqa: BLE001
-        pass
-    # 2) pytesseract (Tesseract 바이너리 별도 설치 필요, 한국어 kor)
+
+def _load_engine_locked():
+    """엔진을 실제로 로드한다(반드시 _LOCK 안에서). _TRIED 는 로드가 끝난 뒤에 세운다 —
+    로드 중에 들어온 요청이 '엔진 없음'으로 오해하지 않도록."""
+    global _ENGINE, _ENGINE_KIND, _TRIED
     try:
-        import pytesseract  # noqa: F401
-        _ENGINE = "tesseract"
-        _ENGINE_KIND = "tesseract"
-        return _ENGINE_KIND
-    except Exception:  # noqa: BLE001
-        pass
-    _ENGINE_KIND = None
-    return None
+        # 1) EasyOCR (한국어 정식 지원, pip만으로 설치)
+        try:
+            import easyocr
+
+            from core import perf
+            perf.apply()   # GPU면 cuDNN 자동 튜닝, CPU면 스레드 수 확보
+            _ENGINE = easyocr.Reader(["ko", "en"], **_reader_kwargs())
+            _ENGINE_KIND = "easyocr"
+            return _ENGINE_KIND
+        except Exception:  # noqa: BLE001
+            pass
+        # 2) pytesseract (Tesseract 바이너리 별도 설치 필요, 한국어 kor)
+        try:
+            import pytesseract  # noqa: F401
+            _ENGINE = "tesseract"
+            _ENGINE_KIND = "tesseract"
+            return _ENGINE_KIND
+        except Exception:  # noqa: BLE001
+            pass
+        _ENGINE_KIND = None
+        return None
+    finally:
+        _TRIED = True
 
 
 def available() -> bool:

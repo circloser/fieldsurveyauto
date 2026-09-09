@@ -433,8 +433,9 @@ def _suggest_all(doc, pdf_path: str) -> list[dict]:
             cx, cy = (b["x0"] + b["x1"]) / 2, (b["y0"] + b["y1"]) / 2
             return any(t["x0"] - 2 <= cx <= t["x1"] + 2 and t["y0"] - 2 <= cy <= t["y1"] + 2
                        for t in tboxes)
-        # 표 칸 전체에 박스 생성(최대) → 사용자가 삭제. 칸 없으면(스캔) 단어 방식.
-        cell_boxes = suggest_cells_maximal(pdf_path, page.page_no)
+        # 표 칸 전체에 박스 생성(최대) → 사용자가 삭제.
+        # page 를 함께 넘겨 스캔본(선이 그림인 문서)도 이미지 격자로 칸을 잡는다.
+        cell_boxes = suggest_cells_maximal(pdf_path, page.page_no, page)
         boxes.extend(b for b in (cell_boxes if cell_boxes else suggest_pixel_boxes(page))
                      if not in_table(b))
     # 문서 위치(페이지→위→왼쪽) 순서로 번호 부여
@@ -1640,6 +1641,111 @@ def report_result():
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=Path(path).name)
+
+
+# ---------- SCE(수생태계 종적 연속성 평가 프로그램) 연계 — 선택 기능 ----------
+# 4번 일괄 처리 결과(서식별 시트 엑셀)를 SCE 입력 양식(구조물목록·구조물조사·어류조사…)으로 변환한다.
+# 기본은 꺼짐 — 환경설정에서 켜고, 필요하면 SCE 프로그램 폴더를 지정한다(core/sce_link.py).
+# 꺼져 있으면 4번 결과 화면에 SCE 버튼이 나오지 않는다(SCE를 안 쓰는 곳에 배포할 때).
+_SCE: dict[str, object] = {"path": None}
+
+
+def _sce_module():
+    from core import sce_link
+    return sce_link.module(sce_link.load(config.SCE_CONFIG_PATH))
+
+
+@app.get("/api/sce/status")
+def sce_status() -> JSONResponse:
+    from core import sce_link
+    st = sce_link.status(config.SCE_CONFIG_PATH)
+    st["has_result"] = bool(_PDF_APPLY.get("excel_path"))
+    return JSONResponse(st)
+
+
+@app.post("/api/sce/config")
+def sce_config(payload: dict = Body(default={})) -> JSONResponse:
+    """SCE 연계 사용 여부·폴더 저장 → 저장 후 상태(불러올 수 있는지)까지 돌려준다."""
+    from core import sce_link
+    enabled = bool(payload.get("enabled"))
+    folder = str(payload.get("path") or "").strip()
+    if enabled and folder and not Path(folder).is_dir():
+        return JSONResponse({"error": f"폴더를 찾을 수 없습니다: {folder}"}, status_code=400)
+    sce_link.save(config.SCE_CONFIG_PATH, enabled, folder)
+    st = sce_link.status(config.SCE_CONFIG_PATH)
+    st["ok"] = True
+    return JSONResponse(st)
+
+
+@app.post("/api/sce/export")
+def sce_export(payload: dict = Body(default={})) -> JSONResponse:
+    """4번 결과 엑셀 → SCE 입력 양식. evaluate=true 면 SCE 평가(엑셀·워드)까지 실행해 zip 으로 묶는다."""
+    import zipfile
+
+    mod, err = _sce_module()
+    if mod is None:
+        return JSONResponse({"error": err}, status_code=400)
+    src = _PDF_APPLY.get("excel_path")
+    if not src or not Path(str(src)).exists():
+        return JSONResponse({"error": "먼저 4번 일괄 처리를 실행하세요 — 그 결과를 SCE 입력 양식으로 정리합니다."},
+                            status_code=400)
+    river = str(payload.get("river") or "").strip()
+    length = payload.get("length_km")
+    try:
+        length_km = float(length) if length not in (None, "") else None
+    except (TypeError, ValueError):
+        length_km = None
+    evaluate = bool(payload.get("evaluate"))
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = config.OUTPUT_DIR / f"SCE_{stamp}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        path, rep = mod.convert(str(src), out_dir / f"SCE입력_{stamp}.xlsx",
+                                river_name=river, length_km=length_km)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"SCE 입력 양식 변환 실패: {e}"}, status_code=400)
+    river_used = river or (rep.rivers.most_common(1)[0][0] if rep.rivers else "")
+    final = Path(str(path)).with_name(f"SCE입력_{river_used or '조사하천'}_{stamp}.xlsx")
+    Path(str(path)).rename(final)
+    result: dict = {
+        "ok": True, "river": river_used, "n_struct": rep.n_struct, "n_surveys": rep.n_surveys,
+        "n_fish": rep.n_fish_rows, "n_notes": len(rep.notes),
+        "notes": [{"structure": n.structure, "round": n.round, "sheet": n.sheet, "message": n.message}
+                  for n in rep.notes],
+    }
+    download = final
+    if evaluate:
+        try:
+            from sce.cli import run_file  # type: ignore
+            res = run_file(final, out_dir, docx=True, log=lambda *_a, **_k: None)
+            rv = res["result"].river
+            result["evaluation"] = {
+                "river_rating": rv.rating, "secured_km": rv.secured_km, "secured_pct": rv.secured_pct,
+                "counts": rv.counts, "warnings": res["result"].warnings,
+            }
+            zpath = out_dir / f"SCE결과_{river_used or '조사하천'}_{stamp}.zip"
+            with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+                for p in (final, res.get("xlsx"), res.get("docx")):
+                    if p and Path(str(p)).exists():
+                        z.write(str(p), Path(str(p)).name)
+            download = zpath
+        except Exception as e:  # noqa: BLE001
+            result["evaluation_error"] = f"SCE 평가 실행 실패: {e}"
+    _SCE["path"] = str(download)
+    result["download"] = "/api/sce/result"
+    result["filename"] = download.name
+    return JSONResponse(result)
+
+
+@app.get("/api/sce/result")
+def sce_result():
+    path = _SCE.get("path")
+    if not path or not Path(str(path)).exists():
+        return JSONResponse({"error": "SCE 결과가 없습니다. 먼저 내보내기를 실행하세요."}, status_code=404)
+    p = Path(str(path))
+    media = ("application/zip" if p.suffix == ".zip"
+             else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return FileResponse(str(p), media_type=media, filename=p.name)
 
 
 @app.post("/api/report/load")

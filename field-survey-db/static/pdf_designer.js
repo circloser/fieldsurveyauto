@@ -694,11 +694,78 @@ $("rptInsertBtn").addEventListener("click", () => {
   inp.focus();
 });
 
+// ---------- SCE(수생태계 종적 연속성 평가) 연계 — 선택 기능 ----------
+// 4번 결과를 SCE 입력 양식으로 정리(서식 3장을 구조물별로 합치고 형태·낙차유무 판정, 검수 메모 포함).
+// 환경설정에서 켠 경우에만 버튼이 보인다(끄면 아무것도 표시하지 않음).
+let SCE_STATUS = { enabled: false, available: false, error: "" };
+(async () => {
+  try { SCE_STATUS = await (await fetch("/api/sce/status")).json(); } catch (e) { /* 무시 */ }
+})();
+
+function sceButtons() {
+  if (!SCE_STATUS.enabled) return "";          // 꺼짐 — 버튼 없음
+  if (!SCE_STATUS.available) {                 // 켰지만 SCE를 못 찾음 — 설정으로 안내
+    return `<div id="sceRow" style="margin-top:10px;padding:10px 12px;background:#fff8e6;border:1px solid #ffe08a;border-radius:10px;font-size:13px">`
+      + `⚠️ <b>SCE 연계</b>를 켰지만 SCE 프로그램을 찾지 못했습니다 — `
+      + `<a href="/settings" target="_blank">환경설정</a>에서 SCE 폴더를 지정하세요.`
+      + `<div class="muted" style="margin-top:4px">${(SCE_STATUS.error || "").replace(/</g, "&lt;").slice(0, 200)}</div></div>`;
+  }
+  return `<div id="sceRow" style="margin-top:10px;padding:10px 12px;background:#f1f3f5;border-radius:10px">`
+    + `<span style="font-size:13px"><b>🐟 종적 연속성 평가(SCE) 연계</b> — 인공구조물 1·2, 어도, 어류 조사표를 구조물별로 합쳐 SCE 입력 양식으로 정리합니다.</span><br/>`
+    + `<button class="mini-btn" id="sceExportBtn" style="margin-top:6px">📋 SCE 입력양식 내보내기</button> `
+    + `<button class="mini-btn" id="sceEvalBtn" style="margin-top:6px">📈 SCE 평가까지 실행 (zip)</button>`
+    + `<div id="sceResult" style="margin-top:6px"></div></div>`;
+}
+function bindSce() {
+  const a = $("sceExportBtn"), b = $("sceEvalBtn");
+  if (a) a.addEventListener("click", () => sceExport(false));
+  if (b) b.addEventListener("click", () => sceExport(true));
+}
+async function sceExport(evaluate) {
+  const river = prompt("하천명 (비우면 조사표에서 자동으로 찾습니다)", "");
+  if (river === null) return;
+  let length_km = null;
+  if (evaluate) {
+    const s = prompt("하천연장(km) — 하천 단위 평가에 필요합니다. 모르면 비워 두세요(구조물 단위 평가만 수행).", "");
+    if (s === null) return;
+    if (s.trim()) length_km = parseFloat(s);
+  }
+  const box = $("sceResult");
+  showOverlay(evaluate ? "SCE 입력 양식 변환 + 평가 실행 중…" : "SCE 입력 양식으로 변환하는 중…");
+  try {
+    const d = await (await fetch("/api/sce/export", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ river, length_km, evaluate }),
+    })).json();
+    if (d.error) throw new Error(d.error);
+    let html = `<p style="margin:4px 0;font-size:13px">✅ 하천 <b>${d.river || "(미확인)"}</b> · 구조물 <b>${d.n_struct}</b>개 · 조사 ${d.n_surveys}건 · 어류 ${d.n_fish}행 · 검수 항목 <b style="color:#b0870b">${d.n_notes}</b>건</p>`;
+    if (d.evaluation) {
+      const ev = d.evaluation, c = ev.counts || {};
+      html += `<p style="margin:4px 0;font-size:13px">📈 하천 단위: <b>${ev.river_rating}</b>`
+        + (ev.secured_km != null ? ` (확보구간 ${ev.secured_km} km, ${ev.secured_pct != null ? ev.secured_pct.toFixed(1) : "-"} %)` : "")
+        + ` · 구조물: 연속 ${c["연속"] || 0} / 훼손 ${c["훼손"] || 0} / 단절 ${c["단절"] || 0} / 없음 ${c["없음"] || 0}</p>`;
+      if (ev.warnings && ev.warnings.length) html += `<p class="muted">⚠️ ${ev.warnings.slice(0, 5).join(" · ")}</p>`;
+    }
+    if (d.evaluation_error) html += `<p class="muted">⚠️ ${d.evaluation_error}</p>`;
+    html += `<a class="draft-dl" href="${d.download}">📥 ${d.filename}</a>`;
+    if (d.notes && d.notes.length) {
+      html += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px">🔎 검수 항목 ${d.n_notes}건 보기 (엑셀 '연계검수' 시트에도 있음)</summary>`
+        + `<table class="apply-table"><thead><tr><th>구조물</th><th>차수</th><th>확인 사항</th></tr></thead><tbody>`
+        + d.notes.slice(0, 60).map((n) => `<tr><td>${n.structure}</td><td>${n.round}</td><td>${n.message}</td></tr>`).join("")
+        + `</tbody></table></details>`;
+    }
+    html += `<p class="muted" style="margin-top:6px">다음 단계: 엑셀의 <b>구조물목록</b> 시트에 상류→하류 순서와 종점거리 Li(km), <b>하천정보</b>에 하천연장을 입력한 뒤 SCE에서 평가를 실행하세요.</p>`;
+    box.innerHTML = html;
+  } catch (e) { box.innerHTML = `<p class="muted">❌ ${e.message}</p>`; }
+  finally { hideOverlay(); }
+}
+
 function renderApplyAuto(d) {
   let html = `<p class="muted">✅ ${d.ok_count}행 처리 · <b>시트 ${d.forms}개</b>로 정리`
     + (d.failed && d.failed.length ? ` · ⚠️ ${d.failed.length}개 미분류/실패` : "") + `</p>`;
   if ((d.ok_count || 0) > 0) {
     html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
+    html += sceButtons();
   } else {
     html += `<p class="muted">추출된 행이 없습니다 — 아래 '버려진 페이지 확인'에서 처리 방법을 정하거나, 해당 양식을 템플릿에 추가하세요.</p>`;
   }
@@ -729,6 +796,7 @@ function renderApplyAuto(d) {
     html += `<p class="muted">⚠️ 미분류/실패: ` + d.failed.map((f) => `${f.name} (${f.error})`).join(", ") + `</p>`;
   }
   $("applyResult").innerHTML = html;
+  bindSce();
   const dcBtn = $("dcApplyBtn");
   if (dcBtn) dcBtn.addEventListener("click", () => {
     const overrides = {};
@@ -760,6 +828,7 @@ function renderApply(d) {
     }
   }
   html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
+  html += sceButtons();
   // 빈칸·이상치 요약(#3)
   const OL = d.outliers || [];
   const totalCells = d.rows.length * d.fields.length;
@@ -781,6 +850,7 @@ function renderApply(d) {
     }).join("") + `</tr>`;
   });
   html += `</tbody></table></div>`; $("applyResult").innerHTML = html;
+  bindSce();
 }
 
 async function pdfAnalyze() {
