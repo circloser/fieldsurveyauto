@@ -115,6 +115,10 @@
   overflow: hidden; text-overflow: ellipsis; display: flex; gap: 4px; align-items: center;
 }
 .pbox.sel .pbox-tag { background: #3f8425; }
+/* 표(여러 행) 박스 — 파란색: 안의 데이터 줄마다 엑셀 한 행 */
+.pbox.table-mode { border-color: #1c7ed6; background: rgba(28,126,214,.08); }
+.pbox.table-mode .pbox-tag { background: #1c7ed6; }
+.pbox.table-mode.sel { border-color: #1864ab; background: rgba(24,100,171,.16); }
 /* 설문지로 인식된 문항 — 주황 점선(표시 전용, 마우스 통과) */
 .sbox {
   position: absolute; box-sizing: border-box; pointer-events: none; z-index: 1;

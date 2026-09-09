@@ -683,6 +683,14 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
             bb["x1"] = float(b["x1"]) + d[0]
             bb["y0"] = float(b["y0"]) + d[1]
             bb["y1"] = float(b["y1"]) + d[1]
+        if b.get("mode") == "table":   # 표(여러 행) 박스 — 데이터 줄마다 한 건이 되도록 행 목록으로
+            from core.table_rows import TABLE_MARK, extract_table
+            try:
+                cols, trs = extract_table(page, bb, pdf_path, columns=b.get("columns"))
+            except Exception:  # noqa: BLE001
+                cols, trs = list(b.get("columns") or []), []
+            results[i] = {TABLE_MARK: True, "columns": cols, "rows": trs}
+            continue
         # 칸 경계 스냅 — 박스가 표 칸 밖으로 살짝 벗어나도 남의 글자가 섞이지 않게
         if pdf_path is not None:
             cells = cells_for(page.page_no)

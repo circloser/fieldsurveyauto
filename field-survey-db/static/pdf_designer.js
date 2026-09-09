@@ -149,14 +149,18 @@ function renderPage() {
     if (box.page !== p.page_no) return;
     const idx = BOXES.indexOf(box);
     const d = document.createElement("div");
-    d.className = "pbox" + (idx === selected ? " sel" : "") + (box.mode === "title" ? " title-mode" : "");
+    d.className = "pbox" + (idx === selected ? " sel" : "") + (box.mode === "title" ? " title-mode" : "")
+      + (box.mode === "table" ? " table-mode" : "");
     d.style.left = (box.x0 * sc) + "px";
     d.style.top = (box.y0 * sc) + "px";
     d.style.width = ((box.x1 - box.x0) * sc) + "px";
     d.style.height = ((box.y1 - box.y0) * sc) + "px";
     const mark = box.mode === "bold" ? "𝐁 " : box.mode === "check" ? "☑ " : box.mode === "title" ? "📑 "
-      : box.mode === "number" ? "# " : box.mode === "image" ? "🖼 " : "";
-    d.innerHTML = `<span class="pbox-tag">${mark}${box.field}<span class="pbox-x">✕</span></span>` +
+      : box.mode === "number" ? "# " : box.mode === "image" ? "🖼 " : box.mode === "table" ? "▤ " : "";
+    const tagText = box.mode === "table" && box.columns && box.columns.length
+      ? `${box.field} · 줄마다 한 행 (${box.columns.length}열: ${box.columns.join(", ")})`
+      : box.field;
+    d.innerHTML = `<span class="pbox-tag">${mark}${tagText}<span class="pbox-x">✕</span></span>` +
                   `<span class="pbox-resize" title="크기 조절"></span>`;
     d.querySelector(".pbox-x").addEventListener("click", (e) => { e.stopPropagation(); deleteBox(idx); });
     d.querySelector(".pbox-x").addEventListener("mousedown", (e) => e.stopPropagation());
@@ -273,7 +277,7 @@ function sortBoxesByPosition() {
 
 // ---------- 박스 목록 ----------
 const MODES = [["text", "일반"], ["number", "숫자"], ["bold", "굵게"], ["check", "체크"],
-               ["image", "이미지"], ["title", "제목"]];
+               ["image", "이미지"], ["title", "제목"], ["table", "표(여러 행)"]];
 const REL = { right: "오른쪽", below: "아래", self: "그 칸" };
 function anchorChip(box) {
   if (!box.anchor || !box.anchor.label) return "";

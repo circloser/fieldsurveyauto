@@ -421,9 +421,22 @@ def _suggest_all(doc, pdf_path: str) -> list[dict]:
                 "x0": t["x0"], "y0": t["y0"], "x1": t["x1"], "y1": t["y1"],
                 "use_anchor": False, "suggested": True, "anchor": None,
             })
+        # 목록형 표(머리글 + 데이터 여러 줄)는 '표(여러 행)' 박스 하나로 — 줄마다 엑셀 한 행
+        from core.table_rows import suggest_table_boxes
+        try:
+            tboxes = suggest_table_boxes(pdf_path, page)
+        except Exception:  # noqa: BLE001
+            tboxes = []
+        boxes.extend(tboxes)
+
+        def in_table(b: dict) -> bool:
+            cx, cy = (b["x0"] + b["x1"]) / 2, (b["y0"] + b["y1"]) / 2
+            return any(t["x0"] - 2 <= cx <= t["x1"] + 2 and t["y0"] - 2 <= cy <= t["y1"] + 2
+                       for t in tboxes)
         # 표 칸 전체에 박스 생성(최대) → 사용자가 삭제. 칸 없으면(스캔) 단어 방식.
         cell_boxes = suggest_cells_maximal(pdf_path, page.page_no)
-        boxes.extend(cell_boxes if cell_boxes else suggest_pixel_boxes(page))
+        boxes.extend(b for b in (cell_boxes if cell_boxes else suggest_pixel_boxes(page))
+                     if not in_table(b))
     # 문서 위치(페이지→위→왼쪽) 순서로 번호 부여
     boxes.sort(key=lambda b: (b["page"], b["y0"], b["x0"]))
     for i, b in enumerate(boxes):
@@ -972,6 +985,14 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
     def _label_sets(bx: list[dict]) -> dict[int, set[str]]:
         out: dict[int, set[str]] = {}
         for b in bx:
+            if b.get("mode") == "table":
+                # 표(여러 행) 박스는 머리글 열 이름들이 그 쪽의 지문 — 스캔본에서 제목 OCR이
+                # 깨져도 머리글(기관명·성명·연락처…)이 있으면 같은 양식으로 알아본다
+                for c in b.get("columns") or []:
+                    k = normalize_key(c)
+                    if k and not k.startswith("열"):
+                        out.setdefault(int(b.get("page", 0)), set()).add(k)
+                continue
             lbl = ((b.get("anchor") or {}).get("label")) or b.get("field") or ""
             k = normalize_key(lbl)
             if k and k != "칸":
@@ -1206,6 +1227,22 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 continue
 
             accepted.sort(key=lambda a: a[0])  # 문서 순서대로 행 생성
+            # 제목이 없는 템플릿(스캔 양식 등)은 시트 하나 — 이름은 그 템플릿 쪽들 가운데 처음
+            # 제대로 읽힌 큰 글씨(3자 이상, 한글 낱말 포함), 없으면 템플릿 이름.
+            # (쪽마다 OCR이 조금씩 다르게 읽은 제목('!', '용', '… 제출서 {')으로 시트가 갈리지 않게)
+            import re as _re
+            tpl_sheet: dict[str, str] = {}
+            for first_ip, ext, page_map in accepted:
+                if (ext.get("title") or "").strip():
+                    continue
+                name = ext["name"]
+                if tpl_sheet.get(name, name) != name:
+                    continue
+                t = (page_title(first_ip) if page_map else "").strip()
+                if len(t) >= 3 and _re.search(r"[가-힣]{2,}", t):
+                    tpl_sheet[name] = t
+                else:   # 저장된 템플릿은 그 이름으로, 저장 안 한 '현재 양식'은 기본 시트('추출결과')로
+                    tpl_sheet.setdefault(name, "" if name == "현재 양식" else name)
             tcount: dict[str, int] = {}
             for bi, (first_ip, ext, page_map) in enumerate(accepted, start=1):
                 row = apply_pixel_template(doc.pages, ext["boxes"], page_map=page_map,
@@ -1216,17 +1253,32 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                 # 축적된다. 템플릿에 제목이 없을 때만 입력 문서의 큰 글씨로 폴백.
                 title = (ext.get("title") or "").strip()
                 if not title:
+                    title = tpl_sheet.get(ext["name"], "")     # 제목 없는 템플릿 → 시트 하나
+                if not title:
                     title_field = next((b["field"] for b in sorted(ext["boxes"],
                                                                    key=lambda z: z.get("order", 0))
                                         if b.get("mode") == "title"), None)
                     title = (row.get(title_field) or "").strip() if title_field else ""
                 if not title:
                     title = page_title(first_ip) if page_map else ""
+                # 템플릿에 제목이 없어 입력 쪽의 큰 글씨를 썼는데 그 쪽이 스캔(OCR)이면,
+                # 오탈자('… 제출서 {')로 시트가 갈리지 않게 이미 있는 비슷한 시트에 합친다
+                pg0 = by_page.get(first_ip)
+                if not (ext.get("title") or "").strip() and title and pg0 is not None \
+                        and getattr(pg0, "ocr", False):
+                    for existing in list(groups):
+                        if existing and existing != title and _title_sim(title, existing) >= 0.6:
+                            title = existing
+                            break
                 g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
-                for fld in ext["fields"]:
+                # 표(여러 행) 박스가 있으면 데이터 줄마다 한 행으로 펼친다(열 = 표 머리글)
+                from core.table_rows import explode_rows
+                out_rows, out_fields = explode_rows(row, ext["fields"])
+                for fld in out_fields:
                     if fld not in g["fields"]:
                         g["fields"].append(fld)
-                g["rows"].append({"_파일명": fname, "_제목": title, **row})
+                for r in out_rows:
+                    g["rows"].append({"_파일명": fname, "_제목": title, **r})
                 tcount[ext["name"]] = tcount.get(ext["name"], 0) + 1
             for ip, srow in survey_rows:
                 # 설문지 제목: 섹션 머리글('Ⅰ. 의료서비스의 질')이 큰 글씨여도 그건 건너뛰고
@@ -1380,7 +1432,9 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
                     t = detect_title(pdf_path, first_ip)
                     if t and t.get("text"):
                         row[group_field] = t["text"]
-                rows.append(row)
+                from core.table_rows import explode_rows
+                out_rows, fields = explode_rows(row, fields)   # 표(여러 행) → 줄마다 한 행
+                rows.extend(out_rows)
             match_info.append({"name": uf.filename,
                                "matched": len(bundle_maps[0]) if bundle_maps[0] else 0,
                                "bundles": len(bundle_maps),
@@ -1495,8 +1549,11 @@ def report_ai_draft(payload: dict = Body(...)) -> JSONResponse:
     sample: dict = {}
     if entry:
         try:
-            sample = apply_pixel_template(entry["doc"].pages, box_list,
-                                          pdf_path=entry["pdf_path"])
+            from core.table_rows import explode_rows
+            raw = apply_pixel_template(entry["doc"].pages, box_list,
+                                       pdf_path=entry["pdf_path"])
+            rows0, fields = explode_rows(raw, fields)   # 표 박스는 첫 줄 값으로 샘플
+            sample = rows0[0] if rows0 else {}
         except Exception:  # noqa: BLE001
             sample = {}
 
