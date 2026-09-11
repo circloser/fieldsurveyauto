@@ -426,13 +426,22 @@ def parse_survey(page: PdfPage) -> list[Question]:
 
 
 def is_survey_page(page: PdfPage, pdf_path: str | None = None) -> bool:
-    """번호 문항이 2개 이상(또는 항목 3개 이상)이고 선택지가 달린 페이지 — 또는 척도표(리커트)."""
+    """설문 쪽인가 — 척도표(리커트)거나, 번호 문항과 '1·2로 시작하는 선택지 묶음'이 빽빽한 쪽.
+
+    지침·보고서 본문의 '1)', '가)', '1단계:' 같은 목록도 문항·선택지처럼 읽히므로 세 조건을 모두 본다.
+      ① 번호 문항이 1개 이상
+      ② 선택지가 1·2로 시작해 2개 이상 달린 문항이 2개 이상
+      ③ 그런 문항 수가 쪽 줄 수의 20% 이상
+    실측: 설문 쪽은 27~50%, 지침·보고서 본문은 13% 이하(선택지 묶음 없는 쪽은 번호 문항 0).
+    """
     from core.likert import _COL_CACHE, parse_likert
     if parse_likert(page, fallback=_COL_CACHE.get(pdf_path or "")) is not None:
         return True
     qs = parse_survey(page)
     numbered = sum(1 for q in qs if q.no is not None)
-    return (numbered >= 2 or len(qs) >= 3) and any(q.choices for q in qs)
+    good = sum(1 for q in qs if len(q.choices) >= 2 and [c.no for c in q.choices[:2]] == [1, 2])
+    n_lines = max(1, len(_lines(page)))
+    return numbered >= 1 and good >= 2 and good >= 0.2 * n_lines
 
 
 def survey_items(page: PdfPage) -> list[dict]:

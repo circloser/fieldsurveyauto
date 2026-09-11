@@ -67,8 +67,36 @@ def _fill_even(xs: list[float]) -> list[float]:
     return out
 
 
+def _score_order(toks: list[Word], cols: list[float]) -> str | None:
+    """점수 머리글 검사 — 숫자가 든 토큰은 열 위치와 같아야 한다(1..k 'fwd' 또는 k..1 'rev').
+
+    보고서의 수치 표('5 6 7 8 9', '0 5 0 0 5')가 등간격이라 머리글로 오인되던 것을 막는다.
+    스캔본 OCR이 숫자 하나쯤 잘못 읽어도 되도록 숫자 토큰의 60% 이상이 맞으면 인정하고,
+    숫자를 잃은 '(점' '근점'은 '점'으로 끝나면 위치 검사 없이 허용한다."""
+    k = len(cols)
+    fwd = rev = digits = 0
+    for w in toks:
+        t = w.text.strip()
+        pos = min(range(k), key=lambda i: abs(cols[i] - w.cx)) + 1
+        m = re.search(r"\d+", t)
+        if m:
+            digits += 1
+            v = int(m.group(0))
+            fwd += v == pos
+            rev += v == k + 1 - pos
+        elif not re.search(r"[점죄짐]\W?$", t):
+            return None
+    if digits == 0:
+        return "fwd"                    # 숫자가 모두 깨졌어도 '점' 토큰이 3개 이상이면 머리글
+    if fwd >= 0.6 * digits:
+        return "fwd"
+    return "rev" if rev >= 0.6 * digits else None
+
+
 def _find_columns(page: PdfPage, lines: list[list[Word]]) -> tuple[list[float], float] | None:
-    """머리글 행: 오른쪽 절반에 짧은 점수 토큰이 3개 이상 등간격으로 놓인 줄."""
+    """머리글 행: 오른쪽 절반에 짧은 점수 토큰이 3개 이상 등간격으로 놓인 줄.
+
+    열 순서 = 점수 순서(첫 열이 1점). '5점 4점 … 1점'처럼 거꾸로 적힌 머리글이면 열을 뒤집어 돌려준다."""
     best = None
     for line in lines:
         right = [w for w in line if w.x0 > page.width * 0.5]
@@ -83,6 +111,11 @@ def _find_columns(page: PdfPage, lines: list[list[Word]]) -> tuple[list[float], 
         if step <= 0 or any(abs(d / step - round(d / step)) > 0.25 for d in diffs):
             continue   # 등간격(정수배)이 아니면 머리글이 아님
         cols = _fill_even(xs)
+        order = _score_order(toks, cols)
+        if order is None:
+            continue   # 숫자가 열 위치와 안 맞음 — 점수 머리글이 아니라 수치 표
+        if order == "rev":
+            cols = list(reversed(cols))
         if best is None or len(cols) > len(best[0]):
             best = (cols, statistics.mean(w.cy for w in toks))
     return best
@@ -153,7 +186,7 @@ def mark_likert_by_ink(pdf_path: str, page: PdfPage, grid: LikertGrid,
     dark, s = _dark_map(pdf_path, page.page_no, dpi)
     H, W = dark.shape
     cols = grid.columns
-    step = statistics.median([b - a for a, b in zip(cols, cols[1:])]) if len(cols) > 1 else 30.0
+    step = statistics.median([abs(b - a) for a, b in zip(cols, cols[1:])]) if len(cols) > 1 else 30.0
     ys = [r.word.cy for r in grid.rows]
     for i, r in enumerate(grid.rows):
         h_txt = max(4.0, r.word.y1 - r.word.y0)
