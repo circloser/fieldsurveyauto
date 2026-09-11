@@ -153,3 +153,100 @@ def test_photo_only_page_becomes_photo_sheet(tmp_path, monkeypatch):
     assert [row["설명"] for row in g["rows"]] == [f"(설명) 사진{k + 1} 번식지 전경" for k in range(4)]
     assert [row["번호"] for row in g["rows"]] == [1, 2, 3, 4]
     assert all(Path(row["사진"][len(IMG_PREFIX):]).exists() for row in g["rows"])
+
+
+def test_photo_pages_only_right_after_survey_sheets(tmp_path, monkeypatch):
+    """조사표가 있는 파일에서는 조사표 바로 뒤에 이어진 사진 쪽만 '현장 사진' — 본문 뒤의 그림 쪽은 버림.
+    혼합 일괄 점검에서 지침(131쪽)의 그림 쪽 15쪽('<그림 10> 조사정점 설정', 화면 캡처)이 사진으로 오인됐다."""
+    import app.main as app_main
+    from fastapi.testclient import TestClient
+
+    from core.pdf_pipeline import suggest_from_cells
+    from tests.test_pdf_pipeline import _draw_form
+
+    tpl = tmp_path / "tpl.pdf"
+    _draw_form(tpl, [("하천명", "해남천"), ("보길이", "30")], y_top=60, title="하천 조사표")
+    boxes = suggest_from_cells(str(tpl), 0)
+    store = type("S", (), {"list_names": lambda self: ["조사표"],
+                           "get": lambda self, n: {"name": "조사표", "boxes": boxes}})()
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    photo = tmp_path / "photos.pdf"
+    _scan_photo_page(photo)
+    text = tmp_path / "text.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "Appendix notes page without photos", fontsize=12)
+    doc.save(str(text))
+    doc.close()
+    bundle = tmp_path / "bundle.pdf"
+    m = fitz.open()
+    for src in (tpl, photo, text, photo):                    # 조사표 · 사진 · 본문 · 사진
+        s = fitz.open(str(src))
+        m.insert_pdf(s)
+        s.close()
+    m.save(str(bundle))
+    m.close()
+
+    client = TestClient(app_main.app)
+    with bundle.open("rb") as f:
+        r = client.post("/api/pdf/apply",
+                        data={"boxes": "[]", "sheet_name_field": "__group_title__", "auto_classify": "1"},
+                        files=[("files", ("bundle.pdf", f, "application/pdf"))])
+    assert r.status_code == 200, r.text
+    g = next(g for g in app_main._PDF_APPLY["groups"] if g["label"] == "현장 사진")
+    assert {row["쪽"] for row in g["rows"]} == {2}                 # 조사표(1쪽) 바로 뒤 사진 쪽만
+    assert sum(d["pages"] for d in r.json()["discarded"]) == 2    # 본문 쪽과 그 뒤 사진 쪽은 버림
+
+
+def test_report_page_with_figures_is_not_photo_page(tmp_path):
+    """본문 + 그림 쪽(지침·보고서)은 사진 모음이 아니다 — 혼합 일괄 점검에서 지침 15쪽이 '현장 사진'으로 오인됐다."""
+    from PIL import Image
+
+    from core.pdf_reader import read_pdf
+    from core.photos import photo_page_items
+
+    png = tmp_path / "fig.png"
+    Image.fromarray(_photo(3)).save(png)
+
+    def make(name, body_lines):
+        p = tmp_path / name
+        doc = fitz.open()
+        page = doc.new_page(width=595, height=842)
+        font = fitz.Font("cjk")
+        tw = fitz.TextWriter(page.rect)
+        for r in ((20, 40, 300, 360), (305, 40, 585, 360)):
+            page.insert_image(fitz.Rect(*r), filename=str(png), keep_proportion=False)
+            tw.append((r[0] + 4, r[3] + 14), "(설명) 어도 입구부 전경", font=font, fontsize=9)
+        for k in range(body_lines):
+            tw.append((40, 420 + k * 18), "어도 입구부는 하류 수위 변동 범위를 고려하여 설치하며 유속은 어류 유영 능력 이내로 한다",
+                      font=font, fontsize=10)
+        tw.write_text(page)
+        doc.save(str(p))
+        doc.close()
+        return p
+
+    report = make("report.pdf", 8)
+    assert photo_page_items(str(report), read_pdf(str(report), ocr_scanned=False).pages[0]) is None
+    sheet = make("sheet.pdf", 0)
+    items = photo_page_items(str(sheet), read_pdf(str(sheet), ocr_scanned=False).pages[0])
+    assert items is not None and [it["caption"] for it in items] == ["(설명) 어도 입구부 전경"] * 2
+
+
+def test_caption_box_follows_snapped_photo(tmp_path):
+    """사진 설명 박스(caption_of)는 템플릿 좌표가 아니라 맞춘 사진 바로 아래 줄을 읽는다
+    (2026년 조사표는 사진·설명이 2024년 템플릿보다 약 36pt 위에 있어 좌표로는 빈칸이었다)."""
+    from core.pdf_pipeline import apply_pixel_template
+    from core.pdf_reader import read_pdf
+
+    p = tmp_path / "photos.pdf"
+    want = _scan_photo_page(p)
+    x0, y0, x1, y1 = want[1]
+    boxes = [
+        {"field": "조사사진 2", "page": 0, "mode": "image", "order": 1,
+         "x0": x0, "y0": y0 + 40, "x1": x1, "y1": y1 + 40, "use_anchor": False, "anchor": None},
+        {"field": "조사사진 2_설명", "page": 0, "mode": "text", "order": 2, "caption_of": "조사사진 2",
+         "x0": x0, "y0": y1 + 40, "x1": x1, "y1": y1 + 60, "use_anchor": False, "anchor": None},
+    ]
+    got = apply_pixel_template(read_pdf(str(p), ocr_scanned=False).pages, boxes, pdf_path=str(p))
+    assert got["조사사진 2_설명"] == "(설명) 사진2 번식지 전경"

@@ -31,14 +31,15 @@ def _scan_like(page) -> bool:
 def embedded_photo_rects(page) -> list[tuple[float, float, float, float]]:
     """글자 PDF에 박힌 그림(쪽 전체 스캔 그림·작은 아이콘 제외)의 위치(pt)."""
     pr = page.rect
-    out = []
-    for info in page.get_images(full=True):
-        for r in page.get_image_rects(info[0]):
-            if r.width * r.height >= 0.9 * pr.width * pr.height:
+    out: list[tuple[float, float, float, float]] = []
+    for xref in dict.fromkeys(info[0] for info in page.get_images(full=True)):   # 같은 그림을 여러 번 써도 한 번씩
+        for r in page.get_image_rects(xref):
+            if r.width * r.height >= 0.9 * pr.width * pr.height or r.width < 40 or r.height < 30:
                 continue
-            if r.width >= 40 and r.height >= 30:
-                out.append((r.x0, r.y0, r.x1, r.y1))
-    return out
+            t = (r.x0, r.y0, r.x1, r.y1)
+            if t not in out:
+                out.append(t)
+    return sorted(out, key=lambda t: (round(t[1] / 20), t[0]))
 
 
 def _render(page, dpi: int, clip=None):
@@ -220,13 +221,23 @@ def caption_below(words, rect, gap: float = 24) -> str:
     return next((t for t in texts if "설명" in t), texts[0] if texts else "")
 
 
-def photo_page_items(pdf_path: str, page, min_photos: int = 2, min_cover: float = 0.35) -> list[dict] | None:
+def photo_page_items(pdf_path: str, page, min_photos: int = 2, min_cover: float = 0.35,
+                     max_other_words: int = 25) -> list[dict] | None:
     """사진만 모은 쪽이면 [{rect(pt), caption}] (읽는 순서), 아니면 None.
-    사진이 min_photos장 이상이고 쪽 면적의 min_cover 이상을 덮을 때."""
+
+    사진이 min_photos장 이상, 쪽 면적의 min_cover 이상을 덮고, 사진·사진 아래 설명 줄 밖의 글자가
+    max_other_words개 이하일 때. 지침·보고서의 '본문 + 그림' 쪽은 사진 모음이 아니다
+    (실측: 저어새 사진 대지는 설명·꼬리말 10~12단어, 지침 그림 쪽은 본문 수십 단어 — 15쪽이 오인됐었음)."""
     rects = page_photos(pdf_path, page.page_no)
     if len(rects) < min_photos:
         return None
     cover = sum((r[2] - r[0]) * (r[3] - r[1]) for r in rects) / (page.width * page.height)
     if cover < min_cover:
+        return None
+
+    def in_photo_or_caption(w) -> bool:
+        return any(r[0] - 5 <= w.cx <= r[2] + 5 and r[1] - 5 <= w.cy <= r[3] + 26 for r in rects)
+
+    if sum(1 for w in page.words if not in_photo_or_caption(w)) > max_other_words:
         return None
     return [{"rect": r, "caption": caption_below(page.words, r)} for r in rects]

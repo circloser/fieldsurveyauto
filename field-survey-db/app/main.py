@@ -1185,21 +1185,29 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                         prev_ip, prev_last, prev_nq = ip, (span[1] if span else None), nq
                 unmatched = keep
 
-            # 사진만 모은 쪽(현장 사진 대지) — 맞는 양식이 없어도 버리지 않고 사진과 설명을 한 장씩 꺼낸다
+            # 사진만 모은 쪽(현장 사진 대지) — 맞는 양식이 없어도 버리지 않고 사진과 설명을 한 장씩 꺼낸다.
+            # 조사표·설문이 있는 파일에서는 그 쪽 바로 뒤에 이어지는 사진 쪽만(조사표에 딸린 사진 대지) —
+            # 지침·보고서의 그림 쪽('<그림 10> 조사정점 설정', 화면 캡처)을 현장 사진으로 오인하지 않게.
+            # 조사표·설문이 하나도 없는 파일은 사진 대지 파일로 보고 사진 쪽을 모두 꺼낸다.
             photo_rows: list[dict] = []
             if unmatched:
                 from core.pdf_pipeline import crop_box_image
                 from core.photos import photo_page_items
+                data_pages = set(page_assign) | {p for _, s in survey_rows for p in s.get("_쪽들", [])}
+                taken: set[int] = set()
                 keep = []
                 for ip in sorted(unmatched):
                     pg = by_page.get(ip)
-                    try:
-                        items = photo_page_items(pdf_path, pg) if pg is not None else None
-                    except Exception:  # noqa: BLE001
-                        items = None
+                    items = None
+                    if pg is not None and (not data_pages or ip - 1 in data_pages or ip - 1 in taken):
+                        try:
+                            items = photo_page_items(pdf_path, pg)
+                        except Exception:  # noqa: BLE001
+                            items = None
                     if not items:
                         keep.append(ip)
                         continue
+                    taken.add(ip)
                     for k, it in enumerate(items, start=1):
                         x0, y0, x1, y1 = it["rect"]
                         photo_rows.append({"_파일명": f"{uf.filename} #{ip + 1}쪽", "쪽": ip + 1, "번호": k,

@@ -226,12 +226,58 @@ def page_cells(pdf_path: str, page_no: int, page: PdfPage | None = None) -> list
         return []
 
 
-def suggest_cells_maximal(pdf_path: str, page_no: int, page: PdfPage | None = None) -> list[dict]:
-    """모든 표 칸에 박스를 만든다(최대 생성 → 사용자가 삭제).
+_CHECK_MARKS = _re.compile(r"^[□■☐☑▣◼◻\s]+")
 
-    각 칸의 왼쪽/위 라벨을 이름으로 쓰고, 빈 여백 칸(텍스트도 라벨이웃도 없음)만 제외.
+
+def _cell_kind(text: str) -> str:
+    """칸 글자의 성격 — empty / check(□■ 머리글) / label(짧은 한글 항목명) / value."""
+    t = (text or "").strip()
+    if not t:
+        return "empty"
+    if _re.match(r"^[□■☐☑▣◼◻]", t):
+        return "check"
+    return "label" if _looks_like_label(t) else "value"
+
+
+def _tidy_name(text: str) -> str:
+    """'조 사 자' → '조사자'(한 글자씩 띄운 라벨)."""
+    t = normalize(text or "")
+    parts = t.split(" ")
+    return "".join(parts) if len(parts) > 1 and all(len(p) == 1 for p in parts) else t
+
+
+def _header_text(text: str) -> str:
+    """'■알 (Egg)' → '알 (Egg)' — 체크 표시만 뗀 머리글(앵커 라벨용, □/■가 달라도 찾아짐)."""
+    return _CHECK_MARKS.sub("", (text or "").strip()).strip()
+
+
+def _header_name(text: str) -> str:
+    """'■알 (Egg)' → '알' — 체크 표시와 뒤의 영문 괄호를 뗀 열 이름."""
+    return _tidy_name(_re.sub(r"\s*\([A-Za-z .]+\)\s*$", "", _header_text(text)))
+
+
+def _numberish(text: str) -> bool:
+    """예시 값이 비었거나 숫자로 읽히면 True('25.5 m' 포함, '다수'·'관찰 못함'은 아님)."""
+    from core.numeric import first_number_text
+    t = (text or "").strip()
+    return not t or bool(first_number_text(t))
+
+
+def suggest_cells_maximal(pdf_path: str, page_no: int, page: PdfPage | None = None) -> list[dict]:
+    """표 칸마다 박스를 만든다(최대 생성 → 사용자가 삭제) — 이름은 라벨 기준.
+
+    값이 적힌 '작성 예시' 양식을 올려도 이름이 예시 값('매도' '다수' '90')으로 붙지 않게:
+      · 줄마다 왼쪽부터 '라벨 칸 | 값 칸' 짝을 지어 값 칸에 라벨 이름 — 라벨 칸 자체는 박스를 만들지 않는다
+      · 열 머리글 줄(□알 □새끼 …) 바로 아래 줄은 '줄 라벨_열 머리글'(단계별 개체수_알, 위 머리글 앵커),
+        체크 표시 머리글 칸은 '체크' 박스(성장단계_알)
+      · 여러 줄을 묶는 왼쪽 라벨(둥지 현황 | 번식준비·포란…)은 박스 없음
+      · 첫 줄이 라벨인 큰 칸(기타 특이사항 …)은 그 줄을 뺀 영역, 사진이 든 칸은 사진(이미지) + 사진 아래 설명
+      · 수치형 이름이어도 예시 값이 숫자가 아니면(다수) '일반' 유형
+    짝을 못 지은 칸은 예전처럼 왼쪽/위 라벨 이름.
     page 를 주면 스캔본(선이 그림인 문서)도 이미지 격자로 칸을 잡는다.
     """
+    from core.numeric import looks_numeric_field
+
     cells = page_cells(pdf_path, page_no, page)
     if not cells:
         return []
@@ -254,9 +300,116 @@ def suggest_cells_maximal(pdf_path: str, page_no: int, page: PdfPage | None = No
                 best, by = d, d.y1
         return best
 
+    kind = {id(c): _cell_kind(c.text) for c in cells}
+    heights = sorted(c.y1 - c.y0 for c in cells)
+    row_h = heights[len(heights) // 4]
     boxes: list[dict] = []
     seen: set[tuple] = set()
+    handled: set[int] = set()
+
+    def add(x0, y0, x1, y1, field, mode="text", anchor=None):
+        key = (round(x0), round(y0))
+        if key in seen:
+            return
+        seen.add(key)
+        boxes.append({"field": field.strip()[:20] or "칸", "page": page_no,
+                      "x0": round(x0, 1), "y0": round(y0, 1), "x1": round(x1, 1), "y1": round(y1, 1),
+                      "mode": mode, "use_anchor": False, "suggested": True, "from_cell": True,
+                      "anchor": anchor})
+
+    # ① 여러 줄을 묶는 왼쪽 라벨(둥지 현황 | 번식준비·포란·…) — 박스 없음
     for c in cells:
+        if kind[id(c)] != "label" or c.y1 - c.y0 < row_h * 1.8:
+            continue
+        rights = [d for d in cells if d is not c and abs(d.x0 - c.x1) < 4 and _voverlap(c, d)]
+        if len(rights) >= 2 and all(d.y1 - d.y0 < (c.y1 - c.y0) * 0.7 for d in rights):
+            handled.add(id(c))
+
+    rows: list[list[Cell]] = []
+    for c in sorted(cells, key=lambda c: (c.y0, c.x0)):
+        if rows and abs(rows[-1][0].y0 - c.y0) < 3:
+            rows[-1].append(c)
+        else:
+            rows.append([c])
+    for r in rows:
+        r.sort(key=lambda c: c.x0)
+
+    # ② 열 머리글 줄 + 바로 아래 값 줄(칸 경계가 같음) — '줄 라벨_열 머리글'
+    for top, low in zip(rows, rows[1:]):
+        hdr = [c for c in top if id(c) not in handled]
+        val = [c for c in low if id(c) not in handled]
+        if (len(hdr) < 4 or len(val) != len(hdr)
+                or kind[id(hdr[0])] != "label" or kind[id(val[0])] != "label"):
+            continue
+        if not all(abs(a.x0 - b.x0) < 3 and abs(a.x1 - b.x1) < 3 for a, b in zip(hdr, val)):
+            continue
+        heads = hdr[1:]
+        if sum(kind[id(h)] in ("check", "label") for h in heads) < 0.8 * len(heads):
+            continue
+        handled.update(id(c) for c in hdr + val)
+        corner, rowlab = _tidy_name(hdr[0].text), _tidy_name(val[0].text)
+        numeric = looks_numeric_field(rowlab) and all(_numberish(v.text) for v in val[1:])
+        for h, v in zip(heads, val[1:]):
+            if kind[id(h)] == "check":
+                add(h.x0, h.y0, h.x1, h.y1, f"{corner}_{_header_name(h.text)}", "check")
+            add(v.x0, v.y0, v.x1, v.y1, f"{rowlab}_{_header_name(h.text)}",
+                "number" if numeric else "text", {"label": _header_text(h.text), "relation": "below"})
+
+    # ③ 줄마다 왼쪽부터 '라벨 칸 | 값 칸' 짝 — 값 칸에 라벨 이름, 라벨 칸은 박스 없음
+    for row in rows:
+        rest = [c for c in row if id(c) not in handled]
+        i = 0
+        while i < len(rest):
+            c = rest[i]
+            v = rest[i + 1] if i + 1 < len(rest) else None
+            if (kind[id(c)] == "label" and v is not None and kind[id(v)] != "check"
+                    and abs(v.x0 - c.x1) < 4 and _voverlap(c, v)):
+                name = _tidy_name(c.text)
+                handled.update((id(c), id(v)))
+                mode = "number" if looks_numeric_field(name) and _numberish(v.text) else "text"
+                add(v.x0, v.y0, v.x1, v.y1, name, mode, {"label": c.text.strip(), "relation": "right"})
+                i += 2
+            else:
+                i += 1
+
+    # ④ 첫 줄이 라벨인 큰 칸 — 그 줄을 뺀 영역, 사진이 들었으면 사진(이미지) + 사진 아래 설명
+    words = None
+    for c in cells:
+        if id(c) in handled or c.y1 - c.y0 < row_h * 2.5 or not (c.text or "").strip():
+            continue
+        if words is None:
+            words = page.words if page is not None else read_pdf(pdf_path, ocr_scanned=False).pages[page_no].words
+        inside = sorted((w for w in words if c.x0 <= w.cx <= c.x1 and c.y0 <= w.cy <= c.y1),
+                        key=lambda w: (w.cy, w.x0))
+        if len(inside) < 2:
+            continue
+        first = sorted((w for w in inside if w.cy - inside[0].cy < 4), key=lambda w: w.x0)
+        head = normalize(" ".join(w.text for w in first))
+        if len(first) == len(inside) or not _looks_like_label(head):
+            continue
+        handled.add(id(c))
+        name = _tidy_name(head)
+        try:
+            from core.photos import page_photos
+            photos = [r for r in page_photos(pdf_path, page_no)
+                      if r[0] >= c.x0 - 3 and r[2] <= c.x1 + 3 and r[1] >= c.y0 - 3 and r[3] <= c.y1 + 3]
+        except Exception:  # noqa: BLE001
+            photos = []
+        if photos:
+            ph = max(photos, key=lambda r: (r[2] - r[0]) * (r[3] - r[1]))
+            add(ph[0], ph[1], ph[2], ph[3], name, "image")
+            if c.y1 - ph[3] > 8:
+                n0 = len(boxes)
+                add(c.x0, ph[3], c.x1, c.y1, f"{name}_설명")
+                if len(boxes) > n0:
+                    boxes[-1]["caption_of"] = name     # 사진이 옮겨 가도 그 사진 바로 아래 줄을 읽게
+        else:
+            add(c.x0, max(w.y1 for w in first) + 1, c.x1, c.y1, name)
+
+    # ⑤ 나머지 칸 — 예전처럼 왼쪽/위 라벨 이름
+    for c in cells:
+        if id(c) in handled:
+            continue
         left, top = left_of(c), top_of(c)
         label, rel = "", "right"
         if left is not None and _looks_like_label(left.text):
@@ -747,12 +900,17 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
 
     # 2차: 라벨이 없거나 못 찾은 박스 — 제목은 페이지의 큰 글씨로, 나머지는
     # 오프셋 보정된 좌표로 읽는다(양식이 통째로 밀린 경우 같이 따라감).
+    photo_rects: dict[str, tuple[float, float, float, float]] = {}   # 이미지 박스 → 맞춘 사진 테두리
     for i, b in enumerate(ordered):
         if i in results:
             continue
         page = resolved[i]
         if page is None:
             results[i] = ""
+            continue
+        if b.get("caption_of") in photo_rects:   # 사진 설명 — 템플릿 좌표가 아니라 맞춘 사진 바로 아래 줄
+            from core.photos import caption_below
+            results[i] = caption_below(page.words, photo_rects[b["caption_of"]])
             continue
         if b.get("mode") == "title" and pdf_path is not None:
             t = title_for(page.page_no)
@@ -785,6 +943,7 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
                 if pdf_path:   # 박스 안·둘레의 실제 사진 테두리에 맞춰 자른다(칸 선·설명 글·잘림 방지)
                     from core.photos import snap_photo_box
                     bb = snap_photo_box(pdf_path, page.page_no, bb)
+                photo_rects[b["field"]] = (float(bb["x0"]), float(bb["y0"]), float(bb["x1"]), float(bb["y1"]))
                 results[i] = crop_box_image(pdf_path, page.page_no, bb) if pdf_path else ""
             except Exception:  # noqa: BLE001
                 results[i] = ""

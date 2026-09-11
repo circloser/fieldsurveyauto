@@ -74,7 +74,7 @@ def test_scanned_form_cells_match_text_pdf(tmp_path, ocr_ready):
     assert xs == [40, 160]                                      # 두 열 경계가 원본과 같다
 
     boxes = suggest_cells_maximal(str(scan_pdf), 0, scan)
-    assert len(boxes) == n_text
+    assert len(boxes) == len(ROWS)                               # 값 칸마다 하나 — 짝지은 라벨 칸 자체는 박스 없음
     labels = {(b.get("anchor") or {}).get("label", "") for b in boxes}
     assert "하천명" in labels and "어도유무" in labels           # 라벨(왼쪽 칸)이 이름으로 붙는다
     # 유형: 이름이 수치형인 값 칸만 '숫자', 나머지는 '일반'

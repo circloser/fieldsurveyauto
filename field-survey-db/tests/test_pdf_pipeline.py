@@ -242,8 +242,9 @@ def test_maximal_covers_all_cells(request, doc):
         pytest.skip("PDF 샘플 없음")
     from core.pdf_pipeline import suggest_cells_maximal
     boxes = suggest_cells_maximal(str(fx), 0)
-    # 최대 생성: 칸 대부분 커버(소수 제안보다 훨씬 많음)
-    assert len(boxes) > 80
+    # 최대 생성: 칸 대부분 커버(소수 제안보다 훨씬 많음). 짝지은 라벨 칸 자체는 박스를 만들지 않아
+    # (값 칸에 라벨 이름 — 작성 예시 양식에서 예시 값이 이름이 되던 문제) 예전 80여 개보다 조금 적다
+    assert len(boxes) > 70
     # 위치 중복 없음
     keys = [(round(b["x0"]), round(b["y0"])) for b in boxes]
     assert len(keys) == len(set(keys))
