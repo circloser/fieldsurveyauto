@@ -41,10 +41,11 @@ def _looks_like_label(text: str) -> bool:
 
 
 def to_pdf(src: str, cache_dir: str) -> str:
-    """입력을 PDF로 만든다. pdf는 그대로, hwpx/hwp는 한글로 변환."""
+    """입력을 PDF로 만든다. pdf는 그대로(기울어진 스캔 쪽이 있으면 곧게 편 사본), hwpx/hwp는 한글로 변환."""
     ext = os.path.splitext(src)[1].lower()
     if ext == ".pdf":
-        return src
+        from core.deskew import deskew_pdf
+        return deskew_pdf(src, cache_dir)
     if ext in (".hwpx", ".hwp"):
         from core.convert import hwpx_to_pdf
         base = os.path.splitext(os.path.basename(src))[0]
@@ -631,6 +632,41 @@ def match_bundles(boxes: list[dict], pages: list[PdfPage],
     return bundles
 
 
+def _label_word_offset(page: PdfPage, boxes: list[dict]) -> tuple[float, float] | None:
+    """라벨 글자로 잰 쪽 이동량 — 표 칸을 못 찾는 쪽(흐린 선·기울어진 스캔)의 좌표 보정용.
+
+    '오른쪽' 라벨은 값 박스와 같은 줄에 있으므로 (라벨 단어 세로 중심 − 박스 세로 중심)이 세로 이동량이다.
+    라벨마다 박스 근처(세로 ±60pt, 박스 오른쪽 끝보다 왼쪽)에서 같은 글자 단어 중 가장 가까운 것을 쓰고,
+    중앙값 ±4pt 안에 3개 이상 모일 때만 믿는다(여러 줄에 걸친 합쳐진 라벨 칸 같은 예외는 걸러짐).
+    가로는 스캔마다 차이가 작고 라벨 정렬(가운데·왼쪽)에 따라 흔들려 재지 않는다."""
+    import statistics
+
+    words: dict[str, list] = {}
+    for w in page.words:
+        k = normalize_key(w.text)
+        if len(k) >= 2:
+            words.setdefault(k, []).append(w)
+    dys: list[float] = []
+    for b in boxes:
+        a = b.get("anchor") or {}
+        if a.get("relation", "right") != "right" or not b.get("anchor_ok", True):
+            continue
+        cands = words.get(normalize_key(a.get("label") or ""))
+        if not cands:
+            continue
+        cy = (float(b["y0"]) + float(b["y1"])) / 2
+        near = [w for w in cands if abs(w.cy - cy) <= 60 and w.x1 <= float(b["x1"])]
+        if near:
+            dys.append(min(near, key=lambda w: abs(w.cy - cy)).cy - cy)
+    if len(dys) < 3:
+        return None
+    med = statistics.median(dys)
+    agree = [d for d in dys if abs(d - med) <= 4]
+    if len(agree) < 3 or abs(med) <= 2:
+        return None
+    return (0.0, statistics.median(agree))
+
+
 def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
                          page_map: dict[int, int] | None = None,
                          pdf_path: str | None = None) -> dict[str, str]:
@@ -700,6 +736,14 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
             dy = statistics.median(d[1] for d in ds)
             if abs(dx) > 2 or abs(dy) > 2:
                 offset[pno] = (dx, dy)
+    # 칸을 못 찾아(흐린 선·기울어진 스캔) 라벨 따라가기가 3개 미만인 쪽 — 라벨 글자 위치로 이동량을 잰다
+    for pno in {p.page_no for p in resolved.values() if p is not None}:
+        if len(deltas.get(pno, [])) >= 3:
+            continue
+        d = _label_word_offset(by_page[pno], [b for i, b in enumerate(ordered)
+                                               if resolved[i] is not None and resolved[i].page_no == pno])
+        if d is not None:
+            offset[pno] = d
 
     # 2차: 라벨이 없거나 못 찾은 박스 — 제목은 페이지의 큰 글씨로, 나머지는
     # 오프셋 보정된 좌표로 읽는다(양식이 통째로 밀린 경우 같이 따라감).
@@ -738,6 +782,9 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
                 bb = _clip_to_cell(cells, bb)
         if b.get("mode") == "image":   # 이미지 캡처 박스 — 글자 대신 영역 그림
             try:
+                if pdf_path:   # 박스 안·둘레의 실제 사진 테두리에 맞춰 자른다(칸 선·설명 글·잘림 방지)
+                    from core.photos import snap_photo_box
+                    bb = snap_photo_box(pdf_path, page.page_no, bb)
                 results[i] = crop_box_image(pdf_path, page.page_no, bb) if pdf_path else ""
             except Exception:  # noqa: BLE001
                 results[i] = ""

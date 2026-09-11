@@ -1185,6 +1185,29 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                         prev_ip, prev_last, prev_nq = ip, (span[1] if span else None), nq
                 unmatched = keep
 
+            # 사진만 모은 쪽(현장 사진 대지) — 맞는 양식이 없어도 버리지 않고 사진과 설명을 한 장씩 꺼낸다
+            photo_rows: list[dict] = []
+            if unmatched:
+                from core.pdf_pipeline import crop_box_image
+                from core.photos import photo_page_items
+                keep = []
+                for ip in sorted(unmatched):
+                    pg = by_page.get(ip)
+                    try:
+                        items = photo_page_items(pdf_path, pg) if pg is not None else None
+                    except Exception:  # noqa: BLE001
+                        items = None
+                    if not items:
+                        keep.append(ip)
+                        continue
+                    for k, it in enumerate(items, start=1):
+                        x0, y0, x1, y1 = it["rect"]
+                        photo_rows.append({"_파일명": f"{uf.filename} #{ip + 1}쪽", "쪽": ip + 1, "번호": k,
+                                           "설명": it["caption"],
+                                           "사진": crop_box_image(pdf_path, ip, {"x0": x0, "y0": y0,
+                                                                            "x1": x1, "y1": y1})})
+                unmatched = keep
+
             # ② 추출 대상 확정 — 소양식 쪽은 '페이지 1장 = 1행',
             #    전체 템플릿은 배정된 페이지 안에서 묶음(조사표) 구성
             accepted = []  # (첫 페이지, {name, boxes, fields, title}, page_map)
@@ -1229,7 +1252,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                              {"name": cur["name"], "boxes": cur["boxes"],
                               "fields": cur["fields"], "title": cur["title"]}, pm)
                             for pm in maps]
-            if not accepted and not survey_rows:
+            if not accepted and not survey_rows and not photo_rows:
                 failed.append({"name": uf.filename,
                                "error": "맞는 양식(템플릿)이 없어 버림 처리했습니다."})
                 if unmatched:
@@ -1327,6 +1350,14 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                         g["fields"].append(fld)
                 g["rows"].append({"_파일명": fname, "_제목": title, **srow})
                 tcount["설문지(자동 인식)"] = tcount.get("설문지(자동 인식)", 0) + 1
+            if photo_rows:   # 사진 모음 쪽 — 사진 한 장이 한 행(쪽·번호·설명·사진)
+                title = "현장 사진"
+                g = groups.setdefault(title, {"label": title, "fields": [], "rows": []})
+                for fld in ("쪽", "번호", "설명", "사진"):
+                    if fld not in g["fields"]:
+                        g["fields"].append(fld)
+                g["rows"].extend({"_제목": title, **r} for r in photo_rows)
+                tcount["사진 모음(자동 인식)"] = len({r["쪽"] for r in photo_rows})
             for tname, cnt in tcount.items():
                 match_info.append({"name": uf.filename, "template": tname,
                                    "bundles": cnt})
