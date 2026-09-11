@@ -37,7 +37,7 @@ def _degrees(s: str):
     return float(m.group()) if m else None
 
 
-def _iqr_bounds(nums: list[float]):
+def _iqr_bounds(nums: list[float], k: float = 1.5):
     xs = sorted(nums)
     n = len(xs)
 
@@ -49,13 +49,17 @@ def _iqr_bounds(nums: list[float]):
 
     q1, q3 = q(0.25), q(0.75)
     iqr = q3 - q1
-    return q1 - 1.5 * iqr, q3 + 1.5 * iqr, iqr
+    return q1 - k * iqr, q3 + k * iqr, iqr
 
 
 def find_outliers(records: list[dict], min_n: int = 4) -> list[dict]:
     """records: 같은 서식 행들의 [{field: value}]. 반환: 행별 {field: 사유}.
 
-    - 숫자 열: 비어있지 않은 숫자가 min_n개 이상이고 IQR>0일 때 경계 밖 값 표시.
+    - 숫자 열: 비어있지 않은 숫자가 min_n개 이상일 때 3×IQR 경계 밖 값 표시
+      (IQR=0이면 중앙값 ± 여유). 드물고 확실한 것만 경고한다 —
+      · 0이 30% 이상인 열은 0을 '해당 없음'(구조물·어도가 없는 칸)으로 보고 통계·표시에서 뺀다.
+      · 음수가 없는 열은 하한을 0으로(통상범위 '-5~27' 같은 표시 방지).
+      · 경고가 max(2, 10%)건을 넘는 열은 원래 값이 넓게 퍼진 것 — 이상치로 보지 않는다.
     - 위도/경도: 한국 범위 밖이면 표시.
     """
     out: list[dict] = [{} for _ in records]
@@ -78,8 +82,12 @@ def find_outliers(records: list[dict], min_n: int = 4) -> list[dict]:
         nums = [(i, v) for i, v in pairs if v is not None]
         if len(nums) < min_n:
             continue
+        if sum(1 for _, v in nums if v == 0) >= 0.3 * len(nums):
+            nums = [(i, v) for i, v in nums if v != 0]   # 0 = 해당 없음 — 통계·경고에서 뺀다
+            if len(nums) < min_n:
+                continue
         vals = [v for _, v in nums]
-        lo, hi, iqr = _iqr_bounds(vals)
+        lo, hi, iqr = _iqr_bounds(vals, k=3.0)
         if iqr <= 0:
             # 대부분 동일값(IQR=0)인데 하나만 크게 튀는 오추출 잡기.
             # 작은 절대값(예: 0↔0.3)은 오탐하지 않도록 여유 = max(1,|중앙값|)*3.
@@ -87,9 +95,13 @@ def find_outliers(records: list[dict], min_n: int = 4) -> list[dict]:
             med = xs[len(xs) // 2]
             margin = max(1.0, abs(med)) * 3
             lo, hi = med - margin, med + margin
-        for i, v in nums:
-            if v < lo or v > hi:
-                out[i][f] = f"이상치(통상범위 {lo:g}~{hi:g} 벗어남: {v:g})"
+        if min(vals) >= 0:
+            lo = max(lo, 0.0)
+        hits = [(i, v) for i, v in nums if v < lo or v > hi]
+        if len(hits) > max(2, 0.1 * len(nums)):
+            continue   # 여러 칸이 한꺼번에 벗어남 = 원래 넓게 퍼진 열
+        for i, v in hits:
+            out[i][f] = f"이상치(통상범위 {lo:g}~{hi:g} 벗어남: {v:g})"
     return out
 
 
