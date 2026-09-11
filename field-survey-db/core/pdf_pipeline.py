@@ -545,7 +545,8 @@ def _box_value(page: PdfPage, box: dict) -> str:
 
     # 라벨 앵커 우선(text/bold/number) — 못 찾으면 박스 좌표로 폴백
     anchor = box.get("anchor")
-    if anchor and box.get("use_anchor", True) and anchor.get("label") and mode in ("text", "bold", "number"):
+    if (anchor and box.get("use_anchor", True) and box.get("anchor_ok", True)
+            and anchor.get("label") and mode in ("text", "bold", "number")):
         v = value_by_label(page, anchor["label"], anchor.get("relation", "right"),
                            bold_only=(mode == "bold"))
         if v:
@@ -676,7 +677,10 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
         if page is None:
             results[i] = ""
             continue
-        if pdf_path and b.get("mode", "text") in ("text", "number") and (b.get("anchor") or {}).get("label"):
+        # 라벨을 따라가 읽기 — 단, 템플릿 양식에서 라벨이 박스 자리와 맞지 않는 것으로 확인된
+        # 앵커(anchor_ok=False, core.anchor_check)는 따라가지 않고 아래 좌표 방식으로 읽는다
+        if (pdf_path and b.get("mode", "text") in ("text", "number")
+                and (b.get("anchor") or {}).get("label") and b.get("anchor_ok", True)):
             cells = cells_for(page.page_no)
             if cells:
                 r = _cell_anchor_value(cells, b, return_cell=True)

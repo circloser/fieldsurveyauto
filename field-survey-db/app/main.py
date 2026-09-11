@@ -1019,6 +1019,9 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
 
     def _mk_template(name: str, boxes: list[dict], tpdf) -> dict:
         bx, flds = _dedup_box_fields(boxes)
+        if tpdf:   # 박스 자리와 맞지 않게 저장된 라벨은 따라가지 않게(좌표로 읽음)
+            from core.anchor_check import validate_anchors
+            validate_anchors(bx, tpdf)
         tpages = sorted({int(b.get("page", 0)) for b in bx})
         # 템플릿 페이지별 제목 — 여러 쪽에 제목이 있으면 '쪽 = 소양식' 묶음집이다
         ptitles = {tp: (_page_title_of(tpdf, tp) if tpdf else "") for tp in tpages}
@@ -1413,6 +1416,11 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
 
     # 중복 이름은 접미사로 유일화(엑셀 열 충돌 방지). 사용자가 이름을 안 바꾼 경우 대비.
     box_list, fields = _dedup_box_fields(box_list)
+    # 화면에 불러온 양식이 있으면 그 PDF로 라벨을 확인 — 박스 자리와 맞지 않는 라벨은 따라가지 않음
+    _entry = _PDF_DOCS.get(doc_id) if doc_id else None
+    if _entry:
+        from core.anchor_check import validate_anchors
+        validate_anchors(box_list, _entry["pdf_path"])
 
     # '제목별 분류' — 제목(위계) 박스 값으로 같은 양식끼리 시트를 묶는다.
     # 제목 박스가 없는(예전) 템플릿이면 입력 문서의 큰 글씨 제목을 감지해 폴백.
