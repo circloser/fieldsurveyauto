@@ -394,9 +394,10 @@ def _survey_info(doc, pdf_path: str) -> dict | None:
                 pages.append(p.page_no)
                 for r in grid.rows:
                     w = r.word
+                    cols = r.cols or grid.columns
                     items.append({"page": p.page_no, "key": f"{r.qid}_{r.text[:18]}", "qid": r.qid,
-                                  "text": r.text, "choices": len(grid.columns),
-                                  "x0": w.x0, "y0": w.y0, "x1": max(grid.columns) + 10, "y1": w.y1})
+                                  "text": r.text, "choices": 0 if r.free else len(cols),
+                                  "x0": w.x0, "y0": w.y0, "x1": max(cols) + 10, "y1": w.y1})
             elif is_survey_page(p, pdf_path=pdf_path):
                 its = survey_items(p)
                 questions += len(its)
