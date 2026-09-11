@@ -744,7 +744,24 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
             continue
         results[i] = _box_value(page, bb)
 
-    return {b["field"]: results[i] for i, b in enumerate(ordered)}
+    return {b["field"]: _strip_caption(results[i], b) for i, b in enumerate(ordered)}
+
+
+_CAPTION = _re.compile(r"[(（]\s*([^()（）]{1,20}?)\s*[)）]")
+
+
+def _strip_caption(val, box: dict):
+    """칸에 인쇄된 안내 괄호를 값에서 뗀다 — '(보명칭) 탄천_신20' → '탄천_신20', '(보코드)' → ''.
+    괄호 안 글자가 박스 이름(쪽 접두어 'P2_'·중복 번호 '_2' 제외)이나 라벨과 같을 때만 뗀다 —
+    '(주)한국수자원공사' '가곡천(상류)' 같은 값의 괄호는 그대로."""
+    if not isinstance(val, str) or ("(" not in val and "（" not in val) or val.startswith(IMG_PREFIX):
+        return val
+    name = _re.sub(r"_\d+$", "", _re.sub(r"^P\d+_", "", str(box.get("field") or "")))
+    names = {normalize_key(name), normalize_key((box.get("anchor") or {}).get("label") or "")} - {""}
+    if not names:
+        return val
+    out = _CAPTION.sub(lambda m: "" if normalize_key(m.group(1)) in names else m.group(0), val)
+    return normalize(out) if out != val else val
 
 
 def field_order(boxes: list[dict]) -> list[str]:
