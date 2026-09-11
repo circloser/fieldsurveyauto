@@ -97,6 +97,11 @@ def main() -> None:
     print("  종료하려면 이 창에서 Ctrl+C 를 누르세요.")
     _env_report()
     print("=" * 52)
+    try:   # 지난번에 창을 닫아 강제로 끝났을 때 남은, 이 프로그램이 띄웠던 보이지 않는 한글 정리
+        from core.convert import cleanup_orphans
+        cleanup_orphans()
+    except Exception:  # noqa: BLE001
+        pass
     threading.Thread(target=open_browser_when_ready, args=(port,), daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
