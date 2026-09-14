@@ -92,9 +92,37 @@ def image_grid(pdf_path: str, page_no: int, region: tuple[float, float, float, f
     vb = vmask > 0
     ys = _line_positions(hb, axis=1, min_frac=min_frac)
     xs = _line_positions(vb, axis=0, min_frac=max(min_frac, 0.3))
+
+    # 한 줄 안에서만 쓰는 짧은 칸 구분선 — 표 높이의 30%에 못 미쳐 위에서 빠진다
+    # (실제 사례: 저어새 조사표 스캔의 첫 줄 '조사지역|칠산도|날짜|…', 둥지 현황의 작은 줄들이 한 칸으로 합쳐짐).
+    # 가장 낮은 줄 높이에 맞춘 세로 커널로 다시 찾아, 그 줄 띠를 80% 이상 채우고 위·아래 가로선에 모두 닿는
+    # 선만 칸 경계로 더한다 — 사진 테두리(칸 여백 안쪽이라 가로선에 안 닿음)·글자 획(줄 높이보다 짧음)은 제외.
+    vs = None
+    gaps = [b - a for a, b in zip(ys, ys[1:]) if b - a >= 12]
+    if gaps and max(10, int(min(gaps) * 0.6)) < kv:
+        kv2 = max(10, int(min(gaps) * 0.6))
+        vs = cv2.morphologyEx(bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, kv2))) > 0
+
+    def short_vline(x: int, ya: int, yb: int) -> bool:    # 줄 띠(ya..yb, 가로선 위치)를 채우고 양끝이 닿나
+        if vs is None or yb - ya < 12:
+            return False
+        xa, xb = max(0, x - 3), x + 4
+        mid = vs[ya + 2:yb - 1, xa:xb]
+        return (bool(mid.size) and mid.any(axis=1).mean() >= 0.8
+                and bool(vs[max(0, ya - 1):ya + 5, xa:xb].any()) and bool(vs[max(0, yb - 4):yb + 2, xa:xb].any()))
+
+    if vs is not None and len(ys) >= 2:
+        extra: list[float] = []
+        for ya, yb in zip(ys, ys[1:]):
+            if yb - ya < 12:
+                continue
+            cand = np.where(vs[ya + 2:yb - 1].mean(axis=0) >= 0.8)[0]
+            extra += [c for c in _cluster([float(i) for i in cand], 3) if short_vline(int(c), ya, yb)]
+        if extra:
+            xs = [int(v) for v in _cluster([float(x) for x in xs] + extra, 4)]
     if len(ys) < 2 or len(xs) < 2:
         return []
-    ys = _trim_rows(ys, xs, vb)
+    ys = _trim_rows(ys, xs, vb if vs is None else (vb | vs))
     if len(ys) < 2:
         return []
     s = 72.0 / dpi
@@ -107,7 +135,9 @@ def image_grid(pdf_path: str, page_no: int, region: tuple[float, float, float, f
 
     def has_vline(x: int, ya: int, yb: int) -> bool:
         band = vb[ya:yb, max(0, x - 3):x + 4]
-        return band.any(axis=1).mean() >= 0.5 if band.size else False
+        if band.size and band.any(axis=1).mean() >= 0.5:
+            return True
+        return short_vline(x, ya - 2, yb + 2)
 
     # 합쳐진 칸: 사이에 선이 없으면 같은 묶음(union-find)
     parent = list(range(nr * nc))
