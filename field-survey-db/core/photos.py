@@ -221,6 +221,66 @@ def caption_below(words, rect, gap: float = 24) -> str:
     return next((t for t in texts if "설명" in t), texts[0] if texts else "")
 
 
+def photo_form_items(pdf_path: str, page, min_labeled: float = 0.6) -> list[dict] | None:
+    """사진 양식 쪽이면 [{rect(pt), caption}] (읽는 순서), 아니면 None.
+
+    사진 양식 = 칸마다 이름('상류 방향' '어도 입구')이 붙고 그 아래 칸에 사진을 넣는 표, 왼쪽에는 묶음 이름
+    ('보 전경' '어도'). 실제 사례: 탄천·양양 조사표 묶음의 '1차 인공구조물 현장 사진' 쪽 — 사진이 쪽의
+    10~30%뿐이고 칸 이름 글자가 많아 사진 대지로 인식되지 않아 버려졌다.
+    설명 = '묶음 이름 · 칸 이름'(사진 칸 안에 적은 글이 있으면 뒤에 붙임). 사진의 60% 이상에서 이름을 찾을 때만.
+    사진 대지(사진 틀 아래에 '(설명) …')와는 머리글 칸이 낮고(30pt 이하) 묶음 칸이 좁은(쪽 폭 20% 이하) 점으로 구분."""
+    rects = page_photos(pdf_path, page.page_no)
+    if not rects:
+        return None
+    from core.pdf_pipeline import page_cells
+
+    cells = page_cells(pdf_path, page.page_no, page)
+    if not cells:
+        return None
+
+    def area(c):
+        return (c.x1 - c.x0) * (c.y1 - c.y0)
+
+    # 쪽의 글자 칸 대부분이 '사진 칸 이름'(바로 아래가 훨씬 높은 칸인 머리글)이거나 왼쪽 묶음 이름(좁고 높은 칸)이어야
+    # 사진 양식이다 — 사진 칸 두 개가 딸린 조사표(저어새 조사표의 '조사사진 1·2')를 사진 양식으로 오인하지 않게.
+    texted = [c for c in cells if (c.text or "").strip()]
+
+    def slot_label(c) -> bool:
+        if c.x1 - c.x0 <= page.width * 0.2 and c.y1 - c.y0 >= 60:
+            return True
+        return any(abs(d.y0 - c.y1) < 4 and d.y1 - d.y0 >= 3 * (c.y1 - c.y0)
+                   and min(c.x1, d.x1) - max(c.x0, d.x0) > 0.5 * (c.x1 - c.x0) for d in cells)
+
+    if not texted or sum(1 for c in texted if slot_label(c)) < 0.6 * len(texted):
+        return None
+
+    items: list[dict] = []
+    labeled = 0
+    for r in rects:
+        cx, cy = (r[0] + r[2]) / 2, (r[1] + r[3]) / 2
+        holders = [c for c in cells if c.x0 - 2 <= cx <= c.x1 + 2 and c.y0 - 2 <= cy <= c.y1 + 2]
+        if not holders:
+            items.append({"rect": r, "caption": ""})
+            continue
+        h = min(holders, key=area)
+        heads = [c for c in cells if abs(c.y1 - h.y0) < 4 and c.y1 - c.y0 <= 30 and (c.text or "").strip()
+                 and len(c.text.strip()) <= 30 and min(c.x1, h.x1) - max(c.x0, h.x0) > 0.5 * (h.x1 - h.x0)]
+        head = normalize(heads[0].text) if heads else ""
+        top = heads[0].y0 if heads else h.y0
+        groups = [c for c in cells if c.x1 <= h.x0 + 2 and c.y0 <= top + 3 and c.y1 >= h.y1 - 3
+                  and c.x1 - c.x0 <= page.width * 0.2 and (c.text or "").strip()]
+        group = normalize(min(groups, key=lambda c: c.x0).text) if groups else ""
+        note = normalize(" ".join(
+            w.text for w in sorted(page.words, key=lambda w: (round(w.cy / 5), w.x0))
+            if h.x0 <= w.cx <= h.x1 and h.y0 <= w.cy <= h.y1 and not (r[0] - 2 <= w.cx <= r[2] + 2 and r[1] - 2 <= w.cy <= r[3] + 2)))
+        if group or head:
+            labeled += 1
+        items.append({"rect": r, "caption": " · ".join(t for t in (group, head, note) if t)})
+    if labeled < max(1.0, min_labeled * len(rects)):
+        return None
+    return items
+
+
 def photo_page_items(pdf_path: str, page, min_photos: int = 2, min_cover: float = 0.35,
                      max_other_words: int = 25) -> list[dict] | None:
     """사진만 모은 쪽이면 [{rect(pt), caption}] (읽는 순서), 아니면 None.

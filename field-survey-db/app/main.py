@@ -1192,7 +1192,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
             photo_rows: list[dict] = []
             if unmatched:
                 from core.pdf_pipeline import crop_box_image
-                from core.photos import photo_page_items
+                from core.photos import photo_form_items, photo_page_items
                 data_pages = set(page_assign) | {p for _, s in survey_rows for p in s.get("_쪽들", [])}
                 taken: set[int] = set()
                 keep = []
@@ -1200,8 +1200,8 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                     pg = by_page.get(ip)
                     items = None
                     if pg is not None and (not data_pages or ip - 1 in data_pages or ip - 1 in taken):
-                        try:
-                            items = photo_page_items(pdf_path, pg)
+                        try:   # 사진 양식(칸 이름 + 사진) 먼저, 아니면 사진 대지(사진 + 아래 설명)
+                            items = photo_form_items(pdf_path, pg) or photo_page_items(pdf_path, pg)
                         except Exception:  # noqa: BLE001
                             items = None
                     if not items:
@@ -1731,6 +1731,30 @@ def sce_status() -> JSONResponse:
     st = sce_link.status(config.SCE_CONFIG_PATH)
     st["has_result"] = bool(_PDF_APPLY.get("excel_path"))
     return JSONResponse(st)
+
+
+@app.get("/api/ocr/corrections")
+def ocr_corrections_get() -> JSONResponse:
+    """스캔 글자 교정 사전(data/ocr_교정사전.txt) — 파일이 없으면 설명 머리말만."""
+    from core import ocr_fix
+    path = config.DATA_DIR / ocr_fix.DICT_NAME
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        text = ocr_fix.DICT_HEADER
+    return JSONResponse({"text": text, "count": len(ocr_fix.load_pairs(path)),
+                         "builtin": [f"{a} = {b}" for a, b in ocr_fix.DEFAULT_PAIRS]})
+
+
+@app.post("/api/ocr/corrections")
+def ocr_corrections_save(payload: dict = Body(default={})) -> JSONResponse:
+    """교정 사전 저장 — 다음 일괄 처리부터 스캔(OCR) 문서 값에 반영된다."""
+    from core import ocr_fix
+    text = str(payload.get("text") or "")
+    path = config.DATA_DIR / ocr_fix.DICT_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text if (not text or text.endswith("\n")) else text + "\n", encoding="utf-8")
+    return JSONResponse({"ok": True, "count": len(ocr_fix.load_pairs(path))})
 
 
 @app.post("/api/sce/config")

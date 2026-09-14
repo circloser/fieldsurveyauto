@@ -115,6 +115,61 @@ def ocr_image(png_bytes: bytes, scale: float = 1.0) -> list[OcrWord]:
     return _ocr_tesseract(png_bytes, scale)
 
 
+def read_region(pdf_path: str, page_no: int, rect, dpi: int = 300, min_ink: float = 0.001) -> str:
+    """쪽의 한 영역(칸 안쪽)만 크게 렌더해 다시 읽는다 — 쪽 전체 OCR이 놓친 외톨이 짧은 글자용.
+
+    실제 사례: 저어새 조사표 스캔의 번식준비 '1'·'3', 이소 '4'(한 자리 숫자만 있는 칸) — 쪽 전체 OCR이 놓쳤다.
+      ① 잉크가 거의 없으면(빈 칸) 읽지 않고, 납작한 덩어리 하나뿐이면 줄표 '-'
+      ② 칸만 잘라 문턱을 낮춘 글자 찾기 — 대부분 여기서 맞는다('4' '3' '?')
+      ③ 그래도 못 찾으면(가는 '1') 잉크 덩어리들(가장자리에 닿은 칸 선 자투리는 뺌)의 테두리만 잘라
+         그 조각을 인식(확신도 0.5 이상만). 찾지 못하면 빈 값 — 지어내지 않는다.
+    ③을 먼저 하면 흐리게 찍힌 '4'의 세로획만 덩어리로 잡혀 '1'로 읽혔다(6쪽 이소).
+    실측(300dpi): 합성 칸 '1'·'3'·빈칸, 실제 1쪽 1·–, 5쪽 ?, 6쪽 3·4 모두 맞음."""
+    x0, y0, x1, y1 = (float(v) for v in rect)
+    if x1 - x0 < 4 or y1 - y0 < 4 or _load_engine() != "easyocr":
+        return ""
+    import cv2
+    import fitz
+    import numpy as np
+
+    doc = fitz.open(pdf_path)
+    try:
+        pix = doc[page_no].get_pixmap(dpi=dpi, clip=fitz.Rect(x0, y0, x1, y1), colorspace=fitz.csGRAY)
+    finally:
+        doc.close()
+    g = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
+    if g.size == 0 or float((g < 128).mean()) < min_ink:
+        return ""
+    H, W = g.shape
+    n, _lab, stats, _ = cv2.connectedComponentsWithStats((g < 160).astype(np.uint8), 8)
+    blobs = [stats[i] for i in range(1, n)
+             if stats[i, cv2.CC_STAT_AREA] >= 15
+             and stats[i, 0] > 0 and stats[i, 1] > 0
+             and stats[i, 0] + stats[i, 2] < W and stats[i, 1] + stats[i, 3] < H]
+    if not blobs:
+        return ""
+    if len(blobs) == 1 and blobs[0][3] <= max(4, 0.15 * blobs[0][2]) and blobs[0][2] >= 12:
+        return "-"                                            # 납작한 덩어리 하나 = 줄표('–' 적힌 칸)
+    big = cv2.copyMakeBorder(g, 24, 24, 24, 24, cv2.BORDER_CONSTANT, value=255)
+    res = _ENGINE.readtext(cv2.cvtColor(big, cv2.COLOR_GRAY2RGB), detail=1, paragraph=False,
+                           text_threshold=0.4, low_text=0.25, min_size=4)
+    res.sort(key=lambda r: (round(min(p[1] for p in r[0]) / 30), min(p[0] for p in r[0])))
+    found = [str(t).strip() for _, t, _c in res if str(t).strip()]
+    if found:
+        return " ".join(found)
+    bx0 = min(b[0] for b in blobs)
+    by0 = min(b[1] for b in blobs)
+    bx1 = max(b[0] + b[2] for b in blobs)
+    by1 = max(b[1] + b[3] for b in blobs)
+    pad = max(10, (by1 - by0) // 2)
+    sub = cv2.copyMakeBorder(g[by0:by1, bx0:bx1], pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=255)
+    h, w = sub.shape
+    got = [str(t).strip() for _, t, c in _ENGINE.recognize(sub, horizontal_list=[[0, w, 0, h]], free_list=[],
+                                                            detail=1)
+           if float(c) >= 0.5 and str(t).strip()]
+    return " ".join(got)
+
+
 def _ocr_easy(png_bytes: bytes, scale: float) -> list[OcrWord]:
     import io
 

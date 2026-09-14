@@ -155,6 +155,130 @@ def test_photo_only_page_becomes_photo_sheet(tmp_path, monkeypatch):
     assert all(Path(row["사진"][len(IMG_PREFIX):]).exists() for row in g["rows"])
 
 
+def _photo_form(path: Path):
+    """사진 양식 쪽(탄천·양양 '1차 인공구조물 현장 사진'과 같은 짜임): 왼쪽 묶음 칸 + 칸 이름 + 이름 아래 사진 칸."""
+    from PIL import Image
+
+    png = path.with_suffix(".png")
+    Image.fromarray(_photo(11)).save(png)
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    font = fitz.Font("cjk")
+    tw = fitz.TextWriter(page.rect)
+    tw.append((200, 70), "1차 인공구조물 현장 사진", font=font, fontsize=14)
+    xs = [91, 229, 368, 506]
+    groups = [("보 전경", ["상류 방향", "하류 방향", "측면 (좌안 □/ 우안 ☑)"], [0, 1]),
+              ("어도", ["어도 입구", "어도 내부", "어도 출구"], [2])]
+    y = 103
+    for glabel, heads, filled in groups:
+        page.draw_rect(fitz.Rect(58, y, 91, y + 149), color=(0, 0, 0), width=0.7)
+        tw.append((61, y + 78), glabel, font=font, fontsize=7)
+        for k in range(3):
+            page.draw_rect(fitz.Rect(xs[k], y, xs[k + 1], y + 14), color=(0, 0, 0), width=0.7)
+            page.draw_rect(fitz.Rect(xs[k], y + 14, xs[k + 1], y + 149), color=(0, 0, 0), width=0.7)
+            tw.append((xs[k] + 30, y + 10), heads[k], font=font, fontsize=7)
+            if k in filled:
+                page.insert_image(fitz.Rect(xs[k] + 7, y + 18, xs[k + 1] - 3, y + 145), filename=str(png),
+                                  keep_proportion=False)
+        y += 149
+    tw.append((60, 420), "※ 기타 : 구조물 파손, 낙차불량, 퇴적 현황 등", font=font, fontsize=8)
+    tw.write_text(page)
+    doc.save(str(path))
+    doc.close()
+
+
+def test_photo_form_captions_from_cell_labels(tmp_path):
+    from core.pdf_reader import read_pdf
+    from core.photos import photo_form_items, photo_page_items
+
+    p = tmp_path / "form.pdf"
+    _photo_form(p)
+    page = read_pdf(str(p), ocr_scanned=False).pages[0]
+    assert photo_page_items(str(p), page) is None                  # 사진 대지 규칙으로는 안 잡힘(예전에 버려진 이유)
+    items = photo_form_items(str(p), page)
+    assert items is not None
+    assert [it["caption"] for it in items] == ["보 전경 · 상류 방향", "보 전경 · 하류 방향", "어도 · 어도 출구"]
+
+
+def test_survey_sheet_with_photo_slots_is_not_photo_form(tmp_path):
+    """조사표 아래쪽에 '조사사진 1·2' 칸이 딸린 쪽은 사진 양식이 아니다(맞는 템플릿이 없을 때 사진 행으로 새지 않게)."""
+    from PIL import Image
+
+    from core.pdf_reader import read_pdf
+    from core.photos import photo_form_items
+
+    png = tmp_path / "ph.png"
+    Image.fromarray(_photo(5)).save(png)
+    p = tmp_path / "sheet.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    font = fitz.Font("cjk")
+    tw = fitz.TextWriter(page.rect)
+    rows = [("조사지역", "칠산도"), ("날짜", "2026. 5. 13."), ("조사자", "김철수"), ("번식준비", "1"),
+            ("포란", "287"), ("육추", "87"), ("둥지합계", "375"), ("동소종 현황", "노랑부리백로 31쌍")]
+    for k, (lab, val) in enumerate(rows):
+        y = 80 + k * 20
+        page.draw_rect(fitz.Rect(30, y, 130, y + 20), color=(0, 0, 0), width=0.7)
+        page.draw_rect(fitz.Rect(130, y, 566, y + 20), color=(0, 0, 0), width=0.7)
+        tw.append((34, y + 14), lab, font=font, fontsize=8)
+        tw.append((134, y + 14), val, font=font, fontsize=8)
+    for x0, x1, lab in ((30, 298, "조사사진 1"), (298, 566, "조사사진 2")):
+        page.draw_rect(fitz.Rect(x0, 300, x1, 315), color=(0, 0, 0), width=0.7)
+        page.draw_rect(fitz.Rect(x0, 315, x1, 500), color=(0, 0, 0), width=0.7)
+        tw.append((x0 + 4, 311), lab, font=font, fontsize=8)
+        page.insert_image(fitz.Rect(x0 + 6, 320, x1 - 6, 495), filename=str(png), keep_proportion=False)
+    tw.write_text(page)
+    doc.save(str(p))
+    doc.close()
+    assert photo_form_items(str(p), read_pdf(str(p), ocr_scanned=False).pages[0]) is None
+
+
+def test_album_page_is_not_photo_form(tmp_path):
+    """사진 대지(사진 + 아래 '(설명) …')는 사진 양식 규칙에 걸리지 않고 기존 규칙으로 읽힌다."""
+    from core.pdf_reader import read_pdf
+    from core.photos import photo_form_items
+
+    p = tmp_path / "album.pdf"
+    _scan_photo_page(p)
+    assert photo_form_items(str(p), read_pdf(str(p), ocr_scanned=False).pages[0]) is None
+
+
+def test_photo_form_page_after_sheet_goes_to_photo_sheet(tmp_path, monkeypatch):
+    import app.main as app_main
+    from fastapi.testclient import TestClient
+
+    from core.pdf_pipeline import suggest_from_cells
+    from tests.test_pdf_pipeline import _draw_form
+
+    tpl = tmp_path / "tpl.pdf"
+    _draw_form(tpl, [("하천명", "탄천"), ("보길이", "30")], y_top=60, title="하천 조사표")
+    boxes = suggest_from_cells(str(tpl), 0)
+    store = type("S", (), {"list_names": lambda self: ["조사표"],
+                           "get": lambda self, n: {"name": "조사표", "boxes": boxes}})()
+    monkeypatch.setattr(app_main, "_TEMPLATES", store)
+    monkeypatch.setattr(app_main, "_tpl_pdf_path", lambda name: tpl)
+
+    form = tmp_path / "form.pdf"
+    _photo_form(form)
+    bundle = tmp_path / "bundle.pdf"
+    m = fitz.open()
+    for src in (tpl, form):
+        s = fitz.open(str(src))
+        m.insert_pdf(s)
+        s.close()
+    m.save(str(bundle))
+    m.close()
+    client = TestClient(app_main.app)
+    with bundle.open("rb") as f:
+        r = client.post("/api/pdf/apply",
+                        data={"boxes": "[]", "sheet_name_field": "__group_title__", "auto_classify": "1"},
+                        files=[("files", ("bundle.pdf", f, "application/pdf"))])
+    assert r.status_code == 200, r.text
+    assert not r.json().get("discarded")
+    g = next(g for g in app_main._PDF_APPLY["groups"] if g["label"] == "현장 사진")
+    assert [row["설명"] for row in g["rows"]] == ["보 전경 · 상류 방향", "보 전경 · 하류 방향", "어도 · 어도 출구"]
+
+
 def test_photo_pages_only_right_after_survey_sheets(tmp_path, monkeypatch):
     """조사표가 있는 파일에서는 조사표 바로 뒤에 이어진 사진 쪽만 '현장 사진' — 본문 뒤의 그림 쪽은 버림.
     혼합 일괄 점검에서 지침(131쪽)의 그림 쪽 15쪽('<그림 10> 조사정점 설정', 화면 캡처)이 사진으로 오인됐다."""

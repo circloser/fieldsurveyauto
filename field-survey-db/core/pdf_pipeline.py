@@ -873,7 +873,8 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
             cells = cells_for(page.page_no)
             if cells:
                 r = _cell_anchor_value(cells, b, return_cell=True)
-                if r is not None:
+                # 스캔 쪽에서 라벨 옆 칸이 비어 나오면 2차로 넘겨 칸 안쪽을 다시 읽게 한다(외톨이 한 자리 숫자)
+                if r is not None and (r[0] or not getattr(page, "ocr", False)):
                     val, vcell = r
                     results[i] = _to_number(val) if b.get("mode") == "number" else val
                     deltas.setdefault(page.page_no, []).append(
@@ -949,8 +950,41 @@ def apply_pixel_template(pages: list[PdfPage], boxes: list[dict],
                 results[i] = ""
             continue
         results[i] = _box_value(page, bb)
+        if (results[i] == "" and pdf_path and getattr(page, "ocr", False)
+                and b.get("mode", "text") in ("text", "number")
+                and (float(bb["x1"]) - float(bb["x0"])) * (float(bb["y1"]) - float(bb["y0"])) <= 40000):
+            # 쪽 전체 OCR이 놓친 칸 안의 외톨이 글자(한 자리 숫자 '1' 등) — 칸 선을 뺀 안쪽만 크게 다시 읽는다
+            from core.ocr import read_region
+            try:
+                v = read_region(pdf_path, page.page_no, (float(bb["x0"]) + 3, float(bb["y0"]) + 3,
+                                                          float(bb["x1"]) - 3, float(bb["y1"]) - 3))
+            except Exception:  # noqa: BLE001
+                v = ""
+            results[i] = _to_number(v) if (v and b.get("mode") == "number") else v
 
-    return {b["field"]: _strip_caption(results[i], b) for i, b in enumerate(ordered)}
+    # 스캔(OCR) 쪽 값은 자주 틀리는 모양을 교정 — 가락지 번호·비슷한 음절 낱말(이 양식 라벨이 사전)·사용자 사전
+    fix = None
+    if any(p is not None and getattr(p, "ocr", False) for p in resolved.values()):
+        from core import ocr_fix
+        labels = ocr_fix.vocab_from_labels([(b.get("anchor") or {}).get("label") for b in ordered]
+                                           + [b.get("field") for b in ordered])
+        dict_path = ocr_fix.default_dict_path()
+
+        def fix(v):
+            if isinstance(v, str):
+                return ocr_fix.correct(v, labels, dict_path)
+            if isinstance(v, dict) and isinstance(v.get("rows"), list):   # 표(여러 행) 박스
+                v["rows"] = [{k: ocr_fix.correct(x, labels, dict_path) for k, x in r.items()} for r in v["rows"]]
+            return v
+
+    out = {}
+    for i, b in enumerate(ordered):
+        v = _strip_caption(results[i], b)
+        if fix is not None and resolved.get(i) is not None and getattr(resolved[i], "ocr", False) \
+                and b.get("mode") not in ("image", "check"):
+            v = fix(v)
+        out[b["field"]] = v
+    return out
 
 
 _CAPTION = _re.compile(r"[(（]\s*([^()（）]{1,20}?)\s*[)）]")
