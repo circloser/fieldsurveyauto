@@ -191,6 +191,47 @@ def test_api_status_and_protection(monkeypatch):
     assert c.post("/api/ocr/runtime/install", json={"variant": "cpu"}).status_code == 400   # 엔진 동봉판
 
 
+def _pdf_bytes(text: str | None) -> bytes:
+    """글자 레이어가 있는 PDF(text) 또는 흰 그림만 든 스캔 흉내 PDF(None)."""
+    import fitz
+    from PIL import Image
+
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=300)
+    if text:
+        page.insert_text((40, 60), text, fontsize=14)
+    else:
+        buf = io.BytesIO()
+        Image.new("RGB", (400, 300), "white").save(buf, format="PNG")
+        page.insert_image(page.rect, stream=buf.getvalue())
+    return doc.tobytes()
+
+
+def test_batch_apply_reports_unread_scan_pages(monkeypatch):
+    """경량 도우미(글자 인식 기능 없음)에서 스캔 문서를 일괄 처리하면 — 빈 행만 조용히 내려가지 않고
+    '못 읽은 쪽'과 받기 안내(ocr_setup)를 함께 돌려준다. 글자 있는 PDF는 안내가 붙지 않는다."""
+    from fastapi.testclient import TestClient
+
+    import app.main as app_main
+    from core import ocr
+
+    monkeypatch.setattr(ocr, "available", lambda: False)          # 엔진 없음(스캔 쪽 OCR 건너뜀)
+    monkeypatch.setattr(ocr_runtime, "_BUNDLED", False)
+    monkeypatch.setattr(ocr_runtime, "_ACTIVE", None)
+    monkeypatch.setattr(ocr_runtime, "_GPU", {"name": "", "driver": "", "vram_gb": 0, "capable": False})
+    c = TestClient(app_main.app)
+    form = {"boxes": "[]", "auto_classify": "1", "sheet_name_field": "__group_title__"}
+
+    r = c.post("/api/pdf/apply", data=form, files=[("files", ("scan.pdf", _pdf_bytes(None), "application/pdf"))])
+    d = r.json()
+    assert d.get("ocr_missing") is True and d["ocr_gap"] == [{"name": "scan.pdf", "pages": 1, "total": 1}], d
+    assert d["ocr_setup"]["ready"] is False and "sizes" in d["ocr_setup"]
+    assert (d.get("ok_count") or 0) == 0
+
+    r = c.post("/api/pdf/apply", data=form, files=[("files", ("typed.pdf", _pdf_bytes("하천명 남대천"), "application/pdf"))])
+    assert "ocr_missing" not in r.json()
+
+
 def test_syscheck_shows_download_when_not_installed(monkeypatch):
     from core import ocr, syscheck
 

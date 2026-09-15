@@ -574,7 +574,11 @@ async function runApply(files, opts) {
   // 보고서 양식은 4번에서 쓰지 않는다 — 5번 '보고서 양식으로 정리'가 결과를 채운다
   try {
     const d = await (await fetch("/api/pdf/apply", { method: "POST", body: fd })).json();
-    if (d.error) throw new Error(d.error);
+    if (d.error) {
+      // 스캔 문서인데 글자 인식 기능이 없어 아무것도 못 읽은 경우 — 경고창 대신 이유와 '받기'를 결과 자리에
+      if (d.ocr_missing) { $("applyResult").innerHTML = ""; renderOcrGap(d); return; }
+      throw new Error(d.error);
+    }
     renderApply(d);
     // 5번(보고서)에서 실행했을 때도 결과가 바로 보이도록 스크롤
     if (opts && opts.scrollToResult) {
@@ -799,6 +803,7 @@ function renderApplyAuto(d) {
     html += `<p class="muted">⚠️ 미분류/실패: ` + d.failed.map((f) => `${f.name} (${f.error})`).join(", ") + `</p>`;
   }
   $("applyResult").innerHTML = html;
+  renderOcrGap(d);
   bindSce();
   const dcBtn = $("dcApplyBtn");
   if (dcBtn) dcBtn.addEventListener("click", () => {
@@ -853,7 +858,28 @@ function renderApply(d) {
     }).join("") + `</tr>`;
   });
   html += `</tbody></table></div>`; $("applyResult").innerHTML = html;
+  renderOcrGap(d);
   bindSce();
+}
+
+// 일괄 처리 결과에 '글자를 못 읽은 스캔 쪽'이 있으면 결과 맨 위에 이유와 받기 버튼을 붙인다.
+// (경량 도우미에서 글자 인식 기능을 아직 안 받았을 때 — 빈 행만 조용히 내려가지 않게)
+function renderOcrGap(d) {
+  if (!d.ocr_missing) return;
+  const box = document.createElement("div");
+  box.className = "env-warn";
+  box.style.marginTop = "0";
+  const files = (d.ocr_gap || []).map((g) => `${g.name}(${g.pages}/${g.total}쪽)`).join(", ");
+  const s = d.ocr_setup || {};
+  if (s.ready || s.bundled) {
+    box.append(`⚠️ 스캔(사진) 쪽의 글자를 읽지 못했습니다: ${files}. 글자 인식 엔진을 불러오지 못한 것 같습니다 — `);
+    const a = document.createElement("a"); a.href = "/system"; a.target = "_blank"; a.textContent = "시스템 점검";
+    box.append(a, "에서 확인하거나 도우미를 다시 켜 주세요.");
+  } else {
+    box.append(`⚠️ 스캔(사진) 쪽의 글자를 읽지 못해 값이 비었습니다: ${files}. `);
+    renderOcrSetup(box, s, { afterDone: "받기가 끝나면 ‘추출 + 엑셀 만들기’를 다시 눌러 주세요." });
+  }
+  $("applyResult").prepend(box);
 }
 
 async function pdfAnalyze() {
@@ -922,42 +948,65 @@ function showOcrSetup(s) {
     const badge = document.querySelector(".security-badge");
     badge.parentNode.insertBefore(el, badge.nextSibling);
   }
+  el.textContent = "";
+  renderOcrSetup(el, s, { intro: true, afterDone: "스캔 양식을 다시 올리면 칸 글자를 읽습니다." });
+}
+
+// 받기 안내·진행·완료를 주어진 요소 안에 그린다(양식 업로드 배너·일괄 처리 결과에서 공용).
+// 받는 곳은 공개 저장소(PyPI·PyTorch·EasyOCR)이고, 파일은 이 컴퓨터에만 저장된다.
+function renderOcrSetup(el, s, opts) {
+  opts = opts || {};
   const fmt = (b) => b >= 1e9 ? (b / 1e9).toFixed(1) + "GB" : Math.max(1, Math.round(b / 1e6)) + "MB";
   const job = s.job || {};
   const v = s.recommended || "cpu";
-  el.textContent = "";
+  const redraw = (next) => { el.textContent = ""; renderOcrSetup(el, next, opts); };
   if (job.running) {
     const pct = job.total ? Math.min(100, job.done / job.total * 100) : 0;
-    el.append(`⏬ 글자 인식 기능 받는 중… ${pct.toFixed(0)}% (${fmt(job.done)} / ${fmt(job.total)}) — `
-      + "다 받으면 이 양식을 다시 올려 주세요.");
+    el.append(`⏬ 글자 인식 기능 받는 중… ${pct.toFixed(0)}% (${fmt(job.done)} / ${fmt(job.total)}) — 받는 동안 다른 작업을 해도 됩니다.`);
     setTimeout(async () => {
-      try { showOcrSetup(await (await fetch("/api/ocr/runtime")).json()); } catch (e) {}
+      try { redraw(await (await fetch("/api/ocr/runtime")).json()); } catch (e) {}
     }, 1500);
     return;
   }
   if (s.ready) {
-    el.append("✅ 글자 인식 기능을 받았습니다 — 스캔 양식을 다시 올리면 칸 글자를 읽습니다.");
+    el.append("✅ 글자 인식 기능을 받았습니다 — " + (opts.afterDone || ""));
     return;
   }
-  const b = document.createElement("b"); b.textContent = "글자 인식 기능";
-  el.append("📷 스캔(사진) PDF라 글자를 읽으려면 ", b,
-    "이 필요합니다. 공개 저장소(PyPI·PyTorch·EasyOCR)에서 받아 이 컴퓨터에만 둡니다. ");
+  if (opts.intro) {
+    const b = document.createElement("b"); b.textContent = "글자 인식 기능";
+    el.append("📷 스캔(사진) PDF라 글자를 읽으려면 ", b, "이 필요합니다. ");
+  }
+  el.append("공개 저장소(PyPI·PyTorch·EasyOCR)에서 받아 이 컴퓨터에만 둡니다. ");
   const get = document.createElement("button");
   get.type = "button"; get.className = "btn";
-  get.textContent = `받기 (${v === "gpu" ? "GPU 가속판, " : ""}${fmt(s.sizes[v])})`;
+  get.textContent = `받기 (${v === "gpu" ? "GPU 가속판, " : ""}${fmt((s.sizes || {})[v] || 0)})`;
   get.addEventListener("click", async () => {
     get.disabled = true;
     const d = await (await fetch("/api/ocr/runtime/install", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ variant: v }),
     })).json();
     if (d.error) { alert(d.error); get.disabled = false; return; }
-    showOcrSetup(d);
+    redraw(d);
   });
   const more = document.createElement("a");
   more.href = "/settings#ocr"; more.target = "_blank"; more.textContent = "자세히";
   el.append(get, " ", more);
   if (job.error) el.append(document.createElement("br"), "⚠️ 지난번 받기 실패: " + job.error);
 }
+
+// 경량 도우미에서 글자 인식 기능을 아직 안 받았으면 4번(일괄 처리) 설명 아래에 미리 알려 준다
+(async () => {
+  try {
+    const s = await (await fetch("/api/ocr/runtime")).json();
+    if (s.bundled || s.ready) return;
+    const p = document.createElement("p");
+    p.className = "muted"; p.style.margin = "0 0 8px";
+    p.append("📷 스캔(사진) 문서도 처리하려면 글자 인식 기능이 필요합니다 — ");
+    const a = document.createElement("a"); a.href = "/settings#ocr"; a.target = "_blank"; a.textContent = "환경설정에서 받기";
+    p.append(a, ". 글자 있는 PDF·한글 파일은 지금도 됩니다.");
+    $("applyInput").parentNode.insertBefore(p, $("applyInput"));
+  } catch (e) {}
+})();
 
 // AI 기능 준비 상태 표시(패키지+API키). 준비 안 됐으면 버튼에 안내.
 (async () => {

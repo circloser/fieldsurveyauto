@@ -381,6 +381,19 @@ def pdf_designer_page() -> FileResponse:
     return FileResponse(config.STATIC_DIR / "pdf_designer.html")
 
 
+def _unread_scan_pages(doc) -> int:
+    """글자를 읽지 못한 스캔 쪽 수 — 글자 레이어가 없는데 OCR도 안 된 쪽(경량 도우미에서 글자 인식 기능을 아직 안 받음)."""
+    return sum(1 for p in doc.pages if p.needs_ocr and not getattr(p, "ocr", False))
+
+
+def _ocr_gap_payload(gap: list[dict]) -> dict:
+    """스캔 쪽을 못 읽은 파일이 있으면 응답에 붙이는 안내 — 화면이 '받기' 버튼과 함께 이유를 보여 준다.
+    (없으면 빈 값을 채워 조용히 빈 행만 내려가는 일이 없게.)"""
+    if not gap:
+        return {}
+    return {"ocr_missing": True, "ocr_gap": gap, "ocr_setup": ocr_runtime.status()}
+
+
 @app.post("/api/pdf/load")
 async def pdf_load(file: UploadFile) -> JSONResponse:
     """입력(hwpx/pdf) → PDF 변환/읽기 → 페이지 메타 + 자동제안 박스."""
@@ -406,7 +419,7 @@ async def pdf_load(file: UploadFile) -> JSONResponse:
     # 표 테두리 기반 자동 제안(기본). 스캔본 등 칸이 없으면 단어 방식으로 폴백.
     boxes = [] if survey else _suggest_all(doc, pdf_path)
     # 스캔 쪽인데 글자를 못 읽었으면(경량 도우미에서 글자 인식 기능을 아직 안 받음) 화면이 받기 안내를 띄운다
-    ocr_missing = any(p.needs_ocr and not getattr(p, "ocr", False) for p in doc.pages)
+    unread = _unread_scan_pages(doc)
     return JSONResponse({
         "doc_id": doc_id,
         "filename": file.filename,
@@ -414,8 +427,8 @@ async def pdf_load(file: UploadFile) -> JSONResponse:
                    "needs_ocr": p.needs_ocr, "ocr": getattr(p, "ocr", False)} for p in doc.pages],
         "boxes": boxes,
         "survey": survey,
-        "ocr_missing": ocr_missing,
-        "ocr_setup": ocr_runtime.status() if ocr_missing else None,
+        "ocr_missing": bool(unread),
+        "ocr_setup": ocr_runtime.status() if unread else None,
     })
 
 
@@ -1116,6 +1129,7 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
     groups: dict[str, dict] = {}  # 제목 값 → {"label", "fields", "rows"}
     failed, match_info = [], []
     discarded: dict[str, int] = {}  # 버려진 페이지 제목 → 쪽수(맞는 양식 없음)
+    ocr_gap: list[dict] = []        # 글자를 못 읽은 스캔 쪽이 있는 파일(글자 인식 기능 없음)
     for uf in files:
         dest = req_dir / (uf.filename or "unnamed")
         with dest.open("wb") as f:
@@ -1123,6 +1137,8 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
         try:
             pdf_path = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
             doc = read_pdf(pdf_path)
+            if (n_unread := _unread_scan_pages(doc)):
+                ocr_gap.append({"name": uf.filename, "pages": n_unread, "total": len(doc.pages)})
 
             ptitle: dict[int, str] = {}
             by_page = {p.page_no: p for p in doc.pages}
@@ -1430,11 +1446,17 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                                                for t, n in discarded.items()],
                                  "units": [{"key": u["key"], "label": u["label"]}
                                            for u in units],
-                                 "outlier_count": 0, "report_used": False})
-        msg = ("처리된 파일이 없습니다. 양식과 입력 파일이 맞는지 확인하세요." if templates else
-               "추출할 박스가 없습니다. 양식을 올려 박스를 만들거나 템플릿을 저장하세요. "
-               "(설문지는 템플릿 없이 인식되지만, 이 파일에서 설문 구조를 찾지 못했습니다)")
-        return JSONResponse({"error": msg, "failed": failed}, status_code=400)
+                                 "outlier_count": 0, "report_used": False,
+                                 **_ocr_gap_payload(ocr_gap)})
+        if ocr_gap:
+            msg = ("스캔(사진) 문서인데 글자 인식 기능이 없어 글자를 읽지 못했습니다. "
+                   "글자 인식 기능을 받은 뒤 다시 처리해 주세요.")
+        elif templates:
+            msg = "처리된 파일이 없습니다. 양식과 입력 파일이 맞는지 확인하세요."
+        else:
+            msg = ("추출할 박스가 없습니다. 양식을 올려 박스를 만들거나 템플릿을 저장하세요. "
+                   "(설문지는 템플릿 없이 인식되지만, 이 파일에서 설문 구조를 찾지 못했습니다)")
+        return JSONResponse({"error": msg, "failed": failed, **_ocr_gap_payload(ocr_gap)}, status_code=400)
     if "" in groups:  # 제목이 없는 조사표: 전부 무제면 시트 하나, 섞였으면 별도 시트
         groups[""]["label"] = "추출결과" if len(groups) == 1 else "(제목없음)"
     group_list = list(groups.values())
@@ -1462,7 +1484,8 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
                          "discarded": [{"title": t, "pages": n}
                                        for t, n in discarded.items()],
                          "units": [{"key": u["key"], "label": u["label"]} for u in units],
-                         "outlier_count": outlier_total, "report_used": False})
+                         "outlier_count": outlier_total, "report_used": False,
+                         **_ocr_gap_payload(ocr_gap)})
 
 
 @app.post("/api/pdf/apply")
@@ -1515,6 +1538,7 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         sheet_name_field = group_field  # 보고서 양식 경로에선 제목이 시트 이름이 됨
 
     rows, failed, match_info = [], [], []
+    ocr_gap: list[dict] = []
     n_tmpl_pages = len({int(b["page"]) for b in box_list})
     for uf in files:
         dest = req_dir / (uf.filename or "unnamed")
@@ -1523,6 +1547,8 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
         try:
             pdf_path = to_pdf(str(dest), str(config.PDF_CACHE_DIR))
             doc = read_pdf(pdf_path)
+            if (n_unread := _unread_scan_pages(doc)):
+                ocr_gap.append({"name": uf.filename, "pages": n_unread, "total": len(doc.pages)})
             # 페이지 자동 매칭 — 한 파일에 같은 서식이 여러 묶음이면 묶음마다 한 행
             bundle_maps = match_bundles(box_list, doc.pages)
             if not bundle_maps:
@@ -1605,7 +1631,8 @@ async def pdf_apply(files: list[UploadFile], boxes: str = Form(""),
                          "failed": failed, "match_info": match_info,
                          "report_used": report_used,
                          "outliers": outliers,
-                         "outlier_count": sum(len(o) for o in outliers)})
+                         "outlier_count": sum(len(o) for o in outliers),
+                         **_ocr_gap_payload(ocr_gap)})
 
 
 @app.post("/api/pdf/analyze")
