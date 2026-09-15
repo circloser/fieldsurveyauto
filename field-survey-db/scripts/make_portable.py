@@ -4,7 +4,7 @@
 사용:
   .venv/Scripts/python scripts/make_portable.py              # 기본판(CPU 처리, OCR 포함, ~430MB)
   .venv/Scripts/python scripts/make_portable.py --gpu        # GPU 가속판(.venv-gpu 의 CUDA torch, zip ~2.2GB)
-  .venv/Scripts/python scripts/make_portable.py --lite       # 경량판(OCR 없음)
+  .venv/Scripts/python scripts/make_portable.py --lite       # 경량판(글자 인식은 필요할 때 내려받기)
   .venv/Scripts/python scripts/make_portable.py --skip-build # 기존 dist로 zip만
 
 산출물: dist/FieldSurveyDB[_GPU|_경량]_포터블_YYYYMMDD_HHMM.zip

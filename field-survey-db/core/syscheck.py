@@ -123,14 +123,15 @@ def _check_gpu(p: dict) -> Item:
                     f"GPU판(CUDA {t['cuda_build']})인데 {g['name']}를 쓰지 못해 CPU로 처리 중({why})",
                     "NVIDIA 드라이버를 580 이상으로 올리고, zip을 다시 풀어 보세요. "
                     "그래도 안 되면 기본판(CPU)을 쓰면 됩니다(속도만 느림).")
+    if not t["installed"]:
+        more = "GPU 가속판을 받으면 GPU로 처리합니다" if p["nvidia"] else "CPU로 처리합니다"
+        return Item("gpu", "GPU 가속", "info", f"GPU: {names} — 글자 인식 기능을 받으면 {more}")
     if p["nvidia"]:
         g = p["nvidia"][0]
         return Item("gpu", "GPU 가속", "info",
                     f"{g['name']} {g['vram_gb']}GB 감지(드라이버 {g['driver']}) — 현재 CPU 처리판",
-                    "GPU판(FieldSurveyDB_GPU 배포본)을 쓰면 스캔 문서 글자 인식이 5~10배 빨라집니다. "
-                    "NVIDIA 드라이버 580 이상 필요.")
-    if not t["installed"]:
-        return Item("gpu", "GPU 가속", "info", f"GPU: {names} — 경량판(OCR 없음)")
+                    "환경설정 → 5. 글자 인식 기능에서 GPU 가속판을 받으면(또는 GPU 배포본을 쓰면) "
+                    "스캔 문서 글자 인식이 5~10배 빨라집니다. NVIDIA 드라이버 580 이상 필요.")
     return Item("gpu", "GPU 가속", "info", f"GPU: {names} — NVIDIA GPU가 없어 CPU {t['threads']}스레드로 처리")
 
 
@@ -182,10 +183,14 @@ def _check_ocr(p: dict) -> Item:
         ok = ocr.available()
         dt = time.time() - t0
     except Exception as e:  # noqa: BLE001
-        return Item("ocr", "글자 인식(OCR)", "fail", f"엔진 로드 실패({e})", "OCR 포함 배포판을 사용하세요.")
+        return Item("ocr", "글자 인식(OCR)", "fail", f"엔진 로드 실패({e})",
+                    "환경설정 → 5. 글자 인식 기능에서 지우고 다시 받거나, OCR 포함 배포판을 사용하세요.")
     if not ok:
+        from core import ocr_runtime
+        if not (ocr_runtime.bundled() or ocr_runtime.active()):
+            return _ocr_download_item()
         return Item("ocr", "글자 인식(OCR)", "warn", "엔진 없음 — 스캔·사진 PDF는 처리 불가(글자 있는 PDF는 가능)",
-                    "스캔 문서도 처리하려면 OCR 포함 배포판(기본판)을 사용하세요.")
+                    "환경설정 → 5. 글자 인식 기능에서 지우고 다시 받거나, OCR 포함 배포판을 사용하세요.")
     dev = "GPU" if p["torch"]["cuda_available"] else "CPU"
     return Item("ocr", "글자 인식(OCR)", "ok",
                 f"EasyOCR(한국어·영어) 로드 {dt:.1f}초 · {dev} 처리 · 인터넷 불필요")
@@ -207,19 +212,26 @@ def _check_ai() -> Item:
 def _check_ocr_quick(p: dict) -> Item:
     """빠른 점검용 글자 인식 상태 — 엔진을 불러오지 않고(수~십 초 걸림) 설치 여부만 본다.
     웹 시작 페이지·시작 창 요약이 '확인하지 못함' 대신 준비 상태를 보여 주도록."""
-    import importlib.util
+    from core import ocr, ocr_runtime
 
-    try:
-        from core import ocr
-        if ocr._TRIED:   # 이미 불러온 뒤면 그 결과
-            return _check_ocr(p)
-    except Exception:  # noqa: BLE001
-        pass
-    if importlib.util.find_spec("easyocr") is None or importlib.util.find_spec("torch") is None:
-        return Item("ocr", "글자 인식(OCR)", "warn", "엔진 없음 — 스캔·사진 PDF는 처리 불가(글자 있는 PDF는 가능)",
-                    "스캔 문서도 처리하려면 OCR 포함 배포판(기본판)을 사용하세요.")
+    if ocr._TRIED:   # 이미 불러온 뒤면 그 결과
+        return _check_ocr(p)
+    if not (ocr_runtime.bundled() or ocr_runtime.active()):
+        return _ocr_download_item()
     dev = "GPU" if p.get("torch", {}).get("cuda_available") else "CPU"
-    return Item("ocr", "글자 인식(OCR)", "ok", f"설치됨 — 스캔 문서를 처음 올릴 때 불러옵니다 · {dev} 처리")
+    how = {"cpu": "내려받아 둠(CPU판)", "gpu": "내려받아 둠(GPU 가속판)"}.get(ocr_runtime.active() or "", "설치됨")
+    return Item("ocr", "글자 인식(OCR)", "ok", f"{how} — 스캔 문서를 처음 올릴 때 불러옵니다 · {dev} 처리")
+
+
+def _ocr_download_item() -> Item:
+    """경량 도우미에서 글자 인식 기능을 아직 받지 않았을 때 — 문제가 아니라 '필요할 때 받기'."""
+    from core import ocr_runtime
+
+    v = "gpu" if ocr_runtime.gpu_info()["capable"] else "cpu"
+    what = f"GPU 가속판 {ocr_runtime.size_text(v)}" if v == "gpu" else ocr_runtime.size_text(v)
+    return Item("ocr", "글자 인식(OCR)", "info",
+                f"필요할 때 내려받기 — 스캔·사진 PDF용({what}, 공개 저장소에서 받아 이 PC에만 저장)",
+                "환경설정 → 5. 글자 인식 기능에서 받거나, 스캔 양식을 올리면 나오는 안내에서 받을 수 있습니다.")
 
 
 def run_checks(quick: bool = False) -> dict:

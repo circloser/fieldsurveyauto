@@ -127,13 +127,13 @@ def profile() -> dict:
         why = torch.get("cuda_error") or "그래픽 드라이버가 오래되었거나 프로그램 폴더가 손상됐을 수 있습니다"
         advice = (f"GPU판(CUDA {torch['cuda_build']})인데 NVIDIA GPU({nvidia[0]['name']})를 쓰지 못해 "
                   f"CPU로 처리합니다 — {why}. NVIDIA 드라이버 580 이상으로 올리거나 zip을 다시 풀어 보세요.")
+    elif not torch["installed"]:
+        advice = "글자 인식(OCR) 기능을 아직 받지 않았습니다 — 스캔 문서를 쓸 때 환경설정에서 내려받을 수 있습니다."
     elif nvidia:
-        advice = (f"NVIDIA GPU({nvidia[0]['name']})가 있지만 이 배포판은 CPU 처리판입니다. "
-                  "GPU판(FieldSurveyDB_GPU)을 쓰면 스캔 문서 글자 인식이 5~10배 빨라집니다.")
-    elif torch["installed"]:
-        advice = f"NVIDIA GPU가 없어 CPU {torch['threads']}스레드로 처리합니다(GPU 가속 불가)."
+        advice = (f"NVIDIA GPU({nvidia[0]['name']})가 있지만 지금은 CPU로 처리합니다. "
+                  "환경설정에서 GPU 가속판을 받으면(또는 GPU 배포본을 쓰면) 스캔 문서 글자 인식이 5~10배 빨라집니다.")
     else:
-        advice = "글자 인식(OCR) 엔진이 없는 경량판입니다(스캔 문서는 처리 불가)."
+        advice = f"NVIDIA GPU가 없어 CPU {torch['threads']}스레드로 처리합니다(GPU 가속 불가)."
     rel = platform.release()
     try:   # Windows 11도 release()는 '10' — 빌드 번호(22000↑)로 구분
         if platform.system() == "Windows" and int(platform.version().split(".")[-1]) >= 22000:
@@ -192,6 +192,8 @@ def summary_lines() -> list[str]:
              + (f" · GPU {', '.join(p['gpus'])}" if p["gpus"] else " · GPU 없음")]
     if p["mode"] == "gpu":
         lines.append(f"[성능] 글자 인식(OCR): GPU 가속 — {p['torch']['device']}")
+    elif not p["torch"]["installed"]:
+        lines.append("[성능] 글자 인식(OCR): 필요할 때 내려받기(환경설정 → 5. 글자 인식 기능)")
     elif p["nvidia"]:
         lines.append(f"[성능] 글자 인식(OCR): CPU 처리 — GPU({p['nvidia'][0]['name']})는 GPU판에서만 사용")
     elif p["torch"]["installed"]:

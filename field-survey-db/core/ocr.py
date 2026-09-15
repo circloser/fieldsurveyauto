@@ -34,13 +34,24 @@ def _reader_kwargs() -> dict:
 
     from core import perf
 
-    kwargs: dict = {"gpu": perf.use_gpu()}
+    # CPU int8 양자화는 끈다: 일부 CPU·가상 PC에서 '잘못된 명령(0xC000001D)'으로 프로그램이 통째로 죽고
+    # (GitHub 빌드 서버에서 실제 발생), 켜도 빠르지 않다(스캔 6쪽 56.1초 vs 56.9초 — 글자 위치 찾기가 대부분).
+    # 끄면 GPU와 같은 원본 모델이라 CPU·GPU PC 결과도 같아진다(켰을 때와 글자 99.5% 동일).
+    kwargs: dict = {"gpu": perf.use_gpu(), "quantize": False}
     # 포터블(exe) 배포: 번들에 모델이 동봉돼 있으면 그걸 사용(인터넷 불필요).
-    # 없으면 easyocr 기본 동작(~/.EasyOCR, 필요 시 자동 다운로드).
+    # 경량 도우미: 환경설정에서 받아 둔 모델(SHA-256 확인됨)만 쓰고 EasyOCR 가 따로 내려받지 않게.
+    # 둘 다 아니면 easyocr 기본 동작(~/.EasyOCR, 필요 시 자동 다운로드 — 개발 환경).
     if getattr(sys, "frozen", False):
         bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "easyocr_models")
         if os.path.isdir(bundled):
             kwargs["model_storage_directory"] = bundled
+            return kwargs
+    from core import ocr_runtime
+    if ocr_runtime.active():
+        md = ocr_runtime.models_dir()
+        if md is not None:
+            kwargs["model_storage_directory"] = str(md)
+            kwargs["download_enabled"] = False
     return kwargs
 
 
@@ -70,8 +81,10 @@ def _load_engine_locked():
     로드 중에 들어온 요청이 '엔진 없음'으로 오해하지 않도록."""
     global _ENGINE, _ENGINE_KIND, _TRIED
     try:
-        # 1) EasyOCR (한국어 정식 지원, pip만으로 설치)
+        # 1) EasyOCR (한국어 정식 지원, pip만으로 설치 · 경량 도우미는 받아 둔 기능을 먼저 붙인다)
         try:
+            from core import ocr_runtime
+            ocr_runtime.activate()
             import easyocr
 
             from core import perf
@@ -97,6 +110,14 @@ def _load_engine_locked():
 
 def available() -> bool:
     return _load_engine() is not None
+
+
+def reset() -> None:
+    """엔진이 없어서 실패했던 판정을 지운다 — 글자 인식 기능을 방금 받은 뒤 다시 켜지 않고 쓰도록."""
+    global _TRIED
+    with _LOCK:
+        if _ENGINE_KIND is None:
+            _TRIED = False
 
 
 def ocr_image(png_bytes: bytes, scale: float = 1.0) -> list[OcrWord]:

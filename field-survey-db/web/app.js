@@ -107,6 +107,18 @@
     showCheck("hwp", items.hwp, "확인하지 못했습니다");
     showCheck("ocr", items.ocr, "확인하지 못했습니다");
     showCheck("ai", items.ai, "확인하지 못했습니다");
+    // 글자 인식 기능을 아직 안 받은 경량 도우미 — 문제는 아니므로 회색, 도우미의 받기 화면으로 잇는다
+    // (이 페이지는 도우미에 받기 요청을 보낼 수 없다: 이 컴퓨터의 작업 화면에서만 가능)
+    if (items.ocr && items.ocr.status === "info") {
+      const li = row("ocr");
+      li.dataset.state = "idle";
+      li.querySelector(".detail").textContent = items.ocr.detail + " ";
+      const a = document.createElement("a");
+      a.href = `http://127.0.0.1:${helper.port}/settings#ocr`;
+      a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "받기 화면 열기";
+      li.querySelector(".detail").append(a);
+    }
   }
 
   retryBtn.addEventListener("click", run);

@@ -42,10 +42,16 @@ https://*.autodata.example.org
    ```
 
 3. GitHub Actions(`.github/workflows/release.yml`)가 Windows에서 테스트 → 포터블 빌드 → 기동 확인을 거쳐
-   Releases 에 `AutoData_Windows.zip` 을 올립니다. 시작 페이지의 내려받기 주소는 항상 최신 릴리스의 이 파일입니다.
+   Releases 에 두 파일을 올립니다.
+   - `AutoData_Windows.zip` — 경량판(약 130MB). 시작 페이지의 내려받기 주소는 항상 최신 릴리스의 이 파일입니다.
+     스캔 문서 글자 인식은 처음 쓸 때 공개 저장소에서 받습니다(`core/ocr_runtime.py`).
+   - `AutoData_Windows_offline.zip` — 오프라인판(약 430MB, 글자 인식 엔진·모델 포함).
+   빌드가 실패하면 실패한 단계의 마지막 출력이 그 실행의 주석(annotation)으로 남습니다.
 4. 예전 도우미를 켠 사람에게는 시작 페이지가 새 버전 안내를 띄웁니다.
 
-GitHub Releases 는 파일 하나당 2 GiB 미만이라 GPU판 전체 zip(약 2.1 GiB)은 올릴 수 없습니다.
+GitHub Releases 는 파일 하나당 2 GiB 미만이라 GPU판 전체 zip(약 2.1 GiB)은 올리지 않습니다 —
+경량판에서 'GPU 가속판'을 받으면 같은 속도가 납니다. torch·EasyOCR 버전을 올리면
+`scripts/make_ocr_manifest.py` 로 내려받기 목록을 다시 만드세요(테스트가 버전 불일치를 잡습니다).
 
 ## 로컬에서 확인
 

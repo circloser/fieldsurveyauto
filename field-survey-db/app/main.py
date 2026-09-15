@@ -41,9 +41,13 @@ from core.template.writer import write_bundle_excel, write_template_excel
 
 config.ensure_dirs()
 
+from core import ocr_runtime  # noqa: E402
+
+ocr_runtime.activate()   # 경량 도우미: 받아 둔 글자 인식 기능을 붙인다(안 받았거나 엔진 동봉판이면 그대로)
+
 app = FastAPI(title=config.APP_TITLE, version=config.APP_VERSION)
 
-# ---------- 웹 시작 페이지(클라우드플레어 Pages) ↔ 이 PC의 오토다타 ----------
+# ---------- 웹 시작 페이지(클라우드플레어 Workers) ↔ 이 PC의 오토다타 ----------
 # 웹 시작 페이지는 허용된 주소에서 상태(버전·점검)만 읽고, 파일 처리는 이 PC의 작업 화면에서 한다.
 # 다른 웹사이트가 이 PC의 오토다타에 파일을 올리거나 설정을 바꾸는 요청(POST 등)은 막는다.
 from starlette.requests import Request  # noqa: E402
@@ -401,6 +405,8 @@ async def pdf_load(file: UploadFile) -> JSONResponse:
     survey = _survey_info(doc, pdf_path)
     # 표 테두리 기반 자동 제안(기본). 스캔본 등 칸이 없으면 단어 방식으로 폴백.
     boxes = [] if survey else _suggest_all(doc, pdf_path)
+    # 스캔 쪽인데 글자를 못 읽었으면(경량 도우미에서 글자 인식 기능을 아직 안 받음) 화면이 받기 안내를 띄운다
+    ocr_missing = any(p.needs_ocr and not getattr(p, "ocr", False) for p in doc.pages)
     return JSONResponse({
         "doc_id": doc_id,
         "filename": file.filename,
@@ -408,6 +414,8 @@ async def pdf_load(file: UploadFile) -> JSONResponse:
                    "needs_ocr": p.needs_ocr, "ocr": getattr(p, "ocr", False)} for p in doc.pages],
         "boxes": boxes,
         "survey": survey,
+        "ocr_missing": ocr_missing,
+        "ocr_setup": ocr_runtime.status() if ocr_missing else None,
     })
 
 
@@ -1790,6 +1798,40 @@ def ocr_corrections_save(payload: dict = Body(default={})) -> JSONResponse:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text if (not text or text.endswith("\n")) else text + "\n", encoding="utf-8")
     return JSONResponse({"ok": True, "count": len(ocr_fix.load_pairs(path))})
+
+
+# ---------- 글자 인식(OCR) 기능 내려받기(경량 도우미) ----------
+# 공개 저장소(PyPI·PyTorch·EasyOCR)에서 받아 이 PC에만 둔다(core/ocr_runtime.py). 웹 시작 페이지 등
+# 다른 사이트는 이 요청을 보낼 수 없다(web_entry_guard — 이 PC의 작업 화면에서만).
+@app.get("/api/ocr/runtime")
+def ocr_runtime_status() -> JSONResponse:
+    return JSONResponse(ocr_runtime.status())
+
+
+@app.post("/api/ocr/runtime/install")
+def ocr_runtime_install(payload: dict = Body(default={})) -> JSONResponse:
+    variant = str(payload.get("variant") or "")
+    if variant not in ocr_runtime.VARIANTS:
+        return JSONResponse({"error": "받을 판(cpu 또는 gpu)을 골라 주세요."}, status_code=400)
+    if ocr_runtime.bundled():
+        return JSONResponse({"error": "이 도우미에는 글자 인식 엔진이 이미 들어 있어 받을 필요가 없습니다."}, status_code=400)
+    ocr_runtime.start_install(variant)
+    return JSONResponse(ocr_runtime.status())
+
+
+@app.post("/api/ocr/runtime/cancel")
+def ocr_runtime_cancel() -> JSONResponse:
+    ocr_runtime.cancel()
+    return JSONResponse(ocr_runtime.status())
+
+
+@app.post("/api/ocr/runtime/remove")
+def ocr_runtime_remove(payload: dict = Body(default={})) -> JSONResponse:
+    try:
+        ocr_runtime.remove(str(payload.get("variant") or ""))
+    except (ValueError, RuntimeError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(ocr_runtime.status())
 
 
 @app.post("/api/sce/config")
