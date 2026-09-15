@@ -1,12 +1,14 @@
-"""웹 시작 페이지(깃허브 → 클라우드플레어 Pages)와 이 PC의 오토다타(도우미)를 잇는 접근 규칙.
+"""웹 시작 페이지(깃허브 → 클라우드플레어 Workers)와 이 PC의 오토다타(도우미)를 잇는 접근 규칙.
 
 웹 주소에서 여는 시작 페이지는 이 PC에서 도우미가 켜져 있는지, 한글·글자 인식·AI 키가 준비됐는지만 묻고,
 실제 처리(파일 올리기·추출·엑셀)는 도우미의 작업 화면(http://127.0.0.1:포트)에서 한다.
   · 허용된 웹 주소는 상태를 묻는 몇 개 주소(READ_PATHS)만 읽을 수 있다(CORS + 크롬 로컬 네트워크 사전 요청).
   · 다른 웹사이트가 이 PC의 도우미에 파일을 올리거나 설정을 바꾸는 요청(POST 등)은 막는다 —
     이 PC의 작업 화면(127.0.0.1·localhost)에서 온 요청만 받는다.
-허용 웹 주소 = 기본(클라우드플레어 Pages 기본 주소·미리보기 주소·로컬 개발) + 설치 폴더의 web_origins.txt(한 줄에 하나,
+허용 웹 주소 = 기본(배포 주소·로컬 개발) + 설치 폴더의 web_origins.txt(한 줄에 하나,
 'https://*.example.org' 는 그 아래 주소 전체).
+기본값에 남이 만들 수 있는 주소(아직 주인이 없는 pages.dev 이름 등)를 넣지 않는다 — 그 주소를 가진 사람이
+이 PC의 도우미 상태를 읽을 수 있게 되기 때문.
 """
 from __future__ import annotations
 
@@ -14,8 +16,9 @@ import re
 from pathlib import Path
 
 ORIGINS_FILE = "web_origins.txt"
-DEFAULT_ORIGINS = ["https://fieldsurveyauto.pages.dev", "http://localhost:8788", "http://127.0.0.1:8788"]
-DEFAULT_SUFFIXES = [".fieldsurveyauto.pages.dev"]   # 브랜치 미리보기 주소 https://<이름>.fieldsurveyauto.pages.dev
+WEB_HOME = "https://autodata.singlena.workers.dev"      # 클라우드플레어 Workers 배포 주소
+DEFAULT_ORIGINS = [WEB_HOME, "http://localhost:8788", "http://127.0.0.1:8788"]
+DEFAULT_SUFFIXES: list[str] = []
 READ_PATHS = ("/health", "/api/local/hello", "/api/system/check")
 _LOCAL = re.compile(r"^http://(127\.0\.0\.1|localhost)(:\d{1,5})?$")
 _ORIGIN = re.compile(r"^https?://[A-Za-z0-9.-]+(:\d{1,5})?$")

@@ -1,5 +1,7 @@
 # 오토다타 웹 시작 페이지
 
+주소: **https://autodata.singlena.workers.dev**
+
 인터넷 주소로 여는 **시작 페이지**입니다. 조사 파일 처리는 하지 않습니다.
 
 - 이 컴퓨터에서 **오토다타 도우미**(`FieldSurveyDB.exe`)가 켜져 있는지 찾고
@@ -8,18 +10,21 @@
 
 파일 · AI 키 · 결과 엑셀은 모두 그 컴퓨터에만 저장됩니다. 이 페이지는 정적 파일(HTML·CSS·JS·글꼴)뿐이라 서버 연산이 없습니다.
 
-## 클라우드플레어 Pages 배포
+## 클라우드플레어 Workers 배포(한 번만 연결)
 
-1. Cloudflare 대시보드 → **Workers & Pages** → **Create** → **Pages** → **Connect to Git** → 저장소 `circloser/fieldsurveyauto` 선택
-2. 빌드 설정
-   - Framework preset: **None**
+저장소 맨 위의 `wrangler.jsonc` 가 배포 설정입니다(Worker 이름 `autodata`, 올릴 폴더 `field-survey-db/web`).
+
+1. Cloudflare 대시보드 → **Workers & Pages** → **autodata** → **Settings** → **Build** → **Connect**
+2. GitHub 저장소 `circloser/fieldsurveyauto` 선택
+3. 설정
+   - Branch: `main`
    - Build command: *(비워 둠)*
-   - Build output directory: **`field-survey-db/web`**
-   - Production branch: `main`
-3. 배포되면 주소가 `https://<프로젝트 이름>.pages.dev` 로 생깁니다.
+   - Deploy command: `npx wrangler deploy` *(기본값)*
+   - Root directory: `/` *(기본값)*
+4. 저장하면 첫 배포가 돌고, 이후 `main` 에 푸시할 때마다 다시 배포됩니다.
 
-도우미는 기본으로 `https://fieldsurveyauto.pages.dev` 와 그 미리보기 주소(`https://*.fieldsurveyauto.pages.dev`)의 요청만 받습니다.
-프로젝트 이름을 다르게 만들었거나 기관 도메인을 연결했다면, 도우미 폴더(`FieldSurveyDB.exe` 옆)에 `web_origins.txt` 를 만들고 한 줄에 하나씩 적으세요.
+도우미는 기본으로 `https://autodata.singlena.workers.dev` 의 요청만 받습니다(상태 읽기만, 파일·설정 변경은 불가).
+기관 도메인을 따로 연결했다면 도우미 폴더(`FieldSurveyDB.exe` 옆)에 `web_origins.txt` 를 만들고 한 줄에 하나씩 적으세요.
 
 ```
 https://autodata.example.org
@@ -28,9 +33,19 @@ https://*.autodata.example.org
 
 ## 도우미 새 버전 배포
 
-1. `app/config.py` 의 `APP_VERSION` 과 이 폴더의 `version.json` 의 `helper` 를 같은 번호로 올립니다.
-2. `scripts/make_portable.py` 로 만든 zip 을 GitHub **Releases** 에 올립니다(파일 하나당 2 GiB 미만 — GPU판 전체 zip은 이 한도를 넘습니다).
-3. `main` 에 푸시하면 Pages 가 다시 배포되고, 시작 페이지가 예전 도우미를 쓰는 사람에게 새 버전 안내를 띄웁니다.
+1. `app/config.py` 의 `APP_VERSION` 과 이 폴더 `version.json` 의 `helper` 를 같은 번호로 올리고 커밋·푸시합니다.
+2. 같은 번호로 태그를 푸시합니다.
+
+   ```
+   git tag v0.5.1
+   git push origin v0.5.1
+   ```
+
+3. GitHub Actions(`.github/workflows/release.yml`)가 Windows에서 테스트 → 포터블 빌드 → 기동 확인을 거쳐
+   Releases 에 `AutoData_Windows.zip` 을 올립니다. 시작 페이지의 내려받기 주소는 항상 최신 릴리스의 이 파일입니다.
+4. 예전 도우미를 켠 사람에게는 시작 페이지가 새 버전 안내를 띄웁니다.
+
+GitHub Releases 는 파일 하나당 2 GiB 미만이라 GPU판 전체 zip(약 2.1 GiB)은 올릴 수 없습니다.
 
 ## 로컬에서 확인
 

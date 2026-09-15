@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import app.main as app_main
 from core import web_access
 
-WEB = "https://fieldsurveyauto.pages.dev"
+WEB = "https://autodata.singlena.workers.dev"
 EVIL = "https://evil.example"
 
 
@@ -27,12 +27,13 @@ def test_status_readable_only_from_allowed_web_origin():
     c = _client()
     ok = c.get("/api/local/hello", headers={"Origin": WEB})
     assert ok.headers.get("access-control-allow-origin") == WEB
-    preview = c.get("/health", headers={"Origin": "https://abc123.fieldsurveyauto.pages.dev"})
-    assert preview.headers.get("access-control-allow-origin") == "https://abc123.fieldsurveyauto.pages.dev"
     bad = c.get("/api/local/hello", headers={"Origin": EVIL})
     assert "access-control-allow-origin" not in bad.headers
-    lookalike = c.get("/health", headers={"Origin": "https://evilfieldsurveyauto.pages.dev"})
-    assert "access-control-allow-origin" not in lookalike.headers
+    for fake in ("https://evilautodata.singlena.workers.dev", "https://x.autodata.singlena.workers.dev",
+                 "http://autodata.singlena.workers.dev",          # https 가 아닌 주소
+                 "https://fieldsurveyauto.pages.dev"):             # 남이 만들 수 있는 예전 후보 주소
+        r = c.get("/health", headers={"Origin": fake})
+        assert "access-control-allow-origin" not in r.headers, fake
     other_path = c.get("/api/templates", headers={"Origin": WEB})              # 상태 주소가 아니면 읽기 허용 안 함
     assert "access-control-allow-origin" not in other_path.headers
 

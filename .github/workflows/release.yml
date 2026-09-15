@@ -1,0 +1,79 @@
+# 오토다타 도우미 배포 — 'v0.5.1' 같은 태그를 푸시하면 Windows에서 포터블(CPU, OCR 포함)을 빌드해
+# GitHub Releases 에 AutoData_Windows.zip 으로 올린다. 웹 시작 페이지의 '내려받기'가 이 파일을 가리킨다.
+# 태그 번호 = app/config.py APP_VERSION = web/version.json helper 가 같아야 진행한다.
+name: 도우미 배포
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: field-survey-db
+    env:
+      PYTHONIOENCODING: utf-8
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11.9"
+
+      - name: 버전 번호 확인
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $app = (Select-String -Path app/config.py -Pattern '^APP_VERSION = "([0-9.]+)').Matches[0].Groups[1].Value
+          $web = (Get-Content web/version.json -Raw | ConvertFrom-Json).helper
+          "태그 $tag · 앱 $app · 웹 $web"
+          if ($tag -ne $app -or $tag -ne $web) { throw "버전 번호가 서로 다릅니다 — 태그·APP_VERSION·version.json 을 맞춰 주세요." }
+          "APP_VER=$tag" >> $env:GITHUB_ENV
+
+      - name: 빌드 환경(로컬과 같은 버전)
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+
+      - name: 글자 인식 모델(EasyOCR 공개 모델) 받기
+        run: .venv\Scripts\python.exe -c "import easyocr; easyocr.Reader(['ko','en'], gpu=False, verbose=False)"
+
+      - name: 테스트
+        run: .venv\Scripts\python.exe -m pytest tests -q --no-header -p no:cacheprovider
+
+      - name: 포터블 빌드 · 기동 확인 · 압축
+        run: .venv\Scripts\python.exe scripts\make_portable.py
+
+      - name: 배포 파일 이름 정리
+        run: |
+          $z = Get-ChildItem dist -Filter "FieldSurveyDB_*.zip" | Where-Object { $_.Name -notmatch "_GPU_|_경량_" } |
+               Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $z) { throw "zip 없음" }
+          Move-Item $z.FullName dist/AutoData_Windows.zip
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path dist/AutoData_Windows.zip))
+          $bad = $zip.Entries | Where-Object { $_.FullName -like "FieldSurveyDB/data/*" -or $_.Name -in @("ai_config.txt", "sce_config.json") }
+          $zip.Dispose()
+          if ($bad) { throw "배포 zip 에 넣으면 안 되는 파일: $($bad.FullName -join ', ')" }
+          "{0:N0} MB" -f ((Get-Item dist/AutoData_Windows.zip).Length / 1MB)
+
+      - name: 릴리스 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/AutoData_Windows.zip `
+            --repo "${{ github.repository }}" `
+            --title "오토다타 도우미 $env:APP_VER" `
+            --notes-file packaging/release_notes.md `
+            --latest

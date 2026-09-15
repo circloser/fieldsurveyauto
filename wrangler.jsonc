@@ -1,0 +1,10 @@
+// 오토다타 웹 시작 페이지 — Cloudflare Workers(정적 파일만, 서버 코드 없음) 배포 설정.
+// 대시보드의 Worker 'autodata' 를 이 저장소에 연결하면 main 에 푸시할 때마다 다시 배포된다.
+// 설명: field-survey-db/web/README.md
+{
+  "name": "autodata",
+  "compatibility_date": "2026-09-15",
+  "assets": {
+    "directory": "./field-survey-db/web"
+  }
+}
