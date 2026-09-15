@@ -4,7 +4,8 @@
 # (param 선언을 쓰지 않는다 — 선언하면 명령 인자 '-m'·'-c' 를 이 스크립트의 옵션으로 오해한다)
 $Title = $args[0]
 $exe = $args[1]
-$rest = if ($args.Count -gt 2) { $args[2..($args.Count - 1)] } else { @() }
+# 항상 배열로 — 인자가 하나뿐일 때 $args[2..2] 는 문자열이 되어 splat 이 글자 단위로 쪼개진다
+$rest = @($args | Select-Object -Skip 2)
 $tmp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $log = Join-Path $tmp ("step_" + [guid]::NewGuid().ToString("N") + ".log")
 & $exe @rest *>&1 | Tee-Object -FilePath $log
