@@ -1,7 +1,7 @@
-# 배포판 빌드용 고정 버전 — 로컬 .venv(CPU판 빌드 환경)와 똑같이 맞춘 목록.
-# GitHub Actions 릴리스 빌드(.github/workflows/release.yml)가 이 목록으로 설치한다.
-# 로컬 .venv 패키지를 올렸다면: .venv\Scripts\python.exe -m pip freeze 로 다시 만들고
-# 로컬 전용 줄(-e ... 편집 설치)은 뺀다.
+# Pinned build environment for release builds (same versions as the local .venv).
+# Used by .github/workflows/release.yml. Keep this file ASCII-only: older pip reads it
+# with the system code page. Regenerate with ".venv\Scripts\python.exe -m pip freeze"
+# and drop local-only lines (-e editable installs).
 altgraph==0.17.5
 annotated-types==0.7.0
 anthropic==0.116.0

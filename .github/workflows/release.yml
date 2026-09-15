@@ -41,19 +41,21 @@ jobs:
           if ($tag -ne $app -or $tag -ne $web) { throw "버전 번호가 서로 다릅니다 — 태그·APP_VERSION·version.json 을 맞춰 주세요." }
           "APP_VER=$tag" >> $env:GITHUB_ENV
 
+      # 각 단계는 scripts/ci_step.ps1 로 실행 — 실패하면 마지막 출력이 주석으로 남는다(로그인 없이 확인 가능)
       - name: 빌드 환경(로컬과 같은 버전)
         run: |
           python -m venv .venv
-          .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+          ./scripts/ci_step.ps1 "pip 올리기" .venv\Scripts\python.exe -m pip install --upgrade pip==26.1.2
+          ./scripts/ci_step.ps1 "패키지 설치" .venv\Scripts\python.exe -m pip install --prefer-binary -r requirements-lock.txt
 
       - name: 글자 인식 모델(EasyOCR 공개 모델) 받기
-        run: .venv\Scripts\python.exe -c "import easyocr; easyocr.Reader(['ko','en'], gpu=False, verbose=False)"
+        run: ./scripts/ci_step.ps1 "모델 받기" .venv\Scripts\python.exe -c "import easyocr; easyocr.Reader(['ko','en'], gpu=False, verbose=False)"
 
       - name: 테스트
-        run: .venv\Scripts\python.exe -m pytest tests -q --no-header -p no:cacheprovider
+        run: ./scripts/ci_step.ps1 "테스트" .venv\Scripts\python.exe -m pytest tests -q --no-header -p no:cacheprovider
 
       - name: 포터블 빌드 · 기동 확인 · 압축
-        run: .venv\Scripts\python.exe scripts\make_portable.py
+        run: ./scripts/ci_step.ps1 "포터블 빌드" .venv\Scripts\python.exe scripts\make_portable.py
 
       - name: 배포 파일 이름 정리
         run: |
