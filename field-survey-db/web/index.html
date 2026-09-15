@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오토다타 (AutoData)</title>
+<meta name="description" content="종이 서식을 올리면 자동으로 엑셀 데이터가 됩니다. 조사 파일은 내 컴퓨터에서만 처리됩니다.">
+<link rel="preload" href="fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <header class="band">
+    <div class="mark" aria-hidden="true">AD</div>
+    <div>
+      <h1>오토다타</h1>
+      <div class="tag">종이 서식을 올리면, 자동으로 엑셀 데이터가 됩니다</div>
+    </div>
+  </header>
+
+  <main class="content">
+    <section aria-labelledby="t-ready">
+      <h2 id="t-ready" class="sec-title">이 컴퓨터 준비 상태</h2>
+      <p class="lead">
+        조사 파일은 이 컴퓨터에 받아 둔 <b>오토다타 도우미</b>가 처리합니다.
+        이 페이지는 준비 상태만 확인하며, 파일·AI 키·결과는 인터넷으로 보내지 않습니다.
+      </p>
+
+      <ul class="checks" aria-live="polite">
+        <li data-key="helper" data-state="wait">
+          <span class="dot" aria-hidden="true"></span>
+          <div class="text"><div class="name">오토다타 도우미</div><div class="detail">이 컴퓨터에서 찾는 중…</div></div>
+        </li>
+        <li data-key="hwp" data-state="idle">
+          <span class="dot" aria-hidden="true"></span>
+          <div class="text"><div class="name">한글(HWP) 파일 변환</div><div class="detail">도우미를 찾으면 확인합니다</div></div>
+        </li>
+        <li data-key="ocr" data-state="idle">
+          <span class="dot" aria-hidden="true"></span>
+          <div class="text"><div class="name">스캔 문서 글자 인식</div><div class="detail">도우미를 찾으면 확인합니다</div></div>
+        </li>
+        <li data-key="ai" data-state="idle">
+          <span class="dot" aria-hidden="true"></span>
+          <div class="text"><div class="name">AI 자동 추출 키</div><div class="detail">도우미를 찾으면 확인합니다</div></div>
+        </li>
+      </ul>
+
+      <div class="actions">
+        <a class="btn primary" id="open" href="#" aria-disabled="true" target="_blank" rel="noopener">작업 화면 열기</a>
+        <button class="btn" id="retry" type="button">다시 찾기</button>
+      </div>
+      <p class="notice" id="update" hidden></p>
+    </section>
+
+    <section class="install" id="install" aria-labelledby="t-install">
+      <h2 id="t-install" class="sub-title">도우미를 처음 쓰거나 찾지 못했다면</h2>
+      <ol class="steps">
+        <li>
+          <span class="step-name">받기</span>
+          <span><a id="download" href="https://github.com/circloser/fieldsurveyauto/releases/latest">최신 도우미 내려받기</a> — Windows 10·11용 압축 파일</span>
+        </li>
+        <li>
+          <span class="step-name">압축 풀기</span>
+          <span>원하는 폴더에 풀어 두세요. 설치나 관리자 권한은 필요 없습니다.</span>
+        </li>
+        <li>
+          <span class="step-name">실행</span>
+          <span>폴더 안의 <code>FieldSurveyDB.exe</code>를 실행하세요. 까만 창이 떠 있는 동안 도우미가 켜져 있습니다.</span>
+        </li>
+        <li>
+          <span class="step-name">허용</span>
+          <span>이 페이지에서 <b>다시 찾기</b>를 누르세요. 브라우저가 이 사이트의 <b>로컬 네트워크 접근</b>을 물으면 허용해 주세요.
+          이미 거절했다면 주소창 왼쪽의 사이트 정보 → 사이트 설정에서 바꿀 수 있습니다.</span>
+        </li>
+      </ol>
+    </section>
+
+    <div class="secure">조사 파일 · AI 키 · 결과 엑셀은 모두 이 컴퓨터에만 저장됩니다</div>
+  </main>
+</div>
+<footer>
+  <span>AutoData</span>
+  <span id="web-version"></span>
+  <a href="https://github.com/circloser/fieldsurveyauto">소스 코드</a>
+</footer>
+</body>
+</html>

@@ -6,10 +6,14 @@ CORE_IDS = {"os", "cpu", "ram", "disk", "gpu", "hwp", "browser", "port", "write"
 
 
 def test_quick_checks_cover_required_items():
+    from core import ocr
+
+    tried_before = ocr._TRIED
     r = run_checks(quick=True)
     ids = {i["id"] for i in r["items"]}
     assert CORE_IDS <= ids
-    assert "ocr" not in ids                                   # 빠른 점검은 OCR 로드 생략
+    assert "ocr" in ids                                       # 웹 시작 페이지도 OCR 준비 상태를 보여 준다
+    assert ocr._TRIED == tried_before                         # …하지만 빠른 점검은 엔진을 불러오지 않는다
     assert all(i["status"] in ("ok", "warn", "fail", "info") for i in r["items"])
     assert r["overall"] in ("ok", "warn", "fail")
     assert sum(r["counts"].values()) == len(r["items"])

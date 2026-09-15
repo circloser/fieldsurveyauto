@@ -204,8 +204,26 @@ def _check_ai() -> Item:
         return Item("ai", "AI 기능(선택)", "info", f"확인 불가({e})")
 
 
+def _check_ocr_quick(p: dict) -> Item:
+    """빠른 점검용 글자 인식 상태 — 엔진을 불러오지 않고(수~십 초 걸림) 설치 여부만 본다.
+    웹 시작 페이지·시작 창 요약이 '확인하지 못함' 대신 준비 상태를 보여 주도록."""
+    import importlib.util
+
+    try:
+        from core import ocr
+        if ocr._TRIED:   # 이미 불러온 뒤면 그 결과
+            return _check_ocr(p)
+    except Exception:  # noqa: BLE001
+        pass
+    if importlib.util.find_spec("easyocr") is None or importlib.util.find_spec("torch") is None:
+        return Item("ocr", "글자 인식(OCR)", "warn", "엔진 없음 — 스캔·사진 PDF는 처리 불가(글자 있는 PDF는 가능)",
+                    "스캔 문서도 처리하려면 OCR 포함 배포판(기본판)을 사용하세요.")
+    dev = "GPU" if p.get("torch", {}).get("cuda_available") else "CPU"
+    return Item("ocr", "글자 인식(OCR)", "ok", f"설치됨 — 스캔 문서를 처음 올릴 때 불러옵니다 · {dev} 처리")
+
+
 def run_checks(quick: bool = False) -> dict:
-    """전체 점검 실행 → {overall, counts, items, profile, ...}. quick=True 면 OCR 로드 생략."""
+    """전체 점검 실행 → {overall, counts, items, profile, ...}. quick=True 면 OCR 엔진 로드 대신 설치 여부만."""
     from app import config
     from core import perf
 
@@ -224,8 +242,7 @@ def run_checks(quick: bool = False) -> dict:
         _check_import("fitz", "pdf", "PDF 엔진", "PDF 읽기·변환"),
         _check_import("openpyxl", "excel", "엑셀 출력", "엑셀(xlsx) 쓰기"),
     ]
-    if not quick:
-        items.append(_check_ocr(p))
+    items.append(_check_ocr_quick(p) if quick else _check_ocr(p))
     items.append(_check_ai())
     counts = {"ok": 0, "warn": 0, "fail": 0, "info": 0}
     for it in items:

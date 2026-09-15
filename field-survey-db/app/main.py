@@ -43,6 +43,41 @@ config.ensure_dirs()
 
 app = FastAPI(title=config.APP_TITLE, version=config.APP_VERSION)
 
+# ---------- 웹 시작 페이지(클라우드플레어 Pages) ↔ 이 PC의 오토다타 ----------
+# 웹 시작 페이지는 허용된 주소에서 상태(버전·점검)만 읽고, 파일 처리는 이 PC의 작업 화면에서 한다.
+# 다른 웹사이트가 이 PC의 오토다타에 파일을 올리거나 설정을 바꾸는 요청(POST 등)은 막는다.
+from starlette.requests import Request  # noqa: E402
+from starlette.responses import Response  # noqa: E402
+
+from core import web_access  # noqa: E402
+
+_WEB_EXACT, _WEB_SUFFIX = web_access.load_origins(config.BASE_DIR)
+
+
+@app.middleware("http")
+async def web_entry_guard(request: Request, call_next):
+    origin = request.headers.get("origin")
+    path = request.url.path
+    from_web = web_access.is_web_origin(origin, _WEB_EXACT, _WEB_SUFFIX)
+    if request.method == "OPTIONS" and origin:
+        if from_web and path in web_access.READ_PATHS:
+            return Response(status_code=204, headers=web_access.preflight_headers(origin))
+        return Response(status_code=403)
+    if origin and request.method not in ("GET", "HEAD") and not web_access.is_local_origin(origin):
+        return JSONResponse({"error": "이 컴퓨터의 오토다타 작업 화면에서만 할 수 있는 작업입니다."}, status_code=403)
+    response = await call_next(request)
+    if from_web and path in web_access.READ_PATHS:
+        for k, v in web_access.cors_headers(origin).items():
+            response.headers[k] = v
+    return response
+
+
+@app.get("/api/local/hello")
+def local_hello(request: Request) -> JSONResponse:
+    """웹 시작 페이지가 이 PC의 오토다타를 찾을 때 — 프로그램 이름·버전·작업 화면 주소만(파일 경로 같은 PC 정보는 없음)."""
+    return JSONResponse({"app": "autodata", "version": config.APP_VERSION.split(" ")[0],
+                         "port": request.url.port, "ui": "/"})
+
 
 @app.middleware("http")
 async def _no_cache_static(request, call_next):
