@@ -667,6 +667,11 @@ $("saveBtn").addEventListener("click", async () => {
   $("saveMsg").textContent = d.ok
     ? `✅ '${name}' 저장됨 (${BOXES.length}개${d.pdf_saved ? " · 양식 PDF 포함" : ""})`
     : "저장 실패";
+  // 같은 양식을 다른 이름으로 이미 저장해 둔 경우 — 일괄 처리는 방금 저장한 것을 우선 쓰지만 예전 것은 지우는 게 안전
+  if (d.ok && d.duplicates && d.duplicates.length) {
+    $("saveMsg").textContent += ` · ⚠️ 같은 양식의 템플릿 ${d.duplicates.map((n) => `'${n}'`).join(", ")}이(가) 이미 있습니다.`
+      + ` 일괄 처리는 방금 저장한 '${name}'을 씁니다. 예전 것은 3번 목록에서 ✕로 지우세요.`;
+  }
   if (d.ok) loadTemplates();
 });
 async function loadTemplates() {

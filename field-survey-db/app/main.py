@@ -250,6 +250,11 @@ def designer_save(payload: dict = Body(...)) -> JSONResponse:
     boxes = payload.get("boxes") or []
     if not name:
         return JSONResponse({"error": "템플릿 이름이 필요합니다."}, status_code=400)
+    # 같은 양식(박스 자리가 같음)을 다른 이름으로 이미 저장해 둔 게 있으면 알려 준다 —
+    # 일괄 처리는 방금 저장한 것을 우선 쓰지만, 예전 것이 남아 있으면 헷갈리기 쉽다
+    duplicates = [n for n in _TEMPLATES.list_names()
+                  if n != name and (_TEMPLATES.get(n) or {}).get("boxes")
+                  and _same_boxes(boxes, _TEMPLATES.get(n)["boxes"])]
     _TEMPLATES.save(name, boxes)
     # 지금 열려 있는 양식 PDF를 템플릿과 함께 보관 → 나중에 불러올 때 그대로 보여줌
     pdf_saved = False
@@ -261,7 +266,7 @@ def designer_save(payload: dict = Body(...)) -> JSONResponse:
             pdf_saved = True
         except OSError:
             pass  # PDF 보관 실패해도 박스 저장은 유효
-    return JSONResponse({"ok": True, "pdf_saved": pdf_saved,
+    return JSONResponse({"ok": True, "pdf_saved": pdf_saved, "duplicates": duplicates,
                          "templates": _TEMPLATES.list_names()})
 
 
@@ -1092,9 +1097,15 @@ def _pdf_apply_auto(files: list[UploadFile], req_dir, stamp: str,
     templates: list[dict] = []
     saved: list[tuple[str, dict]] = [(n, _TEMPLATES.get(n)) for n in _TEMPLATES.list_names()]
     saved = [(n, t) for n, t in saved if t and t.get("boxes")]
+    # 같은 양식을 고쳐 가며 다른 이름으로 여러 번 저장했으면(예: 22·33·44) 쪽 배정 점수가 같아
+    # 먼저 저장한 것이 이겨 버렸다(이미지 유형으로 바꾼 최신본이 무시됨) → 동점일 때 앞의 것이 배정되므로
+    # ① 화면에 불러온 템플릿 ② 가장 최근 저장본 순으로 앞에 둔다.
+    cur_name = next((n for n, t in saved if box_list and _same_boxes(box_list, t["boxes"])), None)
+    saved.sort(key=lambda nt: nt[1].get("saved_at") or "", reverse=True)   # 최근 저장 순(없으면 뒤로, 순서 유지)
+    saved.sort(key=lambda nt: 0 if nt[0] == cur_name else 1)
     # 화면의 박스가 저장 템플릿을 그대로 불러온 것(템플릿 모드)이면 '현재 양식'으로
     # 중복 등록하지 않는다 — 제목 없는 복사본이 끼어들어 미등록 양식을 흡수하는 것 방지
-    if box_list and not any(_same_boxes(box_list, t["boxes"]) for _, t in saved):
+    if box_list and cur_name is None:
         templates.append(_mk_template("현재 양식", box_list, cur_pdf_path))
     for name, t in saved:
         tpdf = _tpl_pdf_path(name)

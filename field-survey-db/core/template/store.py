@@ -25,7 +25,9 @@ class TemplateStore:
         )
 
     def save(self, name: str, boxes: list[dict]) -> None:
-        self._data[name] = {"name": name, "boxes": boxes}
+        import time
+        # saved_at: 같은 양식의 템플릿이 여러 개일 때 일괄 처리가 '가장 최근 저장본'을 고르는 기준
+        self._data[name] = {"name": name, "boxes": boxes, "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
         self._save()
 
     def get(self, name: str) -> dict | None:
