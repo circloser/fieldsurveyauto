@@ -73,7 +73,7 @@
       <div class="grid-pane">
         <div class="pane-head">
           <h2>2. 박스 확인·정리</h2>
-          <span class="hint">필요 없는 박스는 Delete로 삭제 · 빠진 곳은 드래그로 추가</span>
+          <span class="hint">클릭 선택 · Ctrl/Shift 클릭이나 Shift+드래그로 여러 개 선택 · Delete 삭제 · Ctrl+Z 되돌리기 · 빈 곳 드래그로 추가</span>
         </div>
         <div class="tools-row">
           <button class="mini-btn" id="aiBtn" title="Claude AI가 양식을 읽고 추출 항목을 자동으로 찾아 이름까지 붙입니다 (외부 API·인터넷 사용)">🤖 AI 자동 이해</button>
@@ -96,7 +96,8 @@
           <h2>추출 항목 <span id="boxCount" class="pill">0</span></h2>
           <button class="mini-btn" id="sortPosBtn" title="문서 위치 순서대로">↕ 문서 순서로</button>
         </div>
-        <p class="muted" style="margin-top:6px">순서 = 엑셀 열 순서. 드래그로 순서 변경 · 이름 편집.</p>
+        <p class="muted" style="margin-top:6px">순서 = 엑셀 열 순서. 드래그로 순서 변경 · 이름 편집. Ctrl/Shift 클릭으로 여러 개 선택.</p>
+        <div class="sel-bar" id="selBar" hidden></div>
         <ol class="box-list" id="boxList"></ol>
 
         <div class="save-row">

@@ -167,3 +167,20 @@
 .step-card h2, #loadCard h2, .pane-head h2 {
   color: var(--accent); font-weight: 650;
 }
+
+/* ── 여러 박스 선택 ── */
+.pbox.primary { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #3f8425; }          /* 대표(마지막 클릭) 박스 */
+.pbox.marquee { border-color: #1c7ed6; background: rgba(28,126,214,.10); border-style: dashed; }
+.box-item.flash { animation: item-flash .9s ease-out; }                    /* 캔버스에서 고른 항목이 목록에서 눈에 띄게 */
+@keyframes item-flash {
+  0% { background: #cdeeb4; box-shadow: 0 0 0 3px rgba(78,159,47,.45); }
+  100% { background: #f4faee; box-shadow: none; }
+}
+.sel-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; padding: 8px 10px;
+  border-radius: 9px; background: #eef7e5; border: 1px solid #cfe8b8; font-size: 12px;
+}
+.sel-bar select {
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px;
+  font-family: inherit; background: #fff;
+}

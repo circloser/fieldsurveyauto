@@ -1,6 +1,59 @@
 // PDF 통합 픽셀박스 디자이너
 const $ = (id) => document.getElementById(id);
 let DOC_ID = null, PAGES = [], BOXES = [], selected = null;
+
+// ---------- 여러 박스 선택 ----------
+// selected = 대표 박스(인덱스). SEL = 함께 선택된 박스 객체들(Ctrl 클릭 토글 · Shift 클릭 범위 · Shift/Ctrl 드래그 영역).
+// 인덱스가 아니라 객체로 기억해, 박스를 지우거나 순서를 바꿔도 선택이 어긋나지 않는다.
+const SEL = new Set();
+let selAnchor = null;   // Shift 범위 선택의 기준(마지막으로 단독 선택한 박스)
+function isSel(idx) { return idx === selected || SEL.has(BOXES[idx]); }
+function selectOnly(idx) {
+  SEL.clear(); selected = (idx != null && BOXES[idx]) ? idx : null; selAnchor = selected;
+  if (selected != null) SEL.add(BOXES[selected]);
+}
+function clearSel() { SEL.clear(); selected = null; selAnchor = null; }
+function selectToggle(idx) {
+  const b = BOXES[idx]; if (!b) return;
+  if (selected != null && BOXES[selected]) SEL.add(BOXES[selected]);
+  if (SEL.has(b)) {
+    SEL.delete(b);
+    if (selected === idx) { const rest = [...SEL]; selected = rest.length ? BOXES.indexOf(rest[rest.length - 1]) : null; }
+  } else { SEL.add(b); selected = idx; selAnchor = idx; }
+}
+function listOrder() {   // 오른쪽 목록과 같은 순서(현재 쪽, 템플릿 모드면 전체)
+  return [...BOXES].filter((b) => TPL_MODE || b.page === activePage).sort((a, b) => a.order - b.order);
+}
+function selectRange(idx) {
+  const from = (selAnchor != null && BOXES[selAnchor]) ? selAnchor : selected;
+  if (from == null || !BOXES[from]) { selectOnly(idx); return; }
+  const seq = listOrder();
+  const i1 = seq.indexOf(BOXES[from]), i2 = seq.indexOf(BOXES[idx]);
+  if (i1 < 0 || i2 < 0) { selectOnly(idx); return; }
+  if (selected != null && BOXES[selected]) SEL.add(BOXES[selected]);
+  seq.slice(Math.min(i1, i2), Math.max(i1, i2) + 1).forEach((b) => SEL.add(b));
+  selected = idx;
+}
+function pickSelect(idx, e) {
+  if (e && (e.ctrlKey || e.metaKey)) selectToggle(idx);
+  else if (e && e.shiftKey) selectRange(idx);
+  else selectOnly(idx);
+}
+function selectedIdxs() {
+  const s = new Set([...SEL].map((b) => BOXES.indexOf(b)).filter((i) => i >= 0));
+  if (selected != null && BOXES[selected]) s.add(selected);
+  return [...s].sort((a, b) => a - b);
+}
+// 항목의 버튼(유형·라벨 기준)을 눌렀을 때 적용 대상: 그 항목이 여러 선택에 들어 있으면 선택 전체
+function targetsOf(idx) { const all = selectedIdxs(); return (all.length > 1 && all.includes(idx)) ? all : [idx]; }
+
+// 되돌리기(Ctrl+Z) — 지우기·한꺼번에 바꾸기·여러 개 이동 전의 박스 목록 스냅샷
+const UNDO = [];
+function pushUndo() { UNDO.push(JSON.stringify(BOXES)); if (UNDO.length > 30) UNDO.shift(); }
+function undoBoxes() {
+  if (!UNDO.length) return;
+  BOXES = JSON.parse(UNDO.pop()); clearSel(); renderPageNav(); renderPage(); renderBoxes();
+}
 let TPL_MODE = false;   // 양식 없이 템플릿만 불러온 상태(캔버스 없음, 일괄 처리 중심)
 let activePage = 0;
 let zoomW = 700;            // 페이지 표시 너비(px) = 확대/축소 상태
@@ -48,7 +101,7 @@ async function loadForm(file) {
       SURVEY = [];
       $("surveyBanner").hidden = true;
     }
-    activePage = PAGES.length ? PAGES[0].page_no : 0; selected = null;  // 항상 1페이지부터
+    activePage = PAGES.length ? PAGES[0].page_no : 0; clearSel(); UNDO.length = 0;  // 항상 1페이지부터
     $("main").hidden = false;
     renderPageNav(); renderPage(); renderBoxes(); loadTemplates();
     fitZoom();  // 너비에 맞춰 시작
@@ -81,7 +134,7 @@ function renderPageNav() {
         ? `<span class="tp-del" title="이 페이지를 양식에서 삭제">✕</span>` : "");
     b.addEventListener("click", (e) => {
       if (e.target.classList.contains("tp-del")) { deletePage(p.page_no); return; }
-      activePage = p.page_no; selected = null; renderPageNav(); renderPage(); renderBoxes();
+      activePage = p.page_no; clearSel(); renderPageNav(); renderPage(); renderBoxes();
     });
     host.appendChild(b);
   });
@@ -109,7 +162,7 @@ async function deletePage(pno) {
                  .map((b) => (b.page > pno ? { ...b, page: b.page - 1 } : b));
     sortBoxesByPosition();
     if (activePage >= PAGES.length) activePage = PAGES.length - 1;
-    selected = null;
+    clearSel();
     renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
   } catch (e) { alert("페이지 삭제 실패: " + e.message); }
   finally { hideOverlay(); }
@@ -126,7 +179,7 @@ async function addPagesFile(file) {
     PAGES = d.pages; EDIT_VER++;
     const start = Math.max(0, ...BOXES.map((b) => b.order || 0));
     (d.new_boxes || []).forEach((b, i) => BOXES.push({ ...b, order: start + i + 1 }));
-    activePage = d.first_new_page; selected = null;
+    activePage = d.first_new_page; clearSel();
     renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
   } catch (e) { alert("페이지 추가 실패: " + e.message); }
   finally { hideOverlay(); }
@@ -152,7 +205,7 @@ function renderPage() {
     if (box.page !== p.page_no) return;
     const idx = BOXES.indexOf(box);
     const d = document.createElement("div");
-    d.className = "pbox" + (idx === selected ? " sel" : "") + (box.mode === "title" ? " title-mode" : "")
+    d.className = "pbox" + (isSel(idx) ? " sel" : "") + (idx === selected ? " primary" : "") + (box.mode === "title" ? " title-mode" : "")
       + (box.mode === "table" ? " table-mode" : "");
     d.style.left = (box.x0 * sc) + "px";
     d.style.top = (box.y0 * sc) + "px";
@@ -198,10 +251,11 @@ function renderPage() {
 
 function startDraw(e, wrap, p) {
   if (e.button !== 0) return;   // 왼쪽 버튼만 박스 그리기(가운데/오른쪽은 패닝)
+  const marquee = e.shiftKey || e.ctrlKey || e.metaKey;   // Shift/Ctrl + 빈 곳 드래그 = 영역 선택
   const rect = wrap.getBoundingClientRect();
   const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
   const ghost = document.createElement("div");
-  ghost.className = "pbox drawing";
+  ghost.className = "pbox drawing" + (marquee ? " marquee" : "");
   wrap.appendChild(ghost);
   dragState = { wrap, p, sx, sy, ghost, rect };
   const move = (ev) => {
@@ -215,11 +269,30 @@ function startDraw(e, wrap, p) {
     document.removeEventListener("mouseup", up);
     const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
     ghost.remove();
-    finishDraw(p, sx, sy, x, y);
+    if (marquee) finishMarquee(p, sx, sy, x, y, e.ctrlKey || e.metaKey);
+    else finishDraw(p, sx, sy, x, y);
     dragState = null;
   };
   document.addEventListener("mousemove", move);
   document.addEventListener("mouseup", up);
+}
+
+// 영역 선택: 끌어 놓은 사각형에 걸치는 이 쪽의 박스들을 선택(Ctrl 이면 기존 선택에 더함)
+function finishMarquee(p, sx, sy, ex, ey, add) {
+  const sc = scaleOf(p);
+  const x0 = Math.min(sx, ex) / sc, y0 = Math.min(sy, ey) / sc;
+  const x1 = Math.max(sx, ex) / sc, y1 = Math.max(sy, ey) / sc;
+  if ((x1 - x0) < 4 || (y1 - y0) < 4) { renderPage(); return; }
+  if (!add) clearSel();
+  else if (selected != null && BOXES[selected]) SEL.add(BOXES[selected]);
+  let last = null;
+  BOXES.forEach((b, i) => {
+    if (b.page !== p.page_no) return;
+    if (b.x1 < x0 || b.x0 > x1 || b.y1 < y0 || b.y0 > y1) return;
+    SEL.add(b); last = i;
+  });
+  if (last != null) { selected = last; selAnchor = last; }
+  renderPage(); renderBoxes();
 }
 
 function finishDraw(p, sx, sy, ex, ey) {
@@ -232,39 +305,44 @@ function finishDraw(p, sx, sy, ex, ey) {
     x0: +x0.toFixed(1), y0: +y0.toFixed(1), x1: +x1.toFixed(1), y1: +y1.toFixed(1),
     mode: "text", anchor: null, use_anchor: false, suggested: false,
   });
-  selected = BOXES.length - 1;
+  selectOnly(BOXES.length - 1);
   sortBoxesByPosition();  // 그린 위치에 맞춰 목록 순서 자동 배치 (요청 ②)
   renderPage(); renderBoxes();
   setTimeout(() => { const inp = document.querySelector(".box-item.sel input"); if (inp) inp.select(); }, 30);
 }
 
-// 박스 이동/크기조절 (요청 ③)
+// 박스 이동/크기조절 (요청 ③) — 여러 개 선택된 상태에서 그중 하나를 끌면 선택 전체가 함께 움직인다
 function startBoxDrag(e, idx, p, kind) {
   const box = BOXES[idx];
   const sc = scaleOf(p);
   const startX = e.clientX, startY = e.clientY;
-  const o = { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 };
-  let moved = false;
+  const group = (kind === "move" && isSel(idx) && selectedIdxs().length > 1) ? selectedIdxs() : [idx];
+  const orig = group.map((i) => { const b = BOXES[i]; return { b, x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }; });
+  const o = orig.find((g) => g.b === box);
+  let moved = false, undoPushed = false;
   const move = (ev) => {
     const dx = (ev.clientX - startX) / sc, dy = (ev.clientY - startY) / sc;
     if (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) > 3) moved = true;
+    if (moved && group.length > 1 && !undoPushed) {   // 여러 개를 함께 옮기기 전 상태를 되돌리기용으로
+      undoPushed = true; UNDO.push(JSON.stringify(orig.map((g) => ({ ...g.b, x0: g.x0, y0: g.y0, x1: g.x1, y1: g.y1 }))
+        .concat(BOXES.filter((b) => !group.includes(BOXES.indexOf(b))))));
+    }
     if (kind === "resize") {
       box.x1 = Math.max(o.x0 + 4, o.x1 + dx);
       box.y1 = Math.max(o.y0 + 4, o.y1 + dy);
+      box.use_anchor = false;  // 직접 조정하면 위치(좌표) 기준으로
     } else {
-      box.x0 = o.x0 + dx; box.y0 = o.y0 + dy;
-      box.x1 = o.x1 + dx; box.y1 = o.y1 + dy;
+      orig.forEach((g) => { g.b.x0 = g.x0 + dx; g.b.y0 = g.y0 + dy; g.b.x1 = g.x1 + dx; g.b.y1 = g.y1 + dy; g.b.use_anchor = false; });
     }
-    box.use_anchor = false;  // 직접 조정하면 위치(좌표) 기준으로
     renderPage();
   };
   const up = () => {
     document.removeEventListener("mousemove", move);
     document.removeEventListener("mouseup", up);
-    if (!moved) { // 클릭(이동 없음) → 선택(재클릭해도 유지). 해제는 Esc.
-      selected = idx; renderPage(); renderBoxes(); return;
+    if (!moved) { // 클릭(이동 없음) → 선택. Ctrl 클릭 = 추가/제외, Shift 클릭 = 범위. 해제는 Esc.
+      pickSelect(idx, e); renderPage(); renderBoxes(); return;
     }
-    [box.x0, box.y0, box.x1, box.y1] = [+box.x0.toFixed(1), +box.y0.toFixed(1), +box.x1.toFixed(1), +box.y1.toFixed(1)];
+    orig.forEach((g) => { const b = g.b; [b.x0, b.y0, b.x1, b.y1] = [+b.x0.toFixed(1), +b.y0.toFixed(1), +b.x1.toFixed(1), +b.y1.toFixed(1)]; });
     sortBoxesByPosition();  // 위치 바뀌면 목록 순서도 갱신
     renderPage(); renderBoxes();
   };
@@ -290,7 +368,10 @@ function anchorChip(box) {
 
 function renderBoxes() {
   $("boxCount").textContent = BOXES.length;
-  const list = $("boxList"); list.innerHTML = "";
+  renderSelBar();
+  const list = $("boxList");
+  const keepScroll = list.scrollTop;   // 다시 그려도 스크롤 위치는 유지(선택 항목이 안 보일 때만 옮긴다)
+  list.innerHTML = "";
   const page = activePage;
   // 템플릿 모드: 캔버스가 없으므로 전체 항목을 한 목록으로 보여준다
   const pageBoxes = TPL_MODE
@@ -312,7 +393,7 @@ function renderBoxes() {
     const idx = BOXES.indexOf(box);
     const mode = box.mode || "text";
     const li = document.createElement("li");
-    li.className = "box-item" + (idx === selected ? " sel" : "");
+    li.className = "box-item" + (isSel(idx) ? " sel" : "") + (idx === selected ? " primary" : "");
     li.dataset.boxidx = idx;
     li.innerHTML =
       `<div class="bi-top">` +
@@ -329,13 +410,24 @@ function renderBoxes() {
       `</div>`;
     const input = li.querySelector("input");
     input.addEventListener("input", () => { box.field = input.value; renderPage(); });
-    input.addEventListener("focus", () => { selected = idx; renderPage(); });
+    input.addEventListener("focus", () => {   // 이름을 고치려고 클릭 — 여러 선택 중이면 선택은 두고 대표만 바꾼다
+      if (!isSel(idx)) selectOnly(idx); else selected = idx;
+      renderPage();
+    });
     li.querySelector(".del").addEventListener("click", () => deleteBox(idx));
-    li.querySelectorAll(".mode").forEach((mb) => mb.addEventListener("click", () => { box.mode = mb.dataset.m; renderBoxes(); renderPage(); }));
+    li.querySelectorAll(".mode").forEach((mb) => mb.addEventListener("click", () => {
+      const targets = targetsOf(idx);            // 여러 개 선택 중이면 선택 전체의 유형을 한꺼번에
+      if (targets.length > 1) pushUndo();
+      targets.forEach((i) => (BOXES[i].mode = mb.dataset.m));
+      renderBoxes(); renderPage();
+    }));
     const atg = li.querySelector(".anchor-tg");
     if (atg) atg.addEventListener("click", () => cycleAnchor(idx));
     li.querySelector(".swap-lbl").addEventListener("click", () => swapLabel(idx));
-    li.addEventListener("click", (e) => { if (!["INPUT", "BUTTON"].includes(e.target.tagName) && !e.target.classList.contains("drag-h")) { selected = idx; renderPage(); renderBoxes(); } });
+    li.addEventListener("click", (e) => {
+      if (["INPUT", "BUTTON", "SELECT"].includes(e.target.tagName) || e.target.classList.contains("drag-h")) return;
+      pickSelect(idx, e); renderPage(); renderBoxes(); scrollCanvasToBox(idx);
+    });
     const h = li.querySelector(".drag-h");
     h.addEventListener("dragstart", () => { dragBoxIdx = idx; });
     li.addEventListener("dragover", (e) => { if (dragBoxIdx !== null) { e.preventDefault(); li.classList.add("over"); } });
@@ -343,19 +435,67 @@ function renderBoxes() {
     li.addEventListener("drop", (e) => { e.preventDefault(); li.classList.remove("over"); if (dragBoxIdx !== null) reorderBox(dragBoxIdx, idx); dragBoxIdx = null; });
     list.appendChild(li);
   });
+  list.scrollTop = keepScroll;
   scrollSelectedItemIntoView();  // 선택된 박스 항목으로 스크롤
 }
 
-// 선택된 박스에 해당하는 목록 항목을 보이도록 스크롤
+// 선택된 박스에 해당하는 목록 항목이 안 보이면 목록 가운데로 스크롤하고, 선택이 바뀐 직후엔 잠깐 깜빡여 눈에 띄게
+let lastSelObj = null;
 function scrollSelectedItemIntoView() {
-  if (selected == null) return;
+  if (selected == null) { lastSelObj = null; return; }
   const list = $("boxList");
   const el = list.querySelector(`.box-item[data-boxidx="${selected}"]`);
   if (!el) return;
-  const top = el.offsetTop - list.offsetTop;
-  if (top < list.scrollTop) list.scrollTop = top - 4;
-  else if (top + el.offsetHeight > list.scrollTop + list.clientHeight)
-    list.scrollTop = top + el.offsetHeight - list.clientHeight + 4;
+  const top = el.offsetTop, h = el.offsetHeight;   // .box-list 가 position:relative 라 offsetTop 은 목록 기준
+  if (top < list.scrollTop + 2 || top + h > list.scrollTop + list.clientHeight - 2)
+    list.scrollTop = Math.max(0, top - (list.clientHeight - h) / 2);
+  if (BOXES[selected] !== lastSelObj) {
+    lastSelObj = BOXES[selected];
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 900);
+  }
+}
+
+// 목록 항목을 클릭했을 때 — 캔버스에서 그 박스가 안 보이면 보이도록 스크롤
+function scrollCanvasToBox(idx) {
+  const b = BOXES[idx], host = $("pageHost");
+  const page = host && host.querySelector(".pdf-page");
+  const p = PAGES.find((x) => x.page_no === (b && b.page));
+  if (!b || !page || !p) return;
+  const sc = scaleOf(p), hr = host.getBoundingClientRect(), pr = page.getBoundingClientRect();
+  const x = pr.left - hr.left + host.scrollLeft + b.x0 * sc, y = pr.top - hr.top + host.scrollTop + b.y0 * sc;
+  const w = (b.x1 - b.x0) * sc, h = (b.y1 - b.y0) * sc;
+  if (y < host.scrollTop || y + h > host.scrollTop + host.clientHeight)
+    host.scrollTop = Math.max(0, y - (host.clientHeight - h) / 2);
+  if (x < host.scrollLeft || x + w > host.scrollLeft + host.clientWidth)
+    host.scrollLeft = Math.max(0, x - (host.clientWidth - w) / 2);
+}
+
+// 여러 개 선택됐을 때 목록 위 막대: 개수 · 한꺼번에 삭제 · 유형 바꾸기 · 라벨/위치 기준 · 선택 해제
+function renderSelBar() {
+  const bar = $("selBar"); if (!bar) return;
+  const idxs = selectedIdxs();
+  if (idxs.length < 2) { bar.hidden = true; bar.innerHTML = ""; return; }
+  bar.hidden = false;
+  bar.innerHTML = `<b>${idxs.length}개 선택</b>` +
+    `<button class="mini-btn" id="selDel" title="선택한 박스를 모두 지웁니다 (Delete 키 · Ctrl+Z 로 되돌리기)">🗑 선택 삭제</button>` +
+    `<select id="selMode" title="선택한 박스의 유형을 한꺼번에 바꿉니다"><option value="">유형 바꾸기…</option>` +
+      MODES.map(([m, l]) => `<option value="${m}">${l}</option>`).join("") + `</select>` +
+    `<button class="mini-btn" id="selAnchorOn" title="칸 이름(라벨)을 따라가 값을 찾도록 켭니다">🔗 라벨 기준</button>` +
+    `<button class="mini-btn" id="selAnchorOff" title="좌표(위치) 기준으로 값을 찾도록 바꿉니다">📍 위치 기준</button>` +
+    `<button class="mini-btn" id="selClear" title="선택 해제 (Esc)">선택 해제</button>`;
+  $("selDel").addEventListener("click", deleteSelected);
+  $("selMode").addEventListener("change", (e) => {
+    const m = e.target.value; if (!m) return;
+    pushUndo(); idxs.forEach((i) => (BOXES[i].mode = m)); renderBoxes(); renderPage();
+  });
+  $("selAnchorOn").addEventListener("click", () => {
+    pushUndo();
+    idxs.forEach((i) => { const b = BOXES[i]; if (b.anchor && b.anchor.label) { b.use_anchor = true; if (!b.anchor.relation) b.anchor.relation = "right"; } });
+    renderBoxes();
+  });
+  $("selAnchorOff").addEventListener("click", () => { pushUndo(); idxs.forEach((i) => (BOXES[i].use_anchor = false)); renderBoxes(); });
+  $("selClear").addEventListener("click", () => { clearSel(); renderPage(); renderBoxes(); });
 }
 let dragBoxIdx = null;
 function reorderBox(from, to) {
@@ -397,14 +537,31 @@ function cycleAnchor(idx) {
   const seq = ["right", "below", "off"];
   const cur = box.use_anchor ? (box.anchor.relation || "right") : "off";
   const next = seq[(seq.indexOf(cur) + 1) % seq.length];
-  if (next === "off") box.use_anchor = false;
-  else { box.use_anchor = true; box.anchor.relation = next; }
+  const targets = targetsOf(idx);           // 여러 개 선택 중이면 라벨이 있는 선택 전체를 같은 상태로
+  if (targets.length > 1) pushUndo();
+  targets.forEach((i) => {
+    const b = BOXES[i]; if (!b.anchor || !b.anchor.label) return;
+    if (next === "off") b.use_anchor = false;
+    else { b.use_anchor = true; b.anchor.relation = next; }
+  });
   renderBoxes();
 }
 function deleteBox(idx) {
+  const b = BOXES[idx]; if (!b) return;
+  pushUndo();
+  SEL.delete(b);
   BOXES.splice(idx, 1);
   if (selected === idx) selected = null; else if (selected > idx) selected--;
+  if (selAnchor === idx) selAnchor = null; else if (selAnchor > idx) selAnchor--;
   reindex(); renderPage(); renderBoxes();
+}
+// 선택한 박스 전부 삭제 (Delete 키 · 선택 막대) — Ctrl+Z 로 되돌릴 수 있다
+function deleteSelected() {
+  const idxs = selectedIdxs(); if (!idxs.length) return;
+  pushUndo();
+  const gone = new Set(idxs.map((i) => BOXES[i]));
+  BOXES = BOXES.filter((b) => !gone.has(b));
+  clearSel(); reindex(); renderPage(); renderBoxes();
 }
 function reindex() { [...BOXES].sort((a, b) => a.order - b.order).forEach((b, i) => (b.order = i + 1)); }
 
@@ -446,17 +603,25 @@ $("pageHost").addEventListener("wheel", (e) => {
   });
 })();
 
-// 키보드: Delete/Backspace 삭제, Esc 선택 해제
+// 키보드: Delete/Backspace 선택 삭제, Esc 선택 해제, Ctrl+A 이 쪽 전체 선택, Ctrl+Z 되돌리기
 document.addEventListener("keydown", (e) => {
   const tag = (document.activeElement && document.activeElement.tagName) || "";
-  if (tag === "INPUT" || tag === "TEXTAREA") return;  // 입력 중이면 무시
-  if (e.key === "Escape") { if (selected != null) { selected = null; renderPage(); renderBoxes(); } return; }
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;  // 입력 중이면 무시
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "z") { if (UNDO.length) { e.preventDefault(); undoBoxes(); } return; }
+  if (mod && e.key.toLowerCase() === "a") {
+    const seq = listOrder();
+    if (!seq.length || !$("main") || $("main").hidden) return;
+    e.preventDefault(); clearSel(); seq.forEach((b) => SEL.add(b)); selected = BOXES.indexOf(seq[seq.length - 1]);
+    renderPage(); renderBoxes(); return;
+  }
+  if (e.key === "Escape") { if (selected != null || SEL.size) { clearSel(); renderPage(); renderBoxes(); } return; }
   if (e.key !== "Delete" && e.key !== "Backspace") return;
-  if (selected != null && BOXES[selected]) { e.preventDefault(); deleteBox(selected); }
+  if (selectedIdxs().length) { e.preventDefault(); deleteSelected(); }
 });
 
 $("clearBtn").addEventListener("click", () => {
-  if (!BOXES.length || confirm("이 문서의 박스를 모두 지울까요?")) { BOXES = []; selected = null; renderPageNav(); renderPage(); renderBoxes(); }
+  if (!BOXES.length || confirm("이 문서의 박스를 모두 지울까요?")) { pushUndo(); BOXES = []; clearSel(); renderPageNav(); renderPage(); renderBoxes(); }
 });
 
 $("suggestBtn").addEventListener("click", async () => {
@@ -484,8 +649,9 @@ $("aiBtn").addEventListener("click", async () => {
     const r = await fetch("/api/pdf/ai_understand/" + DOC_ID, { method: "POST" });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
+    pushUndo();
     BOXES = (d.boxes || []).map((b, i) => ({ ...b, order: b.order ?? i + 1 }));
-    selected = null;
+    clearSel();
     renderPageNav(); renderPage(); renderBoxes();
     alert(`🤖 AI가 추출 항목 ${BOXES.length}개를 찾아 이름을 붙였습니다. 확인 후 필요하면 수정하세요.`);
   } catch (e) { alert("AI 자동 이해 실패:\n" + e.message); }
@@ -531,7 +697,7 @@ function renderTplList(names) {
 async function loadTemplate(name) {
   const d = await (await fetch("/api/designer/template?name=" + encodeURIComponent(name))).json();
   if (d.error) { alert(d.error); return; }
-  BOXES = (d.boxes || []).map((b) => ({ ...b })); selected = null;
+  BOXES = (d.boxes || []).map((b) => ({ ...b })); clearSel(); UNDO.length = 0;
   if (d.doc_id && d.pages && d.pages.length) {
     // 템플릿과 함께 저장된 양식 PDF가 있으면 캔버스에 그대로 보여준다
     DOC_ID = d.doc_id; PAGES = d.pages;
