@@ -386,6 +386,18 @@ def pdf_designer_page() -> FileResponse:
     return FileResponse(config.STATIC_DIR / "pdf_designer.html")
 
 
+@app.get("/extract")
+def extract_page() -> FileResponse:
+    """데이터 추출 관리 — 저장된 템플릿으로 조사표 파일 일괄 처리(템플릿 디자이너에서 분리)."""
+    return FileResponse(config.STATIC_DIR / "extract.html")
+
+
+@app.get("/entry")
+def entry_page() -> FileResponse:
+    """데이터 입력 관리 — 템플릿을 현장 입력용 디지털 양식으로 공유하고 기록을 모은다."""
+    return FileResponse(config.STATIC_DIR / "entry.html")
+
+
 def _unread_scan_pages(doc) -> int:
     """글자를 읽지 못한 스캔 쪽 수 — 글자 레이어가 없는데 OCR도 안 된 쪽(경량 도우미에서 글자 인식 기능을 아직 안 받음)."""
     return sum(1 for p in doc.pages if p.needs_ocr and not getattr(p, "ocr", False))

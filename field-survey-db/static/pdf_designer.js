@@ -54,7 +54,7 @@ function undoBoxes() {
   if (!UNDO.length) return;
   BOXES = JSON.parse(UNDO.pop()); clearSel(); renderPageNav(); renderPage(); renderBoxes();
 }
-let TPL_MODE = false;   // 양식 없이 템플릿만 불러온 상태(캔버스 없음, 일괄 처리 중심)
+let TPL_MODE = false;   // 양식 없이 템플릿만 불러온 상태(캔버스 없음)
 let activePage = 0;
 let zoomW = 700;            // 페이지 표시 너비(px) = 확대/축소 상태
 const ZOOM_MIN = 420, ZOOM_MAX = 1800, ZOOM_STEP = 1.25;
@@ -89,7 +89,7 @@ async function loadForm(file) {
     DOC_ID = data.doc_id; PAGES = data.pages;
     BOXES = keepBoxes || data.boxes.map((b, i) => ({ ...b, order: b.order ?? i + 1 }));
     exitTplMode();
-    // 설문지(문항 번호 목록·척도표)로 인식되면: 칸 박스 없이 안내 배너 — 4번에서 바로 처리.
+    // 설문지(문항 번호 목록·척도표)로 인식되면: 칸 박스 없이 안내 배너 — 데이터 추출 관리에서 바로 처리.
     // 인식된 문항은 문서 위에 점선 상자로, 오른쪽 목록에 열 이름으로 보여 준다.
     if (data.survey) {
       const s = data.survey;
@@ -163,7 +163,7 @@ async function deletePage(pno) {
     sortBoxesByPosition();
     if (activePage >= PAGES.length) activePage = PAGES.length - 1;
     clearSel();
-    renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
+    renderPageNav(); renderPage(); renderBoxes();
   } catch (e) { alert("페이지 삭제 실패: " + e.message); }
   finally { hideOverlay(); }
 }
@@ -180,7 +180,7 @@ async function addPagesFile(file) {
     const start = Math.max(0, ...BOXES.map((b) => b.order || 0));
     (d.new_boxes || []).forEach((b, i) => BOXES.push({ ...b, order: start + i + 1 }));
     activePage = d.first_new_page; clearSel();
-    renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
+    renderPageNav(); renderPage(); renderBoxes();
   } catch (e) { alert("페이지 추가 실패: " + e.message); }
   finally { hideOverlay(); }
 }
@@ -380,7 +380,7 @@ function renderBoxes() {
   if (!pageBoxes.length) {
     const sv = SURVEY.filter((it) => it.page === page);
     if (sv.length) {
-      // 설문지: 인식된 문항을 열 이름으로 보여 준다(편집 불가 — 4번에서 그대로 열이 됨)
+      // 설문지: 인식된 문항을 열 이름으로 보여 준다(편집 불가 — 데이터 추출 관리에서 그대로 열이 됨)
       list.innerHTML = `<li class="empty-hint">📋 설문지 문항 ${sv.length}개 인식 (엑셀 열 이름)</li>` +
         sv.map((it) => `<li class="survey-item"><span class="sq">${it.qid}</span>` +
           `<span class="st">${(it.text || it.key).replace(/</g, "&lt;")}</span>` +
@@ -670,7 +670,7 @@ $("saveBtn").addEventListener("click", async () => {
   // 같은 양식을 다른 이름으로 이미 저장해 둔 경우 — 일괄 처리는 방금 저장한 것을 우선 쓰지만 예전 것은 지우는 게 안전
   if (d.ok && d.duplicates && d.duplicates.length) {
     $("saveMsg").textContent += ` · ⚠️ 같은 양식의 템플릿 ${d.duplicates.map((n) => `'${n}'`).join(", ")}이(가) 이미 있습니다.`
-      + ` 일괄 처리는 방금 저장한 '${name}'을 씁니다. 예전 것은 3번 목록에서 ✕로 지우세요.`;
+      + ` 일괄 처리는 방금 저장한 '${name}'을 씁니다. 예전 것은 3번 목록에서 ✕로 지우세요. (데이터 추출 관리도 방금 저장한 것을 씁니다)`;
   }
   if (d.ok) loadTemplates();
 });
@@ -715,7 +715,7 @@ async function loadTemplate(name) {
     document.querySelector(".grid-pane").style.display = "none";
   }
   $("main").hidden = false;
-  $("tplName").value = name; renderPageNav(); renderPage(); renderBoxes(); fillFieldSelect();
+  $("tplName").value = name; renderPageNav(); renderPage(); renderBoxes();
   if (!TPL_MODE) fitZoom();
   $("saveMsg").textContent = `📄 '${name}' 불러옴 (${BOXES.length}개${d.doc_id ? " · 양식 PDF 표시" : ""})`;
 }
@@ -724,348 +724,6 @@ async function deleteTemplate(name) {
   const d = await (await fetch("/api/designer/template/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })).json();
   renderTplList(d.templates || []);
 }
-
-let LAST_APPLY_FILES = null;   // 확인 절차(버려진 페이지 재배정)에서 같은 파일로 다시 처리
-async function runApply(files, opts) {
-  if (!files || !files.length) { alert("처리할 파일을 선택하세요."); return; }
-  LAST_APPLY_FILES = files;
-  reindex();
-  // 실제 하는 일만 정확히 안내: PDF는 변환 없이 바로 읽고, 한글 파일만 변환을 거친다
-  const hasHwp = [...files].some((f) => /\.hwpx?$/i.test(f.name || ""));
-  showOverlay(hasHwp
-    ? "추출하는 중… (한글 파일은 PDF로 변환 후 처리 — 시간이 걸릴 수 있어요)"
-    : "추출하는 중…");
-  const fd = new FormData(); fd.append("boxes", JSON.stringify(BOXES));
-  for (const f of files) fd.append("files", f);
-  // 기본 동작: 양식 자동 대조 + 제목별 시트(제목 없으면 시트 하나). 서버가 보고서 양식(5번) 사용 시 기존 경로로 처리.
-  fd.append("sheet_name_field", "__group_title__");
-  fd.append("auto_classify", "1");
-  if (DOC_ID) fd.append("doc_id", DOC_ID);   // 현재 양식의 제목 텍스트(분류 기준)용
-  if (opts && opts.overrides) fd.append("assign_overrides", JSON.stringify(opts.overrides));
-  // 보고서 양식은 4번에서 쓰지 않는다 — 5번 '보고서 양식으로 정리'가 결과를 채운다
-  try {
-    const d = await (await fetch("/api/pdf/apply", { method: "POST", body: fd })).json();
-    if (d.error) {
-      // 스캔 문서인데 글자 인식 기능이 없어 아무것도 못 읽은 경우 — 경고창 대신 이유와 '받기'를 결과 자리에
-      if (d.ocr_missing) { $("applyResult").innerHTML = ""; renderOcrGap(d); return; }
-      throw new Error(d.error);
-    }
-    renderApply(d);
-    // 5번(보고서)에서 실행했을 때도 결과가 바로 보이도록 스크롤
-    if (opts && opts.scrollToResult) {
-      const el = $("applyResult");
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  } catch (e) { alert("추출 실패: " + e.message); }
-  finally { hideOverlay(); }
-}
-
-$("applyBtn").addEventListener("click", () => runApply($("applyInput").files));
-
-// 5번: 4번 일괄 처리 '결과'를 보고서 양식에 채워 정리 → 다운로드 (재추출 없음)
-$("rptGenBtn").addEventListener("click", async () => {
-  if (!REPORT.report_id) { alert("먼저 보고서 양식을 올리거나 AI 초안을 만드세요."); return; }
-  showOverlay("보고서 양식으로 정리하는 중…");
-  try {
-    const d = await (await fetch("/api/report/generate", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report_id: REPORT.report_id, edits: REPORT.edits }),
-    })).json();
-    if (d.error) throw new Error(d.error);
-    $("rptGenMsg").textContent = `✅ ${d.rows}행을 양식에 채웠습니다 — 아래에서 다운로드하세요.`;
-    $("rptGenDl").hidden = false;
-  } catch (e) { alert("보고서 정리 실패: " + e.message); }
-  finally { hideOverlay(); }
-});
-// ---------- 보고서 양식 편집기 ----------
-let REPORT = { report_id: null, cells: [], nrows: 0, ncols: 0, edits: {}, focusCell: null };
-
-function mountReport(d) {
-  REPORT = { report_id: d.report_id, cells: d.cells, nrows: d.nrows, ncols: d.ncols, edits: {}, focusCell: null };
-  $("reportMsg").textContent = `📋 '${d.filename}' — ${d.nrows}행 × ${d.ncols}열` +
-    (d.placeholders && d.placeholders.length ? ` · 자리표시자: ${d.placeholders.slice(0, 12).join(", ")}${d.placeholders.length > 12 ? " …" : ""}` : "");
-  $("reportEditor").hidden = false;
-  $("rptRunRow").hidden = false;   // 양식 장착 즉시, 5번에서 바로 일괄 처리 가능
-  fillFieldSelect();
-  renderReportGrid();
-}
-
-$("reportInput").addEventListener("change", async () => {
-  const f = $("reportInput").files[0];
-  if (!f) return;
-  showOverlay("양식을 불러오는 중…");
-  const fd = new FormData(); fd.append("file", f);
-  try {
-    const d = await (await fetch("/api/report/load", { method: "POST", body: fd })).json();
-    if (d.error) throw new Error(d.error);
-    $("aiDraftDl").hidden = true;   // 직접 올린 양식으로 교체됨
-    mountReport(d);
-  } catch (e) { alert("양식 불러오기 실패: " + e.message); }
-  finally { hideOverlay(); }
-});
-
-// AI 보고서 양식 초안: 만들기 → 편집기 장착 + 다운로드 링크 → (엑셀 편집 후 재업로드)
-$("aiDraftBtn").addEventListener("click", async () => {
-  if (!BOXES.length) { alert("추출 항목이 없습니다. 양식이나 템플릿을 먼저 불러오세요."); return; }
-  showOverlay("🤖 AI가 보고서 양식 초안을 설계하는 중…");
-  try {
-    const r = await fetch("/api/report/ai_draft", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ doc_id: DOC_ID, boxes: BOXES }),
-    });
-    const d = await r.json();
-    if (d.error) throw new Error(d.error);
-    mountReport(d);
-    const dl = $("aiDraftDl");
-    dl.href = d.download_url; dl.hidden = false;
-    $("reportMsg").textContent = `🤖 AI 초안 장착됨 — 아래 표에서 바로 고치거나, ` +
-      `초안을 다운로드해 엑셀에서 편집한 뒤 다시 올리세요. (${d.nrows}행 × ${d.ncols}열)`;
-  } catch (e) { alert("AI 초안 생성 실패:\n" + e.message); }
-  finally { hideOverlay(); }
-});
-
-function colLetter(n) { let s = ""; n++; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
-
-function renderReportGrid() {
-  const t = $("rptGrid"); t.innerHTML = "";
-  // 헤더(열문자)
-  let head = "<thead><tr><th></th>";
-  for (let c = 0; c < REPORT.ncols; c++) head += `<th>${colLetter(c)}</th>`;
-  head += "</tr></thead>";
-  let body = "<tbody>";
-  for (let r = 0; r < REPORT.nrows; r++) {
-    body += `<tr><th>${r + 1}</th>`;
-    for (let c = 0; c < REPORT.ncols; c++) {
-      const v = (REPORT.cells[r] && REPORT.cells[r][c]) || "";
-      const cls = v.startsWith("=") ? "formula" : (v.includes("{") ? "ph" : "");
-      body += `<td><input class="${cls}" data-r="${r + 1}" data-c="${c + 1}" value="${v.replace(/"/g, "&quot;")}" /></td>`;
-    }
-    body += "</tr>";
-  }
-  body += "</tbody>";
-  t.innerHTML = head + body;
-  t.querySelectorAll("input").forEach((inp) => {
-    inp.addEventListener("focus", () => { REPORT.focusCell = inp; });
-    inp.addEventListener("input", () => {
-      const key = `${inp.dataset.r},${inp.dataset.c}`;
-      REPORT.edits[key] = inp.value;
-      inp.className = inp.value.startsWith("=") ? "formula" : (inp.value.includes("{") ? "ph" : "");
-    });
-  });
-}
-
-function fillFieldSelect() {
-  const names = [...new Set(BOXES.map((b) => b.field).filter(Boolean))].sort();
-  const opts = names.map((n) => `<option value="${n}">${n}</option>`).join("");
-  $("rptFieldSel").innerHTML = `<option value="">— 추출 항목 —</option>` + opts;
-}
-
-$("rptInsertBtn").addEventListener("click", () => {
-  const name = $("rptFieldSel").value;
-  if (!name) { alert("삽입할 추출 항목을 선택하세요."); return; }
-  const inp = REPORT.focusCell;
-  if (!inp) { alert("먼저 표에서 넣을 칸을 클릭하세요."); return; }
-  const idx = (($("rptIdxInput") || {}).value || "").trim();
-  const token = (idx && /^\d+$/.test(idx)) ? `{${name}#${idx}}` : `{${name}}`;
-  inp.value = (inp.value || "") + token;
-  inp.dispatchEvent(new Event("input"));
-  inp.focus();
-});
-
-// ---------- SCE(수생태계 종적 연속성 평가) 연계 — 선택 기능 ----------
-// 4번 결과를 SCE 입력 양식으로 정리(서식 3장을 구조물별로 합치고 형태·낙차유무 판정, 검수 메모 포함).
-// 환경설정에서 켠 경우에만 버튼이 보인다(끄면 아무것도 표시하지 않음).
-let SCE_STATUS = { enabled: false, available: false, error: "" };
-(async () => {
-  try { SCE_STATUS = await (await fetch("/api/sce/status")).json(); } catch (e) { /* 무시 */ }
-})();
-
-function sceButtons() {
-  if (!SCE_STATUS.enabled) return "";          // 꺼짐 — 버튼 없음
-  if (!SCE_STATUS.available) {                 // 켰지만 SCE를 못 찾음 — 설정으로 안내
-    return `<div id="sceRow" style="margin-top:10px;padding:10px 12px;background:#fff8e6;border:1px solid #ffe08a;border-radius:10px;font-size:13px">`
-      + `⚠️ <b>SCE 연계</b>를 켰지만 SCE 프로그램을 찾지 못했습니다 — `
-      + `<a href="/settings" target="_blank">환경설정</a>에서 SCE 폴더를 지정하세요.`
-      + `<div class="muted" style="margin-top:4px">${(SCE_STATUS.error || "").replace(/</g, "&lt;").slice(0, 200)}</div></div>`;
-  }
-  return `<div id="sceRow" style="margin-top:10px;padding:10px 12px;background:#f1f3f5;border-radius:10px">`
-    + `<span style="font-size:13px"><b>🐟 종적 연속성 평가(SCE) 연계</b> — 인공구조물 1·2, 어도, 어류 조사표를 구조물별로 합쳐 SCE 입력 양식으로 정리합니다.</span><br/>`
-    + `<button class="mini-btn" id="sceExportBtn" style="margin-top:6px">📋 SCE 입력양식 내보내기</button> `
-    + `<button class="mini-btn" id="sceEvalBtn" style="margin-top:6px">📈 SCE 평가까지 실행 (zip)</button>`
-    + `<div id="sceResult" style="margin-top:6px"></div></div>`;
-}
-function bindSce() {
-  const a = $("sceExportBtn"), b = $("sceEvalBtn");
-  if (a) a.addEventListener("click", () => sceExport(false));
-  if (b) b.addEventListener("click", () => sceExport(true));
-}
-async function sceExport(evaluate) {
-  const river = prompt("하천명 (비우면 조사표에서 자동으로 찾습니다)", "");
-  if (river === null) return;
-  let length_km = null;
-  if (evaluate) {
-    const s = prompt("하천연장(km) — 하천 단위 평가에 필요합니다. 모르면 비워 두세요(구조물 단위 평가만 수행).", "");
-    if (s === null) return;
-    if (s.trim()) length_km = parseFloat(s);
-  }
-  const box = $("sceResult");
-  showOverlay(evaluate ? "SCE 입력 양식 변환 + 평가 실행 중…" : "SCE 입력 양식으로 변환하는 중…");
-  try {
-    const d = await (await fetch("/api/sce/export", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ river, length_km, evaluate }),
-    })).json();
-    if (d.error) throw new Error(d.error);
-    let html = `<p style="margin:4px 0;font-size:13px">✅ 하천 <b>${d.river || "(미확인)"}</b> · 구조물 <b>${d.n_struct}</b>개 · 조사 ${d.n_surveys}건 · 어류 ${d.n_fish}행 · 검수 항목 <b style="color:#b0870b">${d.n_notes}</b>건</p>`;
-    if (d.evaluation) {
-      const ev = d.evaluation, c = ev.counts || {};
-      html += `<p style="margin:4px 0;font-size:13px">📈 하천 단위: <b>${ev.river_rating}</b>`
-        + (ev.secured_km != null ? ` (확보구간 ${ev.secured_km} km, ${ev.secured_pct != null ? ev.secured_pct.toFixed(1) : "-"} %)` : "")
-        + ` · 구조물: 연속 ${c["연속"] || 0} / 훼손 ${c["훼손"] || 0} / 단절 ${c["단절"] || 0} / 없음 ${c["없음"] || 0}</p>`;
-      if (ev.warnings && ev.warnings.length) html += `<p class="muted">⚠️ ${ev.warnings.slice(0, 5).join(" · ")}</p>`;
-    }
-    if (d.evaluation_error) html += `<p class="muted">⚠️ ${d.evaluation_error}</p>`;
-    html += `<a class="draft-dl" href="${d.download}">📥 ${d.filename}</a>`;
-    if (d.notes && d.notes.length) {
-      html += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px">🔎 검수 항목 ${d.n_notes}건 보기 (엑셀 '연계검수' 시트에도 있음)</summary>`
-        + `<table class="apply-table"><thead><tr><th>구조물</th><th>차수</th><th>확인 사항</th></tr></thead><tbody>`
-        + d.notes.slice(0, 60).map((n) => `<tr><td>${n.structure}</td><td>${n.round}</td><td>${n.message}</td></tr>`).join("")
-        + `</tbody></table></details>`;
-    }
-    html += `<p class="muted" style="margin-top:6px">다음 단계: 엑셀의 <b>구조물목록</b> 시트에 상류→하류 순서와 종점거리 Li(km), <b>하천정보</b>에 하천연장을 입력한 뒤 SCE에서 평가를 실행하세요.</p>`;
-    box.innerHTML = html;
-  } catch (e) { box.innerHTML = `<p class="muted">❌ ${e.message}</p>`; }
-  finally { hideOverlay(); }
-}
-
-function renderApplyAuto(d) {
-  let html = `<p class="muted">✅ ${d.ok_count}행 처리 · <b>시트 ${d.forms}개</b>로 정리`
-    + (d.failed && d.failed.length ? ` · ⚠️ ${d.failed.length}개 미분류/실패` : "") + `</p>`;
-  if ((d.ok_count || 0) > 0) {
-    html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
-    html += sceButtons();
-  } else {
-    html += `<p class="muted">추출된 행이 없습니다 — 아래 '버려진 페이지 확인'에서 처리 방법을 정하거나, 해당 양식을 템플릿에 추가하세요.</p>`;
-  }
-  html += `<p style="margin:10px 0 4px;font-size:13px">📊 이상치 <b style="color:#e8590c">${d.outlier_count || 0}건</b>`
-    + ` <span class="muted">— 자세한 해석은 아래 6번 ‘AI 결과 해석’</span></p>`;
-  html += `<table class="apply-table"><thead><tr><th>시트(제목)</th><th>행 수</th><th>이상치</th></tr></thead><tbody>`;
-  (d.by_form || []).forEach((g) => {
-    html += `<tr><td>${g.form}</td><td>${g.count}</td><td>${g.outliers ? `<b style="color:#e8590c">${g.outliers}</b>` : 0}</td></tr>`;
-  });
-  html += `</tbody></table>`;
-  if (d.match_info && d.match_info.length) {
-    html += `<p class="muted" style="margin-top:8px">🔎 분류 결과: `
-      + d.match_info.map((m) => `${m.name} → <b>${m.template}</b>` + ((m.bundles || 1) > 1 ? `×${m.bundles}` : ``)).join(", ") + `</p>`;
-  }
-  if (d.discarded && d.discarded.length) {
-    html += `<p class="muted">🗑 버림 — 맞는 양식(템플릿)이 없는 페이지: `
-      + d.discarded.map((x) => `<b>${x.title}</b> ${x.pages}쪽`).join(", ")
-      + ` <span class="muted">(이 양식도 추출하려면 템플릿에 추가하세요)</span></p>`;
-    // 확인 절차 — 버려진 페이지를 어떻게 처리할지 사용자가 확정(기본: 버림)
-    const uopts = (d.units || []).map((u) => `<option value="${u.key}">${u.label}</option>`).join("");
-    html += `<div class="discard-confirm"><p style="margin:10px 0 6px;font-size:13px"><b>🔎 버려진 페이지 확인</b> — 처리 방법을 정해 주세요 (기본: 버림)</p>`
-      + `<table class="apply-table"><thead><tr><th>페이지 제목</th><th>쪽수</th><th>처리</th></tr></thead><tbody>`
-      + d.discarded.map((x) => `<tr><td>${x.title}</td><td>${x.pages}</td><td><select class="dc-sel" data-title="${encodeURIComponent(x.title)}">`
-        + `<option value="__discard__">버림 (기본)</option>${uopts}</select></td></tr>`).join("")
-      + `</tbody></table><button class="mini-btn" id="dcApplyBtn" style="margin-top:8px">✔ 확인 후 다시 처리</button></div>`;
-  }
-  if (d.failed && d.failed.length) {
-    html += `<p class="muted">⚠️ 미분류/실패: ` + d.failed.map((f) => `${f.name} (${f.error})`).join(", ") + `</p>`;
-  }
-  $("applyResult").innerHTML = html;
-  renderOcrGap(d);
-  bindSce();
-  const dcBtn = $("dcApplyBtn");
-  if (dcBtn) dcBtn.addEventListener("click", () => {
-    const overrides = {};
-    document.querySelectorAll(".dc-sel").forEach((s) => {
-      overrides[decodeURIComponent(s.dataset.title)] = s.value;
-    });
-    const changed = Object.values(overrides).some((v) => v !== "__discard__");
-    if (!changed) { alert("모두 '버림'으로 확정되었습니다. (결과 엑셀은 그대로 사용하시면 됩니다)"); return; }
-    if (!LAST_APPLY_FILES) { alert("다시 처리할 파일이 없습니다. 파일을 다시 선택해 주세요."); return; }
-    runApply(LAST_APPLY_FILES, { overrides, scrollToResult: true });
-  });
-}
-
-function renderApply(d) {
-  if (d.auto_classify) return renderApplyAuto(d);
-  let html = `<p class="muted">✅ ${d.ok_count}개 처리` + (d.failed.length ? ` · ⚠️ ${d.failed.length}개 실패` : "") + `</p>`;
-  if (d.report_used) html += `<p class="muted">📋 보고서 양식 반영됨 (요약표 + 파일별 보고서 시트)</p>`;
-  if (d.match_info && d.match_info.length) {
-    const mi = d.match_info;
-    const multi = mi.filter((m) => (m.bundles || 1) > 1);
-    if (multi.length) {
-      html += `<p class="muted">📚 묶음 인식: ` +
-        multi.map((m) => `${m.name} → <b>${m.bundles}묶음(${m.bundles}행)</b>`).join(", ") + `</p>`;
-    }
-    const anyPartial = mi.some((m) => m.matched < m.template_pages);
-    if (anyPartial) {
-      html += `<p class="muted">📄 페이지 자동 매칭: ` +
-        mi.map((m) => `${m.name}(${m.input_pages}장 중 ${m.matched}개 서식 매칭)`).join(", ") + `</p>`;
-    }
-  }
-  html += `<button class="btn btn-download" onclick="window.location.href='/api/pdf/download'">📥 엑셀 다운로드</button>`;
-  html += sceButtons();
-  // 빈칸·이상치 요약(#3)
-  const OL = d.outliers || [];
-  const totalCells = d.rows.length * d.fields.length;
-  let blanks = 0;
-  d.rows.forEach((row) => d.fields.forEach((f) => { if (!String(row[f] || "").trim()) blanks++; }));
-  html += `<p style="margin:10px 0 4px;font-size:13px">📊 <b>${d.rows.length}행 × ${d.fields.length}항목 = ${totalCells}칸</b> 중 · `
-    + `빈칸 <b style="color:#b0870b">${blanks}개</b> · 이상치 <b style="color:#e8590c">${d.outlier_count || 0}건</b>`
-    + (d.outlier_count ? ` <span class="muted">(주황 칸 확인)</span>` : ``)
-    + ` <span class="muted">— 자세한 해석은 아래 6번 ‘AI 결과 해석’</span></p>`;
-  html += `<div style="overflow:auto"><table class="apply-table"><thead><tr><th>파일</th>` + d.fields.map((f) => `<th>${f}</th>`).join("") + `</tr></thead><tbody>`;
-  d.rows.forEach((row, i) => {
-    const ol = OL[i] || {};
-    html += `<tr><td>${row["_파일명"] || ""}</td>` + d.fields.map((f) => {
-      const raw = row[f] || "";
-      const v = raw.startsWith("__IMG__:") ? "🖼 이미지" : raw.slice(0, 18);
-      return ol[f]
-        ? `<td style="background:#fff0e0;border:1px solid #ff922b" title="${ol[f]}">⚠️ ${v}</td>`
-        : `<td>${v}</td>`;
-    }).join("") + `</tr>`;
-  });
-  html += `</tbody></table></div>`; $("applyResult").innerHTML = html;
-  renderOcrGap(d);
-  bindSce();
-}
-
-// 일괄 처리 결과에 '글자를 못 읽은 스캔 쪽'이 있으면 결과 맨 위에 이유와 받기 버튼을 붙인다.
-// (경량 도우미에서 글자 인식 기능을 아직 안 받았을 때 — 빈 행만 조용히 내려가지 않게)
-function renderOcrGap(d) {
-  if (!d.ocr_missing) return;
-  const box = document.createElement("div");
-  box.className = "env-warn";
-  box.style.marginTop = "0";
-  const files = (d.ocr_gap || []).map((g) => `${g.name}(${g.pages}/${g.total}쪽)`).join(", ");
-  const s = d.ocr_setup || {};
-  if (s.ready || s.bundled) {
-    box.append(`⚠️ 스캔(사진) 쪽의 글자를 읽지 못했습니다: ${files}. 글자 인식 엔진을 불러오지 못한 것 같습니다 — `);
-    const a = document.createElement("a"); a.href = "/system"; a.target = "_blank"; a.textContent = "시스템 점검";
-    box.append(a, "에서 확인하거나 도우미를 다시 켜 주세요.");
-  } else {
-    box.append(`⚠️ 스캔(사진) 쪽의 글자를 읽지 못해 값이 비었습니다: ${files}. `);
-    renderOcrSetup(box, s, { afterDone: "받기가 끝나면 ‘추출 + 엑셀 만들기’를 다시 눌러 주세요." });
-  }
-  $("applyResult").prepend(box);
-}
-
-async function pdfAnalyze() {
-  const btn = $("pdfAnalyzeBtn"), panel = $("pdfAnalysis"), old = btn.textContent;
-  btn.disabled = true; btn.textContent = "분석 중…";
-  panel.style.display = "block"; panel.textContent = "⏳ AI가 추출된 데이터를 분석하는 중…";
-  try {
-    const d = await (await fetch("/api/pdf/analyze", { method: "POST" })).json();
-    if (d.error) { panel.textContent = "오류: " + d.error; return; }
-    const esc = (d.analysis || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    panel.innerHTML = esc.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
-  } catch (e) { panel.textContent = "분석 실패: " + e; }
-  finally { btn.disabled = false; btn.textContent = old; }
-}
-$("pdfAnalyzeBtn").addEventListener("click", pdfAnalyze);   // 6. AI 결과 해석(정적 버튼)
 
 function showOverlay(m) { $("overlayMsg").textContent = m || "처리 중…"; $("overlay").hidden = false; }
 function hideOverlay() { $("overlay").hidden = true; }
@@ -1106,76 +764,6 @@ loadTemplates();
       const badge = document.querySelector(".security-badge");
       badge.parentNode.insertBefore(el, badge.nextSibling);
     }
-  } catch (e) {}
-})();
-
-// 스캔(사진) 문서인데 글자 인식 기능이 없을 때(경량 도우미) — 받기 안내와 진행 표시.
-// 받는 곳은 공개 저장소(PyPI·PyTorch·EasyOCR)이고, 파일은 이 컴퓨터에만 저장된다.
-function showOcrSetup(s) {
-  let el = document.getElementById("ocrSetup");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "ocrSetup"; el.className = "env-warn";
-    const badge = document.querySelector(".security-badge");
-    badge.parentNode.insertBefore(el, badge.nextSibling);
-  }
-  el.textContent = "";
-  renderOcrSetup(el, s, { intro: true, afterDone: "스캔 양식을 다시 올리면 칸 글자를 읽습니다." });
-}
-
-// 받기 안내·진행·완료를 주어진 요소 안에 그린다(양식 업로드 배너·일괄 처리 결과에서 공용).
-// 받는 곳은 공개 저장소(PyPI·PyTorch·EasyOCR)이고, 파일은 이 컴퓨터에만 저장된다.
-function renderOcrSetup(el, s, opts) {
-  opts = opts || {};
-  const fmt = (b) => b >= 1e9 ? (b / 1e9).toFixed(1) + "GB" : Math.max(1, Math.round(b / 1e6)) + "MB";
-  const job = s.job || {};
-  const v = s.recommended || "cpu";
-  const redraw = (next) => { el.textContent = ""; renderOcrSetup(el, next, opts); };
-  if (job.running) {
-    const pct = job.total ? Math.min(100, job.done / job.total * 100) : 0;
-    el.append(`⏬ 글자 인식 기능 받는 중… ${pct.toFixed(0)}% (${fmt(job.done)} / ${fmt(job.total)}) — 받는 동안 다른 작업을 해도 됩니다.`);
-    setTimeout(async () => {
-      try { redraw(await (await fetch("/api/ocr/runtime")).json()); } catch (e) {}
-    }, 1500);
-    return;
-  }
-  if (s.ready) {
-    el.append("✅ 글자 인식 기능을 받았습니다 — " + (opts.afterDone || ""));
-    return;
-  }
-  if (opts.intro) {
-    const b = document.createElement("b"); b.textContent = "글자 인식 기능";
-    el.append("📷 스캔(사진) PDF라 글자를 읽으려면 ", b, "이 필요합니다. ");
-  }
-  el.append("공개 저장소(PyPI·PyTorch·EasyOCR)에서 받아 이 컴퓨터에만 둡니다. ");
-  const get = document.createElement("button");
-  get.type = "button"; get.className = "btn";
-  get.textContent = `받기 (${v === "gpu" ? "GPU 가속판, " : ""}${fmt((s.sizes || {})[v] || 0)})`;
-  get.addEventListener("click", async () => {
-    get.disabled = true;
-    const d = await (await fetch("/api/ocr/runtime/install", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ variant: v }),
-    })).json();
-    if (d.error) { alert(d.error); get.disabled = false; return; }
-    redraw(d);
-  });
-  const more = document.createElement("a");
-  more.href = "/settings#ocr"; more.target = "_blank"; more.textContent = "자세히";
-  el.append(get, " ", more);
-  if (job.error) el.append(document.createElement("br"), "⚠️ 지난번 받기 실패: " + job.error);
-}
-
-// 경량 도우미에서 글자 인식 기능을 아직 안 받았으면 4번(일괄 처리) 설명 아래에 미리 알려 준다
-(async () => {
-  try {
-    const s = await (await fetch("/api/ocr/runtime")).json();
-    if (s.bundled || s.ready) return;
-    const p = document.createElement("p");
-    p.className = "muted"; p.style.margin = "0 0 8px";
-    p.append("📷 스캔(사진) 문서도 처리하려면 글자 인식 기능이 필요합니다 — ");
-    const a = document.createElement("a"); a.href = "/settings#ocr"; a.target = "_blank"; a.textContent = "환경설정에서 받기";
-    p.append(a, ". 글자 있는 PDF·한글 파일은 지금도 됩니다.");
-    $("applyInput").parentNode.insertBefore(p, $("applyInput"));
   } catch (e) {}
 })();
 

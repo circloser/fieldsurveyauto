@@ -21,8 +21,11 @@
       <nav class="tabbar">
         <a href="/">홈</a>
         <a class="on" href="/pdf-designer">템플릿 디자이너</a>
-        <a href="/ai">AI 자동 추출</a>
+        <a href="/entry">데이터 입력 관리</a>
+        <a href="/extract">데이터 추출 관리</a>
+        <a href="/ai">AI 데이터 추출·분석</a>
         <a href="/settings">환경설정</a>
+        <a href="/system">시스템 점검</a>
       </nav>
     </header>
 
@@ -56,12 +59,12 @@
     <div class="designer-main" id="main" hidden>
       <div class="tpl-banner" id="surveyBanner" hidden>
         <div class="tpl-banner-msg">📋 <b>설문지로 인식됨</b> — <span id="surveyBannerInfo"></span>
-          <span class="muted">템플릿을 저장하지 않아도 됩니다. 4번 일괄 처리에 설문지 파일들을 올리면 문항별 열로 자동 추출됩니다.</span>
+          <span class="muted">템플릿을 저장하지 않아도 됩니다. 데이터 추출 관리에 설문지 파일들을 올리면 문항별 열로 자동 추출됩니다.</span>
         </div>
       </div>
       <div class="tpl-banner" id="tplBanner" hidden>
         <div class="tpl-banner-msg">
-          📄 <b id="tplBannerName">템플릿</b> 을 불러왔습니다 — 아래 <b>‘일괄 처리’</b>에 파일을 올려 추출하세요.
+          📄 <b id="tplBannerName">템플릿</b> 을 불러왔습니다 — 박스를 고친 뒤 저장하고, <a href="/extract"><b>데이터 추출 관리</b></a>에서 파일을 올려 추출하세요.
           <span class="muted">박스를 수정하려면 기준 양식을 올리세요.</span>
         </div>
         <div class="tpl-banner-actions">
@@ -115,54 +118,18 @@
           <ul class="tpl-list" id="tplList"></ul>
         </div>
 
-        <div class="step-card">
-          <h2>4. 일괄 처리</h2>
-          <p class="desc">파일들을 선택하고 버튼만 누르세요 — 양식을 알아보고 <b>제목별 시트</b>로 정리합니다. <b>설문지</b>(문항 번호 목록·척도표)는 템플릿 없이 자동 인식하고, 이상한 값은 표시해 드립니다.</p>
-          <input type="file" id="applyInput" accept=".hwpx,.hwp,.pdf" multiple />
-          <button class="btn btn-download" id="applyBtn">추출 + 엑셀 만들기</button>
-          <div id="applyResult"></div>
-        </div>
-
-        <div class="step-card">
-          <h2>5. 보고서 출력 양식 <span class="pill">선택</span></h2>
-          <p class="desc">4번 실행 후 — 엑셀 양식(.xlsx)을 올리고 <b>‘보고서로 정리’</b>를 누르면 결과가 양식에 채워집니다. 수식은 보존됩니다.</p>
-          <p class="desc" style="background:#f1f3f5;border-radius:8px;padding:8px 10px">
-            • <b>{항목}</b> — 건마다 개별 시트 · <b>{항목#2}</b> — 종합표에서 2번째 건 참조
-          </p>
-          <div class="rpt-draft-row">
-            <button class="mini-btn" id="aiDraftBtn" title="추출 항목을 보고 AI가 보고서 양식 초안(xlsx)을 만들어 줍니다. 다운로드해 엑셀에서 편집한 뒤 다시 올릴 수 있습니다.">🤖 AI 초안 만들기</button>
-            <a id="aiDraftDl" class="draft-dl" hidden>📥 초안 다운로드</a>
-          </div>
-          <input type="file" id="reportInput" accept=".xlsx" />
-          <p class="muted" id="reportMsg"></p>
-          <div id="reportEditor" hidden>
-            <div class="rpt-toolbar">
-              <span class="muted">미리보기 — 셀 클릭 후 삽입:</span>
-              <select id="rptFieldSel"><option value="">— 추출 항목 —</option></select>
-              <input type="number" id="rptIdxInput" min="1" placeholder="순번(선택)" style="width:96px"
-                     title="비우면 개별 시트용 {항목}, 숫자를 넣으면 그 순번 데이터를 참조하는 {항목#N} 삽입(종합보고서)" />
-              <button class="mini-btn" id="rptInsertBtn">삽입</button>
-            </div>
-            <div class="rpt-scroll"><table class="rpt-grid" id="rptGrid"></table></div>
-          </div>
-          <div id="rptRunRow" hidden>
-            <button class="btn btn-download" id="rptGenBtn">📊 보고서로 정리</button>
-            <a id="rptGenDl" class="draft-dl" href="/api/report/result" hidden>📥 정리된 보고서 다운로드</a>
-            <p class="muted" id="rptGenMsg" style="margin-top:6px"></p>
-          </div>
-        </div>
-
-        <div class="step-card">
-          <h2>6. AI 결과 해석 <span class="pill">선택</span></h2>
-          <p class="desc">추출 결과를 AI가 요약·해석합니다. (환경설정에 AI 키 필요)</p>
-          <button class="btn" id="pdfAnalyzeBtn" style="background:#fff;color:var(--accent);border:1px solid var(--accent)">📊 AI로 결과 해석하기</button>
-          <div id="pdfAnalysis" style="margin-top:12px;padding:14px;background:#f1f3f5;border-radius:10px;white-space:pre-wrap;font-size:13px;line-height:1.6;display:none"></div>
+        <div class="step-card next-step">
+          <h2>다음 단계</h2>
+          <p class="desc">템플릿을 저장했다면 —</p>
+          <a class="btn btn-download" href="/extract">📦 데이터 추출 관리 → 작성된 조사표 파일들을 엑셀로</a>
+          <a class="btn" href="/entry" style="margin-left:8px">📝 데이터 입력 관리 → 현장에서 입력하는 디지털 양식으로</a>
         </div>
       </div><!-- /steps-bottom -->
     </div>
   </div>
 
   <div class="overlay" id="overlay" hidden><div class="spinner"></div><p id="overlayMsg">불러오는 중…</p></div>
+  <script src="/static/ocr_setup.js"></script>
   <script src="/static/pdf_designer.js"></script>
 </body>
 </html>
