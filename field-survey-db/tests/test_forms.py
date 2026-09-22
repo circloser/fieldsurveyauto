@@ -174,6 +174,8 @@ def _make_template_pdf(path: Path) -> None:
     tw.append((60, 190), "현장 사진", font=font, fontsize=10)
     for j, c in enumerate(["시각", "행동", "비고"]):
         tw.append((105 + j * 133, 417), c, font=font, fontsize=10)
+    tw.append((155, 116), "예시값", font=font, fontsize=9)          # '작성 예시' 양식 — 값·√ 가 이미 인쇄됨
+    tw.append((306, 146), "√", font=font, fontsize=10)
     tw.write_text(page)
     for r in (fitz.Rect(150, 100, 400, 122), fitz.Rect(150, 130, 250, 152), fitz.Rect(300, 130, 322, 152),
               fitz.Rect(100, 170, 300, 320)):
@@ -344,9 +346,16 @@ def test_publish_sync_export_roundtrip(cloud):
         assert s in t0, s
     assert len(pdf[0].get_images()) >= 1                         # 사진 삽입
     t1 = pdf[1].get_text()
-    assert "송도갯벌" in t1 and "√" not in t1 and "기록 2" in t1
+    assert "송도갯벌" in t1 and "기록 2" in t1        # (인쇄된 예시 √ 는 글자로는 남고 눈에는 덮임 — 아래 픽셀 확인)
     one = c.get(f"/api/forms/{fid}/pdf", params={"entry": "entry0000000002"})
     assert fitz.open(stream=one.content, filetype="pdf").page_count == 1
+    # 작성 예시 양식의 인쇄된 값·√ 는 흰색으로 덮인다(글자 추출에는 남지만 눈에는 안 보임) — 픽셀로 확인
+    def dark(pg, x0, y0, x1, y1):
+        pix = pg.get_pixmap(dpi=144, clip=fitz.Rect(x0, y0, x1, y1))
+        return sum(1 for i in range(0, len(pix.samples), pix.n) if pix.samples[i] < 128)
+    assert dark(pdf[1], 302, 132, 320, 150) == 0                 # 기록 2(체크 안 함): 인쇄된 √ 가 덮여 흰 칸
+    assert dark(pdf[0], 302, 132, 320, 150) > 20                 # 기록 1(체크): √ 가 그려짐
+    assert dark(pdf[0], 152, 102, 398, 120) > 50                 # 값 '남동유수지'는 보인다
 
     # 6. 입력 닫기 → 현장에서 더 못 보냄 → 다시 열기
     r = c.post(f"/api/forms/{fid}/close")

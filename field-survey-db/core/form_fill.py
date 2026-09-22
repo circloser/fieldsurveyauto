@@ -5,6 +5,7 @@
   · 체크: 칸 가운데 √   · 사진: 칸 비율에 맞춰 축소 삽입
   · 표(여러 행): 양식의 칸 선을 찾아 머리글 아래 줄부터 채우고, 줄이 모자라면 남는 기록은 표 아래에 작은 글씨로 덧붙인다
   · 각 기록의 첫 쪽 아래에 '오토다타 디지털 입력 · 기록 번호 · 기록 시각 · 위치' 를 작게 남긴다
+  · 템플릿의 양식 PDF 가 값이 인쇄된 '작성 예시'면 칸 안의 예시 값·√·사진을 흰색으로 덮고 쓴다(빈 양식이면 그대로)
 글꼴은 PyMuPDF 에 든 CJK(Droid Sans Fallback) — 한글·√ 모두 있어 따로 설치할 것이 없다.
 """
 from __future__ import annotations
@@ -62,6 +63,27 @@ def _write_text(page, font, rect, text: str, *, size_max: float = SIZE_MAX, size
     return False
 
 
+def _clear(page, rect, *, words: bool = True, photo: bool = False) -> None:
+    """양식 PDF 가 '작성 예시'(값이 이미 인쇄됨)라면 칸 안을 흰색으로 덮고 쓴다 — 빈 양식이면 덮을 게 없어 그대로.
+    칸 선을 지우지 않게 안쪽만 덮는다. 스캔(쪽 전체가 그림) 양식은 판단할 수 없어 덮지 않는다."""
+    import fitz
+    inset = fitz.Rect(rect.x0 + 1.2, rect.y0 + 1.2, rect.x1 - 1.2, rect.y1 - 1.2)
+    if inset.is_empty or inset.width < 3 or inset.height < 3:
+        return
+    hit = words and bool(page.get_text("words", clip=inset))
+    if not hit and photo:                      # 칸 안에 들어 있는 그림(예시 사진) — 쪽 전체 스캔 그림은 제외
+        for info in page.get_images(full=True):
+            for r in page.get_image_rects(info[0]):
+                r = fitz.Rect(r)
+                if r.get_area() > 0 and (r & inset).get_area() >= 0.5 * r.get_area():
+                    hit = True
+                    break
+            if hit:
+                break
+    if hit:
+        page.draw_rect(inset, color=None, fill=(1, 1, 1), overlay=True)
+
+
 def _draw_check(page, font, rect) -> None:
     import fitz
     fs = max(6.0, min(12.0, rect.height * 0.7, rect.width * 0.9))
@@ -110,6 +132,9 @@ def _fill_table(page, font, pdf_path: str, page_no: int, rect, box: dict, value,
         cw = rect.width / len(cols)
         grid = [[fitz.Rect(rect.x0 + j * cw, top + i * rh, rect.x0 + (j + 1) * cw, top + (i + 1) * rh)
                  for j in range(len(cols))] for i in range(n)]
+    for cells in grid:                          # 예시 값이 인쇄된 표라면 데이터 줄 전체를 비운다
+        for cell in cells:
+            _clear(page, cell)
     for i, r in enumerate(rows[:len(grid)]):
         cells = grid[i]
         for j, c in enumerate(cols):
@@ -169,10 +194,12 @@ def fill_pdf(template_pdf: str, boxes: list[dict], entries: list[dict], out_path
                 continue
             v = values.get(key)
             if mode == "check":
+                _clear(page, rect)                      # 예시로 찍힌 √ 가 남지 않게
                 if _is_checked(v):
                     _draw_check(page, font, rect)
             elif mode == "image":
                 p = photo_path(e, key) if photo_path else None
+                _clear(page, rect, photo=True)          # 예시 사진이 남지 않게
                 if p and os.path.exists(p):
                     try:
                         page.insert_image(fitz.Rect(rect.x0 + 1, rect.y0 + 1, rect.x1 - 1, rect.y1 - 1),
@@ -183,6 +210,8 @@ def fill_pdf(template_pdf: str, boxes: list[dict], entries: list[dict], out_path
                 _fill_table(page, font, template_pdf, pno, rect, b, v, warnings, e.get("seq"))
             else:
                 text = _fmt(v)
+                if text:
+                    _clear(page, rect)                  # 값이 있으면 예시 값을 덮고 쓴다(없으면 양식 그대로)
                 if text and not _write_text(page, font, rect, text):
                     warnings.append(f"기록 {e.get('seq')} '{key}': 값이 길어 칸에 일부만 들어갔습니다.")
         if footer:
