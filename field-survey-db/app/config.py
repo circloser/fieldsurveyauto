@@ -30,7 +30,7 @@ TEMPLATE_PDF_DIR = DATA_DIR / "template_pdfs"   # 템플릿과 함께 저장하�
 DEFAULT_PORT = 8765
 
 APP_TITLE = "현장 조사표 DB화"
-APP_VERSION = "0.7.0 (MVP: 업로드→추출→엑셀)"
+APP_VERSION = "0.7.1 (MVP: 업로드→추출→엑셀)"
 
 # --- AI(Vision) 프록시 설정 -------------------------------------------------
 # 진짜 Claude 키는 프록시(Cloudflare Worker)에만 둔다. 이 프로그램은 아래 2개만 안다.

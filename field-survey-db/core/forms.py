@@ -125,15 +125,19 @@ def build_definition(name: str, boxes: list[dict], *, title: str = "", gps: bool
 
 # ---------------------------------------------------------------- 오토다타 웹(클라우드) 호출
 
+USER_AGENT = "AutoData-helper"      # 클라우드플레어가 파이썬 기본 UA(Python-urllib)를 봇으로 막는다(403, error code 1010)
+
+
 class CloudClient:
-    def __init__(self, origin: str, publish_key: str = "", timeout: float = 30.0):
+    def __init__(self, origin: str, publish_key: str = "", timeout: float = 30.0, user_agent: str = USER_AGENT):
         self.origin = origin.rstrip("/")
         self.publish_key = publish_key
         self.timeout = timeout
+        self.user_agent = user_agent or USER_AGENT
 
     def _request(self, method: str, path: str, body=None, headers: dict | None = None) -> tuple[int, str, bytes]:
         data = None
-        h = {"accept": "application/json", **(headers or {})}
+        h = {"accept": "application/json", "user-agent": self.user_agent, **(headers or {})}
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             h["content-type"] = "application/json"

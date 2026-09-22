@@ -54,6 +54,13 @@ class _Cloud(http.server.BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
         if u.path == "/api/forms":
+            # 클라우드플레어처럼 파이썬 기본 UA 는 봇으로 막는다(실서버에서 403 error code 1010 이 났던 회귀)
+            if (self.headers.get("user-agent") or "").lower().startswith("python-urllib"):
+                self.send_response(403)
+                self.send_header("content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"error code: 1010\n")
+                return None
             if self.publish_key and self.headers.get("x-publish-key") != self.publish_key:
                 return self._json(403, {"error": "양식 만들기 키가 맞지 않습니다."})
             d = self._body()
@@ -251,6 +258,21 @@ def test_settings_from_env_and_config_file(tmp_path, monkeypatch):
     assert forms.settings(tmp_path) == {"origin": "https://forms.example.org", "publish_key": "abc"}
     monkeypatch.setenv("AUTODATA_FORMS_ORIGIN", "http://127.0.0.1:8787")
     assert forms.settings(tmp_path)["origin"] == "http://127.0.0.1:8787"
+
+
+def test_cloud_client_sends_own_user_agent(cloud):
+    seen = {}
+    orig = _Cloud.do_POST
+
+    def spy(self):
+        seen["ua"] = self.headers.get("user-agent")
+        return orig(self)
+    _Cloud.do_POST = spy
+    try:
+        forms.CloudClient(cloud["origin"]).create({"title": "x", "fields": [{"key": "a", "type": "text"}]})
+    finally:
+        _Cloud.do_POST = orig
+    assert seen["ua"].startswith("AutoData-helper")
 
 
 def test_qr_svg_and_local_time():

@@ -406,7 +406,8 @@ def entry_page() -> FileResponse:
 
 def _forms_client() -> forms.CloudClient:
     st = forms.settings(config.BASE_DIR)
-    return forms.CloudClient(st["origin"], st["publish_key"])
+    return forms.CloudClient(st["origin"], st["publish_key"],
+                             user_agent=f"AutoData-helper/{config.APP_VERSION.split(' ')[0]}")
 
 
 def _forms_err(e: forms.FormsError) -> JSONResponse:
