@@ -78,11 +78,13 @@ def _mark_outliers(ws, row_idx: int, row: dict, fields: list[str],
         c.comment = Comment(str(reason), "오토다타")
 
 
-def write_bundle_excel(groups: list[dict], out_path: str, num_fields=None) -> str:
+def write_bundle_excel(groups: list[dict], out_path: str, num_fields=None,
+                       first_col: str = "파일명") -> str:
     """서식별 시트로 나눠 저장(AI 번들 추출용).
 
     groups: [{"label": 시트이름, "fields": [열...], "rows": [{'_파일명':.., field:val}]}]
     num_fields: '숫자' 유형 열 이름들(엑셀에 수로 기록). 시트마다 다르면 g["num_fields"] 로 준다.
+    first_col: 첫 열(행의 '_파일명' 값) 머리글 — 디지털 입력 기록은 파일이 아니라 '기록'.
     """
     wb = Workbook()
     wb.remove(wb.active)  # 기본 시트 제거 후 서식별로 생성
@@ -91,7 +93,7 @@ def write_bundle_excel(groups: list[dict], out_path: str, num_fields=None) -> st
         title = _sheet_name(g.get("label") or "추출결과", used)
         used.add(title)
         ws = wb.create_sheet(title)
-        headers = ["파일명"] + list(g["fields"])
+        headers = [first_col] + list(g["fields"])
         ws.append(headers)
         for col in range(1, len(headers) + 1):
             c = ws.cell(row=1, column=col)

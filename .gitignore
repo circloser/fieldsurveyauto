@@ -60,3 +60,10 @@ ai_config.txt
 # ===== AI 설정창 저장파일(암호화된 API 키 — 커밋 금지) =====
 ai_settings.enc
 **/ai_settings.enc
+
+# 디지털 입력 양식 로컬 설정
+forms_config.txt
+field-survey-db/forms_config.txt
+
+# wrangler dev 로컬 상태
+.wrangler/

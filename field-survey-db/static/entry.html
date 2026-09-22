@@ -7,6 +7,37 @@
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="stylesheet" href="/static/designer.css" />
   <link rel="stylesheet" href="/static/pdf_designer.css" />
+  <style>
+    .pub-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .pub-row label { font-size: 13px; font-weight: 600; color: var(--text-sub); flex: none; width: 68px; }
+    .pub-row select, .pub-row input { flex: 1; max-width: 440px; padding: 8px 10px; border: 1px solid #dfe5da; border-radius: 8px; font: inherit; font-size: 14px; background: #fff; }
+    .chk-row { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin: 6px 0 10px; cursor: pointer; }
+    .share-box { display: flex; gap: 16px; align-items: flex-start; margin-top: 10px; padding: 12px; background: #f6f8f3; border-radius: 12px; flex-wrap: wrap; }
+    .share-box img { width: 150px; height: 150px; background: #fff; border-radius: 8px; border: 1px solid #dfe5da; flex: none; }
+    .share-text { flex: 1; min-width: 240px; }
+    .share-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+    .share-link-row { display: flex; gap: 6px; align-items: center; }
+    .share-link-row input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #dfe5da; border-radius: 8px; font: inherit; font-size: 13px; background: #fff; }
+    .share-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .mini-btn.danger { color: #b42323; }
+    .mini-btn.danger:hover { background: #fdecee; color: #b42323; }
+    a.mini-btn { text-decoration: none; display: inline-flex; align-items: center; }
+    .sync-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .sync-row .chk-row { margin: 0; }
+    .entry-scroll { overflow: auto; max-height: 520px; border: 1px solid #dfe5da; border-radius: 8px; }
+    .entry-scroll table.preview th { position: sticky; top: 0; z-index: 1; }
+    .entry-scroll td { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .thumb { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; vertical-align: middle; border: 1px solid #dfe5da; }
+    .form-state { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef7e5; color: #2f6e18; white-space: nowrap; }
+    .form-state.closed { background: #fff4d6; color: #7a5b00; }
+    .tpl-item.on { outline: 2px solid var(--accent); }
+    .tpl-item .tpl-sub { font-size: 12px; color: var(--text-sub); white-space: nowrap; }
+    .export-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .export-row .btn { text-decoration: none; }
+    .btn.outline { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+    .btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+    .empty-hint a { color: var(--accent); }
+  </style>
 </head>
 <body>
   <div class="dwrap">
@@ -15,7 +46,7 @@
         <div class="hd-mark">AD</div>
         <div>
           <h1>데이터 입력 관리</h1>
-          <p class="subtitle">템플릿을 현장에서 쓰는 디지털 입력 양식으로 바꿔 공유하고, 모인 기록을 조사표 PDF·엑셀로 만듭니다.</p>
+          <p class="subtitle">템플릿을 휴대전화에서 바로 쓰는 디지털 입력 양식으로 바꿔 공유하고, 현장에서 보낸 기록을 실시간으로 모아 조사표 PDF·엑셀로 만듭니다.</p>
         </div>
       </div>
       <nav class="tabbar">
@@ -28,10 +59,85 @@
         <a href="/system">시스템 점검</a>
       </nav>
     </header>
-    <div class="card">
-      <h2>준비 중</h2>
-      <p class="desc">디지털 입력 양식 기능은 다음 버전에서 열립니다.</p>
+
+    <div class="security-badge">
+      <span class="sb-lock">🔒</span>
+      <div>
+        <b>현장 기록은 공유 링크로 오토다타 웹(클라우드플레어)에 모였다가 이 PC로 내려옵니다.</b>
+        링크(입력 키)를 아는 사람만 기록을 보낼 수 있고, 기록을 가져오는 관리 키는 이 PC에만 있습니다.
+        <span class="sb-note">※ 양식을 지우면 웹에 모인 기록도 함께 지워집니다. 내보낸 엑셀·PDF 는 이 PC의 data/output 에 남습니다.</span>
+      </div>
     </div>
+
+    <div class="steps-bottom">
+      <div class="step-card">
+        <h2>1. 디지털 양식 만들기</h2>
+        <p class="desc">저장된 템플릿을 고르면 휴대전화에서 바로 입력할 수 있는 <b>디지털 양식</b>이 만들어지고 공유 링크와 QR 이 나옵니다. 항목·유형(글·숫자·체크·사진·표)은 템플릿의 박스를 그대로 따릅니다. <b>(인터넷 연결 필요)</b></p>
+        <div class="pub-row">
+          <label for="tplSel">템플릿</label>
+          <select id="tplSel"></select>
+        </div>
+        <div class="pub-row">
+          <label for="titleInput">양식 제목</label>
+          <input type="text" id="titleInput" placeholder="비우면 템플릿 이름 (예: 2026년 가을 저어새 현지 조사)" />
+        </div>
+        <label class="chk-row"><input type="checkbox" id="gpsChk" /> 📍 양식에 ‘현재 위치 넣기’ 버튼을 둔다 (위도·경도가 기록에 함께 저장)</label>
+        <div>
+          <button class="btn btn-download" id="publishBtn">📲 양식 만들기 · 공유 링크 받기</button>
+        </div>
+        <p class="muted" id="publishMsg"></p>
+        <p class="muted">템플릿을 새로 만들거나 고치려면 <a href="/pdf-designer">템플릿 디자이너</a>로. 양식 PDF 를 연 채로 저장한 템플릿이어야 기록을 <b>현장조사표 PDF</b>로 내보낼 수 있습니다(엑셀은 언제나 됩니다).</p>
+      </div>
+
+      <div class="step-card">
+        <h2>2. 만든 양식 · 공유</h2>
+        <p class="desc">양식을 고르면 공유 링크·QR 과 실시간 기록이 아래에 보입니다. 조사자는 링크를 휴대전화로 열어(카메라로 QR 을 찍어) 기록하고, 인터넷이 끊겨도 기기에 저장됐다가 연결되면 자동으로 보내집니다.</p>
+        <ul class="tpl-list" id="formList"></ul>
+        <div id="formDetail" hidden>
+          <div class="share-box">
+            <img id="qrImg" alt="공유 링크 QR" />
+            <div class="share-text">
+              <div class="share-title" id="shareTitle"></div>
+              <div class="share-link-row">
+                <input type="text" id="shareLink" readonly />
+                <button class="mini-btn" id="copyBtn">📋 복사</button>
+                <a class="mini-btn" id="openLink" target="_blank" rel="noopener">↗ 열어 보기</a>
+              </div>
+              <p class="muted" id="shareMeta" style="margin-top:6px"></p>
+              <div class="share-actions">
+                <button class="mini-btn" id="printQrBtn">🖨 QR 인쇄</button>
+                <button class="mini-btn" id="closeBtn">⏸ 입력 닫기</button>
+                <button class="mini-btn danger" id="deleteBtn">✕ 양식 삭제</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-card" id="entriesCard" hidden>
+        <h2>3. 실시간 기록 <span class="pill" id="countPill">0건</span></h2>
+        <p class="desc">현장에서 보낸 기록이 몇 초 안에 이 표에 나타납니다(이 화면이 열려 있는 동안 5초마다 가져옵니다). 사진은 작은 그림을 누르면 크게 열립니다.</p>
+        <div class="sync-row">
+          <button class="mini-btn" id="syncBtn">🔄 지금 가져오기</button>
+          <label class="chk-row"><input type="checkbox" id="autoChk" checked /> 자동 새로고침</label>
+          <span class="muted" id="syncMsg" style="margin:0"></span>
+        </div>
+        <div class="entry-scroll"><table class="preview" id="entryTable"></table></div>
+      </div>
+
+      <div class="step-card" id="exportCard" hidden>
+        <h2>4. 내보내기</h2>
+        <p class="desc">받아 둔 기록을 <b>엑셀</b>(표 기록은 줄마다 한 행, 사진은 그림으로, 숫자는 수로) 또는 <b>현장조사표 PDF</b>(기록마다 양식 한 벌씩 채움)로 만듭니다. 파일은 data/output 에도 남습니다.</p>
+        <div class="export-row">
+          <a class="btn btn-download" id="excelBtn" href="#">📊 엑셀 내려받기</a>
+          <a class="btn outline" id="pdfBtn" href="#">📄 현장조사표 PDF 내려받기</a>
+        </div>
+        <p class="muted" id="exportMsg"></p>
+      </div>
+    </div><!-- /steps-bottom -->
   </div>
+
+  <div class="overlay" id="overlay" hidden><div class="spinner"></div><p id="overlayMsg">처리 중…</p></div>
+  <script src="/static/entry.js"></script>
 </body>
 </html>

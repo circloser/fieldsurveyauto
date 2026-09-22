@@ -34,6 +34,7 @@ hiddenimports += [
     "pythoncom", "pywintypes", "win32api", "win32con",
     "win32crypt",   # DPAPI 키 암호화(settings_store, 지연 임포트)
     "httpx",        # 멀티 AI 제공자(ai_providers) REST 호출
+    "segno",        # 디지털 입력 양식 공유 링크 QR(core/forms, 지연 임포트)
 ]
 
 # 표준 라이브러리 전체(테스트·GUI·유닉스 전용 제외) — 내려받은 torch·scikit-image 등이 쓰는 모듈 대비

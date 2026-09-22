@@ -4,6 +4,7 @@ fastapi==0.115.6
 uvicorn==0.34.0
 python-multipart==0.0.20
 openpyxl==3.1.5
+segno==1.6.6
 pdfplumber==0.11.5
 pymupdf==1.25.2
 # hwpx → PDF 변환용(한글 설치된 Windows에서). PDF만 쓰면 없어도 됩니다.

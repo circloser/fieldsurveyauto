@@ -1,10 +1,19 @@
-// 오토다타 웹 시작 페이지 — Cloudflare Workers(정적 파일만, 서버 코드 없음) 배포 설정.
-// 대시보드의 Worker 'autodata' 를 이 저장소에 연결하면 main 에 푸시할 때마다 다시 배포된다.
+// 오토다타 웹 — Cloudflare Workers 배포 설정.
+//   · 정적 시작 페이지: field-survey-db/web (assets)
+//   · 디지털 입력 양식 서버: worker/index.js — 양식마다 Durable Object(SQLite) 하나(FormRoom)
+// 대시보드의 Worker 'autodata' 가 이 저장소에 연결돼 있어 main 에 푸시할 때마다 `npx wrangler deploy` 로 다시 배포된다.
+// 양식 만들기를 제한하려면 대시보드에서 Worker 비밀값 PUBLISH_KEY 를 두고 도우미 환경설정에도 같은 값을 넣는다(선택).
 // 설명: field-survey-db/web/README.md
 {
   "name": "autodata",
+  "main": "worker/index.js",
   "compatibility_date": "2026-09-15",
   "assets": {
     "directory": "./field-survey-db/web"
-  }
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "FORMS", "class_name": "FormRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FormRoom"] }],
+  "observability": { "enabled": true }
 }

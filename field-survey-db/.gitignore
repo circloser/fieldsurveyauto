@@ -13,3 +13,6 @@ tests/fixtures/*.pdf
 시스템점검_결과.txt
 static/_probe_*.pdf
 sce_config.json
+
+# 디지털 입력 양식 서버 주소·키(로컬 설정 — 커밋 금지)
+forms_config.txt

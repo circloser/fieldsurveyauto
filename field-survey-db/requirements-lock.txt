@@ -69,6 +69,7 @@ pywin32-ctypes==0.2.3
 PyYAML==6.0.3
 rapidocr-onnxruntime==1.4.4
 scikit-image==0.26.0
+segno==1.6.6
 scipy==1.17.1
 shapely==2.1.2
 six==1.17.0

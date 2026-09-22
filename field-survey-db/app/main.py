@@ -42,6 +42,7 @@ from core.template.writer import write_bundle_excel, write_template_excel
 config.ensure_dirs()
 
 from core import ocr_runtime  # noqa: E402
+from core import forms  # noqa: E402
 
 ocr_runtime.activate()   # 경량 도우미: 받아 둔 글자 인식 기능을 붙인다(안 받았거나 엔진 동봉판이면 그대로)
 
@@ -98,6 +99,8 @@ async def _no_cache_static(request, call_next):
 
 _STORE = CorrectionStore(config.DATA_DIR / "corrections.json")
 _TEMPLATES = TemplateStore(config.DATA_DIR / "templates.json")
+# 데이터 입력 관리 — 디지털 입력 양식 목록·기록(관리 키는 이 파일에만)
+_FORMS = forms.FormRegistry(config.DATA_DIR / "forms.json", config.DATA_DIR / "forms")
 # 마지막 처리 결과(다운로드/검수용). 로컬 단일 사용자 기준의 단순 보관.
 _LAST: dict[str, object] = {"excel_path": None, "result": None}
 _DESIGNER: dict[str, object] = {"excel_path": None}
@@ -396,6 +399,155 @@ def extract_page() -> FileResponse:
 def entry_page() -> FileResponse:
     """데이터 입력 관리 — 템플릿을 현장 입력용 디지털 양식으로 공유하고 기록을 모은다."""
     return FileResponse(config.STATIC_DIR / "entry.html")
+
+
+# ─────────────── 데이터 입력 관리 — 디지털 입력 양식(오토다타 웹의 Durable Object 와 통신) ───────────────
+# 모두 이 PC 의 작업 화면에서만 부른다(web_entry_guard 가 다른 출처의 POST 를 막음). 관리 키는 응답에 넣지 않는다.
+
+def _forms_client() -> forms.CloudClient:
+    st = forms.settings(config.BASE_DIR)
+    return forms.CloudClient(st["origin"], st["publish_key"])
+
+
+def _forms_err(e: forms.FormsError) -> JSONResponse:
+    return JSONResponse({"error": str(e)}, status_code=502 if e.code is None else (404 if e.code == 404 else 400))
+
+
+def _form_or_404(form_id: str):
+    if not forms.valid_id(form_id):
+        return None
+    return _FORMS.get(form_id)
+
+
+@app.get("/api/forms")
+def forms_list() -> JSONResponse:
+    st = forms.settings(config.BASE_DIR)
+    return JSONResponse({"forms": [forms.public_dto(f) for f in _FORMS.list()], "origin": st["origin"],
+                         "publish_key_set": bool(st["publish_key"])})
+
+
+@app.post("/api/forms/publish")
+def forms_publish(payload: dict = Body(...)) -> JSONResponse:
+    """템플릿 → 디지털 양식 만들기(웹에 등록) → 공유 링크."""
+    name = (payload.get("template") or "").strip()
+    tpl = _TEMPLATES.get(name) if name else None
+    if not tpl:
+        return JSONResponse({"error": "템플릿을 찾을 수 없습니다."}, status_code=404)
+    pdf = _tpl_pdf_path(name)
+    try:
+        form = forms.publish(_FORMS, _forms_client(), name, tpl.get("boxes") or [],
+                             pdf if pdf.exists() else None,
+                             title=(payload.get("title") or "").strip(), gps=bool(payload.get("gps")))
+    except forms.FormsError as e:
+        return _forms_err(e)
+    return JSONResponse({"ok": True, "form": form})
+
+
+@app.post("/api/forms/{form_id}/sync")
+def forms_sync(form_id: str) -> JSONResponse:
+    if not _form_or_404(form_id):
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    try:
+        r = forms.sync(_FORMS, _forms_client(), form_id)
+    except forms.FormsError as e:
+        return _forms_err(e)
+    return JSONResponse({"ok": True, **r, "form": forms.public_dto(_FORMS.get(form_id) or {})})
+
+
+@app.get("/api/forms/{form_id}/entries")
+def forms_entries(form_id: str) -> JSONResponse:
+    """이 PC에 받아 둔 기록(사진은 주소로)."""
+    form = _form_or_404(form_id)
+    if not form:
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    out = []
+    for e in _FORMS.load_entries(form_id):
+        photos = {k: f"/api/forms/{form_id}/photo/{e['id']}/{k}" for k, v in (e.get("photos") or {}).items() if v}
+        out.append({**e, "photos": photos, "created_local": forms.local_time(e.get("created", ""))})
+    return JSONResponse({"form": forms.public_dto(form), "entries": out})
+
+
+@app.get("/api/forms/{form_id}/photo/{entry_id}/{field}")
+def forms_photo(form_id: str, entry_id: str, field: str):
+    form = _form_or_404(form_id)
+    if not form:
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    entry = next((e for e in _FORMS.load_entries(form_id) if e.get("id") == entry_id), None)
+    rel = ((entry or {}).get("photos") or {}).get(field)
+    path = (_FORMS.root / form_id / rel) if rel else None
+    if not path or not path.exists():
+        return JSONResponse({"error": "사진이 없습니다."}, status_code=404)
+    return FileResponse(str(path))
+
+
+@app.get("/api/forms/{form_id}/qr.svg")
+def forms_qr(form_id: str):
+    form = _form_or_404(form_id)
+    if not form:
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    return Response(forms.qr_svg(form["share_url"]), media_type="image/svg+xml",
+                    headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/forms/{form_id}/close")
+def forms_close(form_id: str) -> JSONResponse:
+    return _forms_set_closed(form_id, True)
+
+
+@app.post("/api/forms/{form_id}/open")
+def forms_open(form_id: str) -> JSONResponse:
+    return _forms_set_closed(form_id, False)
+
+
+def _forms_set_closed(form_id: str, closed: bool) -> JSONResponse:
+    if not _form_or_404(form_id):
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    try:
+        form = forms.set_closed(_FORMS, _forms_client(), form_id, closed)
+    except forms.FormsError as e:
+        return _forms_err(e)
+    return JSONResponse({"ok": True, "form": form})
+
+
+@app.post("/api/forms/{form_id}/delete")
+def forms_delete(form_id: str) -> JSONResponse:
+    """웹의 양식·기록과 이 PC의 보관 폴더를 지운다(내보낸 엑셀·PDF 는 output 에 남음)."""
+    if not _form_or_404(form_id):
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    try:
+        forms.delete(_FORMS, _forms_client(), form_id)
+    except forms.FormsError as e:
+        return _forms_err(e)
+    return JSONResponse({"ok": True, "forms": [forms.public_dto(f) for f in _FORMS.list()]})
+
+
+@app.get("/api/forms/{form_id}/excel")
+def forms_excel(form_id: str):
+    form = _form_or_404(form_id)
+    if not form:
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out = config.OUTPUT_DIR / f"디지털입력_{forms.safe_name(form.get('title'))}_{stamp}.xlsx"
+    try:
+        forms.export_excel(_FORMS, form_id, out)
+    except forms.FormsError as e:
+        return _forms_err(e)
+    return FileResponse(str(out), filename=out.name,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.get("/api/forms/{form_id}/pdf")
+def forms_pdf(form_id: str, entry: str = ""):
+    form = _form_or_404(form_id)
+    if not form:
+        return JSONResponse({"error": "없는 양식입니다."}, status_code=404)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out = config.OUTPUT_DIR / f"현장조사표_{forms.safe_name(form.get('title'))}_{stamp}.pdf"
+    try:
+        forms.export_pdf(_FORMS, form_id, out, entry_id=entry or None)
+    except forms.FormsError as e:
+        return _forms_err(e)
+    return FileResponse(str(out), filename=out.name, media_type="application/pdf")
 
 
 def _unread_scan_pages(doc) -> int:
