@@ -12,13 +12,13 @@ import sys
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-datas = [("static", "static")]
+datas = [("static", "static"), ("web/manual.html", "static")]   # 사용 설명서(/manual)
 binaries = []
 hiddenimports = []
 
 # 동적 임포트가 많은 패키지들은 통째로 수집(누락 방지). pyhwpx는 보안모듈 DLL 포함.
 for pkg in ("uvicorn", "anthropic", "pdfplumber", "pdfminer", "pyhwpx", "fitz", "pymupdf",
-            "numpy", "cv2", "PIL"):
+            "numpy", "cv2", "PIL", "fontTools"):
     try:
         d, b, h = collect_all(pkg)
         datas += d

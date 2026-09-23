@@ -6,7 +6,8 @@
   · 표(여러 행): 양식의 칸 선을 찾아 머리글 아래 줄부터 채우고, 줄이 모자라면 남는 기록은 표 아래에 작은 글씨로 덧붙인다
   · 각 기록의 첫 쪽 아래에 '오토다타 디지털 입력 · 기록 번호 · 기록 시각 · 위치' 를 작게 남긴다
   · 템플릿의 양식 PDF 가 값이 인쇄된 '작성 예시'면 칸 안의 예시 값·√·사진을 흰색으로 덮고 쓴다(빈 양식이면 그대로)
-글꼴은 PyMuPDF 에 든 CJK(Droid Sans Fallback) — 한글·√ 모두 있어 따로 설치할 것이 없다.
+글꼴은 PyMuPDF 에 든 CJK(Droid Sans Fallback) — 한글·√ 모두 있어 따로 설치할 것이 없다. 저장할 때 쓴 글자만 남겨(subset) 파일을 작게 한다.
+  · 체크 박스 안에 인쇄된 작은 네모(□)가 있으면 그 위에 √ 를 찍는다(라벨과 네모가 한 박스일 때)
 """
 from __future__ import annotations
 
@@ -84,8 +85,30 @@ def _clear(page, rect, *, words: bool = True, photo: bool = False) -> None:
         page.draw_rect(inset, color=None, fill=(1, 1, 1), overlay=True)
 
 
+def _check_square(page, rect):
+    """박스 안에 인쇄된 작은 네모(체크 칸)가 있으면 그 자리 — '도보 □' 처럼 라벨과 네모가 한 박스일 때 네모 위에 √."""
+    import fitz
+    best = None
+    try:
+        drawings = page.get_drawings()
+    except Exception:  # noqa: BLE001
+        return None
+    for d in drawings:
+        r = d.get("rect")
+        if r is None:
+            continue
+        r = fitz.Rect(r)
+        if 5 <= r.width <= 22 and 5 <= r.height <= 22 and abs(r.width - r.height) <= 6 and rect.contains(r):
+            if best is None or r.width * r.height < best.width * best.height:
+                best = r
+    return best
+
+
 def _draw_check(page, font, rect) -> None:
     import fitz
+    sq = _check_square(page, rect)
+    if sq is not None:
+        rect = fitz.Rect(sq.x0 - 1, sq.y0 - 1, sq.x1 + 1, sq.y1 + 1)
     fs = max(6.0, min(12.0, rect.height * 0.7, rect.width * 0.9))
     w = font.text_length("√", fontsize=fs)
     x = rect.x0 + max(0.0, (rect.width - w) / 2)
@@ -218,7 +241,11 @@ def fill_pdf(template_pdf: str, boxes: list[dict], entries: list[dict], out_path
             g = ((e.get("meta") or {}).get("gps") or {}) if gps else {}
             loc = f" · 위치 {g.get('lat')}, {g.get('lon')}" if g.get("lat") is not None else ""
             _footer(out[start], font, f"오토다타 디지털 입력 · 기록 {e.get('seq')} · {local_time(e.get('created', ''))}{loc}")
-    out.save(out_path, garbage=3, deflate=True)
+    try:
+        out.subset_fonts()                     # CJK 글꼴 전체(3MB)가 아니라 쓴 글자만 넣는다(fontTools)
+    except Exception:  # noqa: BLE001
+        pass
+    out.save(out_path, garbage=4, deflate=True)
     pages = out.page_count
     out.close()
     tpl.close()

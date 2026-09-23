@@ -395,6 +395,16 @@ def extract_page() -> FileResponse:
     return FileResponse(config.STATIC_DIR / "extract.html")
 
 
+@app.get("/manual")
+def manual_page() -> FileResponse:
+    """사용 설명서(그림 포함 한 파일) — tools/build_manual.py 가 docs/manual.md 에서 만들어 web/manual.html 에 둔다.
+    포터블에서는 빌드 스펙이 static/manual.html 로 넣고, 소스 실행에서는 web/ 의 파일을 읽는다."""
+    for p in (config.STATIC_DIR / "manual.html", config.BUNDLE_DIR / "web" / "manual.html"):
+        if p.exists():
+            return FileResponse(str(p), media_type="text/html")
+    return JSONResponse({"error": "설명서 파일이 없습니다 — python tools/build_manual.py 로 만드세요."}, status_code=404)
+
+
 @app.get("/entry")
 def entry_page() -> FileResponse:
     """데이터 입력 관리 — 템플릿을 현장 입력용 디지털 양식으로 공유하고 기록을 모은다."""

@@ -54,6 +54,10 @@ https://autodata.example.org
 https://*.autodata.example.org
 ```
 
+## 사용 설명서
+
+`web/manual.html` 은 도우미의 📖 사용 설명서와 같은 파일입니다(`tools/build_manual.py` 가 `docs/manual.md` 에서 만들어 복사). 그림은 `tools/manual_shots.py`(Playwright, 로컬 wrangler dev 필요)로 다시 만듭니다.
+
 ## 도우미 새 버전 배포
 
 1. `app/config.py` 의 `APP_VERSION` 과 이 폴더 `version.json` 의 `helper` 를 같은 번호로 올리고 커밋·푸시합니다.

@@ -79,6 +79,23 @@ def add_extras():
             shutil.copy2(src, DIST / name)
         else:
             print(f"경고: packaging/{name} 없음 — 동봉 생략")
+    # 사용 설명서(HTML 은 프로그램의 📖 버튼이 여는 것과 같은 파일, 한글 문서는 원고에서 생성) + 예제 조사표
+    manual = ROOT / "web" / "manual.html"
+    if manual.exists():
+        shutil.copy2(manual, DIST / "오토다타_사용설명서.html")
+    sys.path.insert(0, str(ROOT))
+    try:
+        from tools.build_manual import main as build_manual
+        build_manual(["--no-copy", "--hwpx", str(DIST / "오토다타_사용설명서.hwpx")])
+    except Exception as e:  # noqa: BLE001
+        print(f"경고: 한글 설명서를 만들지 못했습니다 — {e}")
+    try:
+        from tools.make_examples import main as make_examples
+        make_examples(DIST / "예제")
+        for extra in ("template_boxes.json", "entries.json"):     # 설명서 그림용 파일은 배포본에 필요 없다
+            (DIST / "예제" / extra).unlink(missing_ok=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"경고: 예제 파일을 만들지 못했습니다 — {e}")
 
 
 def smoke():

@@ -26,6 +26,8 @@
     .sync-row .chk-row { margin: 0; }
     .entry-scroll { overflow: auto; max-height: 520px; border: 1px solid #dfe5da; border-radius: 8px; }
     .entry-scroll table.preview th { position: sticky; top: 0; z-index: 1; }
+    .entry-scroll table.preview th:first-child, .entry-scroll table.preview td:first-child { position: sticky; left: 0; background: #fff; z-index: 2; box-shadow: 1px 0 0 #dfe5da; }
+    .entry-scroll table.preview th:first-child { z-index: 3; }
     .entry-scroll td { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .thumb { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; vertical-align: middle; border: 1px solid #dfe5da; }
     .form-state { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef7e5; color: #2f6e18; white-space: nowrap; }
@@ -57,6 +59,7 @@
         <a href="/ai">AI 데이터 추출·분석</a>
         <a href="/settings">환경설정</a>
         <a href="/system">시스템 점검</a>
+        <a class="help" href="/manual" target="_blank" rel="noopener" title="사용 설명서(새 창)">📖 설명서</a>
       </nav>
     </header>
 

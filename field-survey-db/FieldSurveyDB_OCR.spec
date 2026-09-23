@@ -9,13 +9,13 @@
 import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-datas = [("static", "static")]
+datas = [("static", "static"), ("web/manual.html", "static")]   # 사용 설명서(/manual)
 binaries = []
 hiddenimports = []
 
 for pkg in ("uvicorn", "anthropic", "pdfplumber", "pdfminer", "pyhwpx", "fitz", "pymupdf",
             # OCR 스택
-            "easyocr", "torch", "torchvision", "cv2", "skimage", "shapely", "pyclipper"):
+            "easyocr", "torch", "torchvision", "cv2", "skimage", "shapely", "pyclipper", "fontTools"):
     try:
         d, b, h = collect_all(pkg)
         datas += d

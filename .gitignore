@@ -67,3 +67,10 @@ field-survey-db/forms_config.txt
 
 # wrangler dev 로컬 상태
 .wrangler/
+
+# 설명서·예제 생성물(원고 docs/manual.md 와 그림 docs/manual_img 만 커밋)
+field-survey-db/examples/
+field-survey-db/docs/오토다타_사용설명서.*
+
+# 설명서 HTML 은 web/manual.html 한 벌만 커밋(앱은 web/ 에서 읽음)
+field-survey-db/static/manual.html

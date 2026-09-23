@@ -18,6 +18,7 @@ docstring_parser==0.18.0
 easyocr==1.7.2
 et_xmlfile==2.0.0
 fastapi==0.115.6
+fonttools==4.61.1
 filelock==3.29.7
 flatbuffers==25.12.19
 fsspec==2026.6.0
